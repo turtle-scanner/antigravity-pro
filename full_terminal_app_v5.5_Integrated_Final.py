@@ -166,10 +166,36 @@ elif page.startswith("3."):
             st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={tic_in}&interval=D' width='100%' height='500'></iframe>", height=510)
 
 elif page.startswith("4."):
-    st.header("🚀 주도주 랭킹 TOP 50")
-    st.markdown("<div class='glass-card'>본데의 가중치 알고리즘을 통한 매수 우선순위 랭킹입니다.</div>", unsafe_allow_html=True)
-    df_rank = pd.DataFrame({"우선순위": ["💎 TOP 1", "🔥 TOP 2"], "종목": ["NVDA", "PLTR"], "ROE": ["120%", "45%"], "Score": [540, 480]})
-    st.dataframe(df_rank, use_container_width=True, hide_index=True)
+    st.header("🚀 주도주 실시간 랭킹 (Daily Live Ranking)")
+    RANK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
+    
+    with st.spinner("📊 전문가님의 데이터 센터에서 실시간 동기화 중..."):
+        try:
+            df_live = pd.read_csv(RANK_SHEET_URL)
+            # ROE 10% 이상 필터링 (ROE 컬럼명은 시트 상황에 따라 조정 가능, 여기선 'ROE'로 가정)
+            # 만약 % 기호가 있다면 제거 후 비교
+            if 'ROE' in df_live.columns:
+                df_live['ROE_VAL'] = df_live['ROE'].astype(str).str.replace('%','').astype(float)
+                df_final = df_live[df_live['ROE_VAL'] >= 10.0].head(10)
+            else:
+                df_final = df_live.head(10) # 컬럼 없을 시 상위 10개 표시
+            
+            st.markdown(f"<div class='glass-card'>📅 <b>{datetime.now().strftime('%Y-%m-%d')} 기준</b> | ROE 10% 이상 주도주 우선순위</div>", unsafe_allow_html=True)
+            
+            # 전문가님 요청 컬럼 표시 (시트에 해당 컬럼이 있다고 가정, 없으면 기본값)
+            display_cols = ["종목명", "ROE", "현재가", "진입가", "단계", "손절가", "목표가"]
+            # 실제 시트 컬럼명과 다를 경우를 대비한 유연한 처리
+            available_cols = [c for c in display_cols if c in df_final.columns]
+            
+            if available_cols:
+                st.dataframe(df_final[available_cols], use_container_width=True, hide_index=True)
+            else:
+                st.dataframe(df_final, use_container_width=True, hide_index=True)
+                
+            st.success("✅ 구글 시트 데이터 기반 데일리 랭킹 업데이트 완료!")
+        except Exception as e:
+            st.error(f"⚠️ 시트 연동 중 오류 발생: {e}")
+            st.info("시트가 '링크가 있는 모든 사용자에게 공개(뷰어)' 상태인지 확인해 주세요.")
 
 elif page.startswith("5."):
     st.header("🧮 리스크 계산기")
