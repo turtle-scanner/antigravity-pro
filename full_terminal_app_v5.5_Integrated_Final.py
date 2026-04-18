@@ -451,11 +451,34 @@ if page.startswith("1."):
         selected_option = st.selectbox("분석할 종목을 선택하세요", options)
         
         # 선택된 티커 추출
-        selected_ticker = combined_top[combined_top.apply(lambda r: f"{r['T']} ({r['TIC']})" == selected_option, axis=1)].iloc[0]["TIC"]
+        selected_row = combined_top[combined_top.apply(lambda r: f"{r['T']} ({r['TIC']})" == selected_option, axis=1)].iloc[0]
+        selected_ticker = selected_row["TIC"]
+        is_kr_stock = (".KS" in selected_ticker or ".KQ" in selected_ticker)
         
         st.markdown(f"<div style='background: rgba(255,215,0,0.1); padding: 10px; border-radius: 8px; border-left: 4px solid #FFD700; margin-bottom: 15px;'><b>🎯 타겟 분석 중: {selected_option}</b></div>", unsafe_allow_html=True)
-        st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={selected_ticker}&interval=D' width='100%' height='500'></iframe>", height=510)
-        st.success(f"✅ {selected_ticker} 실시간 차트 로드 완료!")
+        
+        if is_kr_stock:
+            # 한국 주식 처리 (네이버 증권 이동)
+            pure_code = selected_ticker.replace(".KS", "").replace(".KQ", "")
+            naver_url = f"https://finance.naver.com/item/main.naver?code={pure_code}"
+            
+            st.warning("💡 한국 주식은 트레이ڈنگ뷰보다 '네이버 증권' 정밀 분석이 더 권장됩니다.")
+            st.markdown(f"""
+            <div class='glass-card' style='text-align: center; padding: 40px;'>
+                <h3 style='color: #FFD700;'>🇰🇷 {selected_option} - 네이버 증권 데이터 연동</h3>
+                <p style='color: #888;'>사령부의 전술적 판단에 따라 한국 시장은 네이버 금융 시스템을 이용합니다.</p>
+                <a href='{naver_url}' target='_blank' style='text-decoration: none;'>
+                    <div style='background: #03C75A; color: white; padding: 15px 30px; border-radius: 10px; font-weight: 800; display: inline-block; cursor: pointer; border: none; box-shadow: 0 5px 15px rgba(3,199,90,0.4);'>
+                        🚀 네이버 증권 정밀 분석실 입장
+                    </div>
+                </a>
+            </div>
+            """, unsafe_allow_html=True)
+            st.success(f"✅ {selected_option} 정밀 데이터 분석 링크 준비 완료!")
+        else:
+            # 미국 주식 처리 (기존 트레이딩뷰)
+            st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={selected_ticker}&interval=D' width='100%' height='500'></iframe>", height=510)
+            st.success(f"✅ {selected_ticker} 실시간 차트 로드 완료!")
 
 elif page.startswith("2."):
     st.header("💬 사령부 소통 및 공지 (HQ Communication)")
