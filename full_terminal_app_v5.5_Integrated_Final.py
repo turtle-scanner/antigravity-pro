@@ -90,37 +90,58 @@ st.markdown("<div style='background: rgba(0,0,0,0.7); border: 2px solid #FFD700;
 
 # --- [PLACEHOLDER_LOGIC_START] ---
 if page.startswith("1."):
-    st.header("🎯 주도주 타점 스캐너 (Scanner Engine)")
-    tabs = st.tabs(["[MAGNA_EP 스캐너]", "[4% 모멘텀 버스트]", "[ANTICIPATION 눌림목]"])
-    def run_sc():
-        data = {"EP": [], "BURST": [], "TTT": []}
+    st.header("🎯 주도주 타점 스캐너 (Master Scanner)")
+    st.markdown("<div class='glass-card'>거래량 9,000,000주 이상 & 10% 이상 상승한 괴물 주도주를 자동 탐지합니다.</div>", unsafe_allow_html=True)
+    
+    def run_master_sc():
+        # 데이터 소스: 구글 시트
+        SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
+        radar_tics = list(TICKER_NAME_MAP.keys())
+        try:
+            df_s = pd.read_csv(SHEET_URL)
+            # 티커 또는 종목명 컬럼 추출
+            for col in df_s.columns:
+                if "티커" in col or "Symbol" in col or "종목" in col:
+                    radar_tics = list(set(radar_tics + df_s[col].dropna().tolist()))
+        except: pass
+        
+        # NDX 9점이상 (핵심 리스트)
+        ndx_core = ["NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "TSLA", "AVGO", "COST", "NFLX", "AMD", "PLTR", "ARM"]
+        radar_tics = list(set(radar_tics + ndx_core))
+        
+        data = {"MONSTER": [], "NORMAL": []}
         pb = st.progress(0); st_txt = st.empty()
-        for i, (tic, name) in enumerate(TICKER_NAME_MAP.items()):
+        
+        for i, tic in enumerate(radar_tics):
             try:
-                st_txt.text(f"> Analyzing {name}...")
-                pb.progress((i+1)/len(TICKER_NAME_MAP))
-                tk = yf.Ticker(tic); h = tk.history(period="30d"); inf = tk.info
-                if len(h) < 20: continue
+                st_txt.text(f"📡 Scanning {tic}...")
+                pb.progress((i+1)/len(radar_tics))
+                h = yf.download(tic, period="5d", progress=False)
+                if len(h) < 2: continue
+                
                 cp, pp = h['Close'].iloc[-1], h['Close'].iloc[-2]
-                ch, va, cv = (cp/pp-1)*100, h['Volume'].iloc[-20:].mean(), h['Volume'].iloc[-1]
-                roe = inf.get('returnOnEquity', 0) * 100
-                score = 0
-                if roe >= 10: score += 4
-                if ch >= 3.5: score += 3
-                if cv > va * 1.5: score += 3
-                grade = "💎 S급" if score >= 8 else ("🟢 A급" if score >= 5 else "⚪ B급")
-                fmt_price = f"{int(cp):,}원" if (".KS" in tic or ".KQ" in tic) else f"${cp:.2f}"
-                row = {"종목명": name, "현재가": fmt_price, "ROE": f"{roe:.1f}%", "BMS점수": f"{score}점", "등급": grade}
-                if (h['Open'].iloc[-1]/pp-1) >= 0.02 and cv > va * 1.5: data["EP"].append(row)
-                if ch >= 3.5 and cv > h['Volume'].iloc[-2]: data["BURST"].append(row)
-                if h['Close'].iloc[-5:].std()/cp*100 < 2.0 and abs(ch) < 1.5: data["TTT"].append(row)
+                ch = (cp/pp - 1) * 100
+                cv = int(h['Volume'].iloc[-1])
+                
+                # [전문가님 필터] 900만주 & 10% 이상
+                if cv >= 9000000 and ch >= 10.0:
+                    fmt_p = f"{int(cp):,}원" if (".KS" in tic or ".KQ" in tic) else f"${cp:.2f}"
+                    data["MONSTER"].append({"종목": tic, "현재가": fmt_p, "거래량": f"{cv:,}", "등락": f"{ch:.1f}%"})
+                elif ch >= 4.0:
+                    data["NORMAL"].append({"종목": tic, "현재가": cp, "거래량": f"{cv:,}", "등락": f"{ch:.1f}%"})
             except: continue
-        pb.empty(); st_txt.empty(); return data
-    sc_res = run_sc()
-    for tab, k in zip(tabs, ["EP", "BURST", "TTT"]):
-        with tab:
-            if sc_res[k]: st.dataframe(pd.DataFrame(sc_res[k]), use_container_width=True, hide_index=True)
-            else: st.info("대상 종목 없음")
+        pb.empty(); st_txt.empty()
+        return data
+
+    if st.button("🚀 괴물 종목 정밀 스캔 시작"):
+        res = run_master_sc()
+        t1, t2 = st.tabs(["🔥 괴물급 (9M+/10%+)", "📈 일반 모멘텀 (4%+)"])
+        with t1:
+            if res["MONSTER"]: st.dataframe(pd.DataFrame(res["MONSTER"]), use_container_width=True, hide_index=True)
+            else: st.info("조건을 만족하는 괴물 종목이 현재 없습니다.")
+        with t2:
+            if res["NORMAL"]: st.dataframe(pd.DataFrame(res["NORMAL"]), use_container_width=True, hide_index=True)
+            else: st.info("상승 추세 종목 없음")
 
 elif page.startswith("2."):
     st.header("💬 소통 대화방 (HQ Control)")
@@ -169,22 +190,21 @@ elif page.startswith("4."):
     st.header("🚀 주도주 실시간 랭킹 (Daily Live Ranking)")
     RANK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
     
+    # 한국 시간 설정
+    now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+    
     with st.spinner("📊 전문가님의 데이터 센터에서 실시간 동기화 중..."):
         try:
             df_live = pd.read_csv(RANK_SHEET_URL)
-            # ROE 10% 이상 필터링 (ROE 컬럼명은 시트 상황에 따라 조정 가능, 여기선 'ROE'로 가정)
-            # 만약 % 기호가 있다면 제거 후 비교
             if 'ROE' in df_live.columns:
                 df_live['ROE_VAL'] = df_live['ROE'].astype(str).str.replace('%','').astype(float)
                 df_final = df_live[df_live['ROE_VAL'] >= 10.0].head(10)
             else:
-                df_final = df_live.head(10) # 컬럼 없을 시 상위 10개 표시
+                df_final = df_live.head(10)
             
-            st.markdown(f"<div class='glass-card'>📅 <b>{datetime.now().strftime('%Y-%m-%d')} 기준</b> | ROE 10% 이상 주도주 우선순위</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='glass-card'>📅 <b>{now_kst.strftime('%Y-%m-%d %H:%M')} KST</b> | ROE 10% 이상 주도주 우선순위</div>", unsafe_allow_html=True)
             
-            # 전문가님 요청 컬럼 표시 (시트에 해당 컬럼이 있다고 가정, 없으면 기본값)
             display_cols = ["종목명", "ROE", "현재가", "진입가", "단계", "손절가", "목표가"]
-            # 실제 시트 컬럼명과 다를 경우를 대비한 유연한 처리
             available_cols = [c for c in display_cols if c in df_final.columns]
             
             if available_cols:
@@ -192,7 +212,7 @@ elif page.startswith("4."):
             else:
                 st.dataframe(df_final, use_container_width=True, hide_index=True)
                 
-            st.success("✅ 구글 시트 데이터 기반 데일리 랭킹 업데이트 완료!")
+            st.success(f"✅ {now_kst.strftime('%H:%M')} 한국 시간 기준 업데이트 완료!")
         except Exception as e:
             st.error(f"⚠️ 시트 연동 중 오류 발생: {e}")
             st.info("시트가 '링크가 있는 모든 사용자에게 공개(뷰어)' 상태인지 확인해 주세요.")
@@ -279,11 +299,37 @@ elif page.startswith("10."):
     st.write("우리가 꿈꾸는 경제적 자유는 삶의 주도권을 되찾는 과정입니다. 여기서 여러분과 함께 성장하기를 고대합니다.")
     
     st.divider()
+
+    # 영문 버전 추가
+    st.markdown("### 🏛️ Corporate Mission (English Version)")
+    st.write("""
+    **Following the footsteps of the three giants, dreaming of a collective ascent.**
+    
+    This platform was born out of my profound respect for three masters: **William O'Neil, Mark Minervini, and Pradeep Bonde.** 
+    My goal was to build a "compass" to keep myself grounded and focused so as not to lose my way in the turbulent ocean of the stock market.
+    """)
+    
+    st.write("""
+    I hold a firm belief that **"anyone who puts in the sincere effort can achieve their professional dreams and reach financial freedom."** 
+    Although this terminal may still be a work in progress, I have poured my heart into writing every line of code and refining every logic, 
+    fueled by the sincere hope that those who share this dream can grow wealthy together.
+    """)
+    
+    st.info("""
+    📖 **Turtle’s Must-Read Recommendation**<br>
+    There are already many excellent books available. Among them, I most highly recommend **"How to Make Money in Stocks" by William O'Neil.** 
+    I hope you gain insights that pierce through the core of the market, going beyond mere technical analysis.
+    """, unsafe_allow_html=True)
+    
+    st.write("""
+    My wish is for this place to evolve into a "Stock Insight Platform" where we do more than just consume information—where we share valuable opinions, 
+    encourage one another, and ascend toward success together. I, too, will never stop learning and will continue this journey alongside you.
+    """)
     
     st.markdown("""
-    <div style='text-align: right;'>
-        <b style='color: #FFD700; font-size: 1.2rem;'>거북이 드림</b><br>
-        <i style='color: #888;'>Sincerely, Turtle Dream</i>
+    <div style='text-align: right; margin-top: 20px;'>
+        <span style='color: #888; font-size: 0.9rem;'>April 18, 2026, on a deepening spring evening at home.</span><br>
+        <b style='color: #FFD700; font-size: 1.2rem;'>Sincerely, Turtle</b>
     </div>
     """, unsafe_allow_html=True)
 
