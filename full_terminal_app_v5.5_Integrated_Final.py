@@ -66,7 +66,17 @@ st.markdown(f"""
     h1, h2 {{ color: #FFD700 !important; font-weight: 900; }}
     .stButton>button {{ background: #1a1a1a !important; color: #FFD700 !important; border: 1px solid #FFD700 !important; border-radius: 10px; font-weight: 800; }}
     .stButton>button:hover {{ background: #FFD700 !important; color: #000 !important; transform: translateY(-3px); box-shadow: 0 8px 25px rgba(255, 215, 0, 0.6); }}
-    .glass-card {{ background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 25px; backdrop-filter: blur(15px); margin-bottom: 30px; }}
+    .glass-card {{ background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 25px; backdrop-filter: blur(15px); margin-bottom: 30px; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }}
+    .glass-card:hover {{ background: rgba(255, 255, 255, 0.08); border-color: rgba(255,215,0,0.3); transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0,0,0,0.4); }}
+    
+    /* 애니메이션 효과 */
+    @keyframes pulse-glow {{ 0% {{ box-shadow: 0 0 15px rgba(0,255,0,0.2); }} 50% {{ box-shadow: 0 0 40px rgba(0,255,0,0.6); }} 100% {{ box-shadow: 0 0 15px rgba(0,255,0,0.2); }} }}
+    .status-pulse {{ animation: pulse-glow 3s infinite; }}
+    
+    @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
+    .ticker-wrap {{ overflow: hidden; background: rgba(255,215,0,0.05); white-space: nowrap; padding: 5px 0; border-bottom: 1px solid rgba(255,215,0,0.1); margin-bottom: 15px; }}
+    .ticker-content {{ display: inline-block; animation: ticker 40s linear infinite; color: #FFD700; font-size: 0.85rem; font-weight: 500; }}
+    .ticker-item {{ margin: 0 30px; display: inline-block; }}
     
     /* 모바일 최적화 */
     @media (max-width: 768px) {{
@@ -77,6 +87,7 @@ st.markdown(f"""
         .mobile-header {{ font-size: 2.2rem !important; }}
         .responsive-bar {{ flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; padding: 15px !important; }}
         .responsive-indices {{ width: 100% !important; justify-content: space-between !important; gap: 10px !important; }}
+        .ticker-content {{ animation: ticker 25s linear infinite; }}
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -215,6 +226,24 @@ if curr_grade == "방장":
 
 page = st.sidebar.radio("Mission Control", menu_ops)
 
+# --- 🛰️ 전광판 티커 테이프 ---
+@st.cache_data(ttl=300)
+def get_ticker_tape():
+    watch = ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "BTC-USD", "ETH-USD"]
+    items = []
+    try:
+        data = yf.download(watch, period="2d", progress=False)['Close']
+        for t in watch:
+            try:
+                c = ((data[t].iloc[-1] / data[t].iloc[-2]) - 1) * 100
+                items.append(f"<span class='ticker-item'>{t} {data[t].iloc[-1]:,.1f} ({c:+.2f}%)</span>")
+            except: pass
+    except: pass
+    return "".join(items)
+
+ticker_html = get_ticker_tape()
+st.markdown(f"<div class='ticker-wrap'><div class='ticker-content'>{ticker_html * 3}</div></div>", unsafe_allow_html=True)
+
 # --- 🛰️ 상단 실시간 정보 바 ---
 now_kr = datetime.now(pytz.timezone('Asia/Seoul'))
 now_us = datetime.now(pytz.timezone('America/New_York'))
@@ -274,8 +303,8 @@ st.markdown(f"""
 
 # --- 🛰️ 마켓 게이지 헤더 ---
 st.markdown("""
-<div style='background: rgba(0,0,0,0.85); border: 2px solid #FFD700; border-radius: 15px; padding: 25px; text-align: center; margin-bottom: 25px; box-shadow: 0 0 30px rgba(255,215,0,0.1);'>
-    <h1 style='color: #00FF00; margin: 0; font-size: 2.2rem;'>🟢 GREEN MARKET ACTIVE</h1>
+<div class='status-pulse' style='background: rgba(0,0,0,0.85); border: 2px solid #FFD700; border-radius: 15px; padding: 25px; text-align: center; margin-bottom: 25px;'>
+    <h1 style='color: #00FF00; margin: 0; font-size: 2.2rem; text-shadow: 0 0 15px rgba(0,255,0,0.5);'>🟢 GREEN MARKET ACTIVE</h1>
     <p style='color: #FFD700; font-size: 1.1rem; margin-top: 10px; font-weight: 700;'>
         🛡️ 사령부 상태: 매수 윈도우 개방 (팔로스루데이 발생: 4월 8일 수요일)
     </p>
@@ -383,7 +412,7 @@ elif page.startswith("2."):
         pd.DataFrame(columns=["시간", "유저", "내용", "등급"]).to_csv(CHAT_FILE, index=False, encoding="utf-8-sig")
 
     # 입력창 차별화
-    st.markdown(f"<div class='glass-card'>현재 권한: <b>{user_grade}</b></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='glass-card'>현재 권한: <b>{curr_grade}</b></div>", unsafe_allow_html=True)
     
     with st.form("hq_chat_form", clear_on_submit=True):
         if is_admin:
@@ -402,7 +431,7 @@ elif page.startswith("2."):
                 new_msg = pd.DataFrame([[t, u, ms, curr_grade]], columns=["시간", "유저", "내용", "등급"])
                 new_msg.to_csv(CHAT_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
                 # 구글 시트 백업
-                gsheet_sync("소통기록_통합", ["시간", "유저", "내용", "등급"], [t, u, ms, user_grade])
+                gsheet_sync("소통기록_통합", ["시간", "유저", "내용", "등급"], [t, u, ms, curr_grade])
                 st.success("✅ 메시지가 사령부 전역에 전파되었습니다.")
                 st.rerun()
 
@@ -756,21 +785,46 @@ elif page.startswith("9."):
     st.divider()
 
 elif page.startswith("10."):
-    st.markdown("<h1 style='text-align: center; color: #FFD700;'>🏛️ 사령부 제작 동기</h1>", unsafe_allow_html=True)
-    st.markdown("### 세 거인의 발자취를 따라, 함께 성장의 궤도에 오르기를 꿈꾸며")
+    st.markdown("<h1 style='text-align: center; color: #FFD700;'>🏛️ 사령부 제작 동기 (Mission Statement)</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888; font-size: 1.1rem;'>Follow the Giants, Conquer the Market Together</p>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center;'>세 거인의 발자취를 따라, 함께 성장의 궤도에 오르기를 꿈꾸며</h3>", unsafe_allow_html=True)
     st.divider()
+    
     st.write("""
-    이 플랫폼은 제가 깊이 존경하는 세 분의 스승, **윌리엄 오닐, 마크 미너비니, 그리고 프라딥 본데**의 트레이딩 철학을 기리는 마음으로 시작되었습니다. 
-    비록 지금은 부족한 점이 많은 터미널이지만, 저와 같은 꿈을 꾸는 분들이 함께 부자가 되었으면 하는 진심 어린 마음을 담아 밤낮으로 코드를 짜고 로직을 다듬었습니다.
+    이 플랫폼은 제가 깊이 존경하는 세 분의 위대한 스승, **윌리엄 오닐, 마크 미너비니, 그리고 프라딥 본데**의 트레이딩 철학을 시스템으로 구현하고 기리기 위해 시작되었습니다. 
+    (This platform was established to systematize and honor the trading philosophies of three legendary mentors: William O'Neil, Mark Minervini, and Pradeep Bonde.)
+    
+    비록 지금은 성장에 목마른 소박한 터미널이지만, 저와 같은 길을 걷는 대원분들이 한 배를 타고 진정한 경제적 자유에 도달하기를 바라는 진심 어린 마음을 담아 밤낮으로 로직을 다듬고 있습니다.
+    (Though it is currently a small terminal, I refine its logic day and night with the sincere hope that fellow traders walking the same path can reach true financial freedom together.)
     """)
+
+    st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+    st.subheader("📚 사령부를 지탱하는 세 개의 기둥 (Three Pillars)")
+    
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown("**1. 윌리엄 오닐 (CAN SLIM)**")
+        st.write("주도주 발굴의 근간입니다. 펀더멘털과 기술적 흐름의 조화를 시스템에 녹였습니다.")
+        st.caption("*The root of leading stocks.*")
+    with c2:
+        st.markdown("**2. 마크 미너비니 (VCP)**")
+        st.write("타점의 정교함입니다. 에너지의 응축과 돌파를 감지하는 지표를 강화했습니다.")
+        st.caption("*The precision of entry.*")
+    with c3:
+        st.markdown("**3. 프라딥 본데 (EP/RS)**")
+        st.write("시장 대응의 프로세스입니다. 실시간 상황 인식과 폭발적 모멘텀을 추적합니다.")
+        st.caption("*The process of response.*")
+    st.markdown("</div>", unsafe_allow_html=True)
+
     st.info("""
-    📖 **오닐의 유산:** 윌리엄 오닐의 저서 『최고의 주식, 최적의 타이밍』은 제 트레이딩의 본질을 깨닫게 해준 보물입니다. 
-    이 터미널이 그 거인들의 어깨 위에 올라타 시장을 바라보는 든든한 디딤돌이 되길 희망합니다.
+    📖 **오닐의 유산 (The Legacy):** 윌리엄 오닐의 저서 『최고의 주식, 최적의 타이밍』은 제 트레이딩 인생의 나침반이 되었습니다. 
+    이 터미널이 거인들의 어깨 위에 올라타 시장의 거센 파도를 넘어서는 여러분의 든든한 디딤돌(Stepping Stone)이 되길 희망합니다.
     """)
+    
     st.markdown("""
-    <div style='text-align: right; margin-top: 20px;'>
-        <span style='color: #888; font-size: 0.9rem;'>2026년 4월 18일, 깊어가는 봄날 밤.</span><br>
-        <b style='color: #FFD700; font-size: 1.2rem;'>전문가거북이 드림</b>
+    <div style='text-align: right; margin-top: 40px; border-top: 1px solid #333; padding-top: 20px;'>
+        <span style='color: #888; font-size: 0.9rem;'>2026년 4월 18일, 깊어가는 봄날 밤. (Deep Spring Night, 2026)</span><br>
+        <b style='color: #FFD700; font-size: 1.2rem;'>전문가거북이 드림 (Truly yours, Expert Turtle)</b>
     </div>
     """, unsafe_allow_html=True)
 
@@ -823,21 +877,23 @@ elif page.startswith("13."):
 elif page.startswith("14."):
     st.header("🌡️ 시장 심리 게이지 (Fear & Greed)")
     try:
-        ndx = yf.download("^IXIC", period="2d", progress=False)['Close']
+        ndx = yf.download("^IXIC", period="5d", progress=False)['Close']
+        if isinstance(ndx, pd.DataFrame): ndx = ndx.iloc[:, 0]
+        ndx = ndx.dropna()
         ndx_ch = ((ndx.iloc[-1] / ndx.iloc[-2]) - 1) * 100
-        val = int(min(max(55 + (ndx_ch * 10), 10), 90))
-    except: val = 50
+        # 기본 점수를 70으로 상향하여 매수 우위 시장 반영
+        val = int(min(max(70 + (ndx_ch * 10), 20), 95))
+    except: val = 75
     col1, col2 = st.columns([1.5, 1.2])
     with col1:
-        fig = go.Figure(go.Indicator(mode="gauge+number", value=val, gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#FFD700"}, 'steps': [{'range': [0, 30], 'color': "#FF4B4B"}, {'range': [71, 100], 'color': "#00FF00"}]}))
+        fig = go.Figure(go.Indicator(mode="gauge+number", value=val, gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#00FF00"}, 'steps': [{'range': [0, 35], 'color': "#FF4B4B"}, {'range': [36, 65], 'color': "#FFD700"}, {'range': [66, 100], 'color': "#00FF00"}]}))
         st.plotly_chart(fig, use_container_width=True)
     with col2:
         st.markdown("<div class='glass-card' style='padding:25px;'>", unsafe_allow_html=True)
         st.subheader("💡 본데의 실시간 훈수")
-        if val <= 30: st.error("🔴 공포 구간: 자본 방어에 집중하십시오.")
-        elif val <= 50: st.warning("🟠 주의 구간: 섣부른 진입을 자제하십시오.")
-        elif val <= 75: st.info("🟡 중립 구간: 개별 주도주의 VCP에 집중하십시오.")
-        else: st.success("🟢 적극 구간: EP 돌파 종목에 올라타십시오.")
+        if val <= 35: st.error("🔴 공포 구간: 비중 축소 및 현금 확보 권고.")
+        elif val <= 65: st.warning("🟡 중립 구간: 주도주 눌림목 타점만 선별 매수.")
+        else: st.success("🟢 적극 매수: 주도주 EP 돌파 시 적극적으로 물량을 확보하십시오.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 elif page.startswith("15."):
