@@ -51,7 +51,7 @@ def gsheet_sync(sheet_name, headers, values):
     try: requests.post(MASTER_GAS_URL, json=payload, timeout=5)
     except: pass
 
-st.set_page_config(page_title="StockDragonfly Pro", page_icon="🐉", layout="wide")
+st.set_page_config(page_title="StockDragonfly Pro", page_icon="🛸", layout="wide")
 
 # --- 🌑 프리미엄 스타일 디자인 ---
 bg_b64 = ""
@@ -75,7 +75,7 @@ if "password_correct" not in st.session_state: st.session_state["password_correc
 if not st.session_state["password_correct"]:
     c1, m, c2 = st.columns([1, 2, 1])
     with m:
-        st.markdown("<h1 style='text-align: center; color: #FFD700; font-size: 4rem; margin-top: 0; margin-bottom: 10px; font-family: \"Outfit\", sans-serif; text-shadow: 0 0 30px rgba(255,215,0,0.4);'>🐉 StockDragonfly</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; color: #FFD700; font-size: 4rem; margin-top: 0; margin-bottom: 10px; font-family: \"Outfit\", sans-serif; text-shadow: 0 0 30px rgba(255,215,0,0.4);'>🛸 StockDragonfly</h1>", unsafe_allow_html=True)
         if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png", use_container_width=True)
         tab1, tab2 = st.tabs(["🚀 Terminal Log-In", "📝 Join Command (자격 시험)"])
         
@@ -175,7 +175,7 @@ if not st.session_state["password_correct"]:
 
 with st.sidebar:
     if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png")
-    st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🐉 StockDragonfly v9.9</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🛸 StockDragonfly v9.9</p>", unsafe_allow_html=True)
     st.divider()
     bgms = {"🔇 OFF": None, "✨ You Raise": "YouRaise.mp3", "😊 Happy": "happy.mp3", "🌅 Hope": "hope.mp3", "🐱 Cute": "cute.mp3", "🎻 Petty": "petty.mp3", "🎙️ Ajussi": "나의아저씨.mp3"}
     sel_bgm = st.selectbox("Radio", list(bgms.keys()), label_visibility="collapsed")
@@ -202,6 +202,48 @@ if curr_grade == "방장":
     menu_ops.append("15. 🎖️ HQ 인적 자원 사령부")
 
 page = st.sidebar.radio("Mission Control", menu_ops)
+
+# --- 🛰️ 상단 실시간 정보 바 ---
+now_kr = datetime.now(pytz.timezone('Asia/Seoul'))
+now_us = datetime.now(pytz.timezone('America/New_York'))
+
+@st.cache_data(ttl=600)
+def get_top_indices():
+    res = {}
+    for n, t in {"NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}.items():
+        try:
+            h = yf.download(t, period="2d", progress=False)['Close']
+            c = ((h.iloc[-1] / h.iloc[-2]) - 1) * 100
+            res[n] = c
+        except: res[n] = 0.0
+    return res
+
+idx_info = get_top_indices()
+
+st.markdown(f"""
+<div style='background: rgba(10,10,10,0.9); border-radius: 12px; padding: 12px 25px; border: 1px solid #333; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);'>
+    <div style='font-family: inherit;'>
+        <span style='color: #888; font-size: 0.85rem;'>TIME OPS</span><br>
+        <span style='color: #EEE; font-size: 0.95rem; font-weight: 600;'>🇰🇷 {now_kr.strftime('%m/%d %H:%M')}</span>
+        <span style='color: #444; margin: 0 10px;'>|</span>
+        <span style='color: #EEE; font-size: 0.95rem; font-weight: 600;'>🇺🇸 {now_us.strftime('%m/%d %H:%M')}</span>
+    </div>
+    <div style='display: flex; gap: 30px;'>
+        <div style='text-align: right;'>
+            <span style='color: #888; font-size: 0.8rem;'>NASDAQ</span><br>
+            <span style='color: {"#00FF00" if idx_info["NASDAQ"]>=0 else "#FF4B4B"}; font-weight: 700;'>{idx_info["NASDAQ"]:+.2f}%</span>
+        </div>
+        <div style='text-align: right;'>
+            <span style='color: #888; font-size: 0.8rem;'>KOSPI</span><br>
+            <span style='color: {"#00FF00" if idx_info["KOSPI"]>=0 else "#FF4B4B"}; font-weight: 700;'>{idx_info["KOSPI"]:+.2f}%</span>
+        </div>
+        <div style='text-align: right;'>
+            <span style='color: #888; font-size: 0.8rem;'>KOSDAQ</span><br>
+            <span style='color: {"#00FF00" if idx_info["KOSDAQ"]>=0 else "#FF4B4B"}; font-weight: 700;'>{idx_info["KOSDAQ"]:+.2f}%</span>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # --- 🛰️ 마켓 게이지 헤더 ---
 st.markdown("""
