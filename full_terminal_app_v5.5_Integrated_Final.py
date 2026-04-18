@@ -109,7 +109,8 @@ if page.startswith("1."):
                 if ch >= 3.5: score += 3
                 if cv > va * 1.5: score += 3
                 grade = "💎 S급" if score >= 8 else ("🟢 A급" if score >= 5 else "⚪ B급")
-                row = {"종목명": name, "현재가": f"${cp:.2f}", "ROE": f"{roe:.1f}%", "BMS점수": f"{score}점", "등급": grade}
+                fmt_price = f"{int(cp):,}원" if (".KS" in tic or ".KQ" in tic) else f"${cp:.2f}"
+                row = {"종목명": name, "현재가": fmt_price, "ROE": f"{roe:.1f}%", "BMS점수": f"{score}점", "등급": grade}
                 if (h['Open'].iloc[-1]/pp-1) >= 0.02 and cv > va * 1.5: data["EP"].append(row)
                 if ch >= 3.5 and cv > h['Volume'].iloc[-2]: data["BURST"].append(row)
                 if h['Close'].iloc[-5:].std()/cp*100 < 2.0 and abs(ch) < 1.5: data["TTT"].append(row)
@@ -176,21 +177,51 @@ elif page.startswith("8."):
     else: st.warning("권한이 없습니다.")
 
 elif page.startswith("9."):
-    st.header("🐝 본데(Pradeep Bonde)는 누구인가?")
+    st.markdown("<h2 style='text-align: center; color: #FFD700;'>🐝 프라딥 본데(StockBee): 시스템으로 시장을 정복한 멘토</h2>", unsafe_allow_html=True)
     st.markdown("""
     <div class='glass-card' style='max-width:850px; margin:0 auto;'>
-    <h4>시스템으로 시장을 정복한 월가의 멘토</h4>
-    <p>본데는 24년 경력의 전업 트레이더로, 물류 전문가 출신답게 주식을 데이터 기반 비즈니스로 정의했습니다. <b>EP, Momentum Burst</b>의 대가입니다.</p>
+        <p>온라인에서 <b>스탁비(Stockbee)</b>라는 필명으로 더 잘 알려진 프라딥 본데는 24년 이상의 경력을 가진 전업 트레이더이자 현대 트레이딩 교육의 거두입니다. 그는 수천 달러를 1억 달러 이상의 자산으로 불린 크리스찬 쿨라매기를 비롯해 세계적인 수익률을 기록한 수많은 트레이더를 배출하며 월가의 전설적인 멘토로 자리 잡았습니다.</p>
+        
+        <h4 style='color: #FFD700; margin-top:30px;'>1. 물류 전문가에서 데이터 트레이더로의 변신</h4>
+        <p>본데의 성공 비결은 그의 독특한 이력에서 시작됩니다. 인도에서 물류 산업의 효율성과 프로세스 관리를 진두지휘하던 그는, 주식 거래를 막연한 운이 아닌 철저하게 설계된 <b>데이터 기반의 비즈니스 모델</b>로 재정의했습니다.</p>
+        
+        <h4 style='color: #FFD700; margin-top:30px;'>2. 스탁비를 지탱하는 4대 트레이딩 철학</h4>
+        <ul>
+            <li><b>안타 전략 (Hitters):</b> 단번에 부자가 되려는 홈런보다, 작고 확실한 수익을 복리로 누적시키는 것이 성공의 핵심입니다.</li>
+            <li><b>셀프 리더십:</b> 트레이딩의 주도권은 자신에게 있어야 합니다. 스스로 문제를 해결하는 의지가 시장의 파도를 넘게 합니다.</li>
+            <li><b>절차적 기억 (Deep Dive):</b> 실전 매매는 반사적으로 이루어져야 합니다. 과거 폭등했던 수천 개의 차트 패턴을 뇌에 각인시키는 혹독한 훈련이 필요합니다.</li>
+            <li><b>철저한 상황 인식:</b> 매일 장세의 폭(Breadth)을 분석하여 공격할 날과 지킬 날을 엄격하게 판단합니다.</li>
+        </ul>
+        
+        <h4 style='color: #FFD700; margin-top:30px;'>3. 시장의 중력을 이기는 대표 매매 기법</h4>
+        <p><b>EP(에피소딕 피벗):</b> 펀더멘털의 근본 변화가 강력한 매수세와 거래량 폭발을 동반하며 갭 상승을 일으키는 초기 국면을 공략합니다.<br>
+        <b>Momentum Burst:</b> 좁은 구간에서 힘을 응축하던 주식이 분출하는 순간을 포착하여 빠른 수익을 챙기는 기법입니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
 elif page.startswith("10."):
-    st.header("🏛️ 사이트 제작 동기")
+    st.markdown("<h2 style='text-align: center; color: #FFD700;'>🏛️ 사령부 제작 동기 (Corporate Mission)</h2>", unsafe_allow_html=True)
     st.markdown("""
-    <div class='glass-card' style='max-width:850px; margin:0 auto;'>
-    <h4>세 거인의 발자취를 따라, 함께 성장의 궤도에 오르기를 꿈꾸며</h4>
-    <p>윌리엄 오닐, 마크 미너비니, 프라딥 본데 마스터를 존경하며 제작했습니다.</p>
-    <div style='text-align:right;'><b>거북이 드림</b><br><i>Sincerely, Turtle</i></div>
+    <div class='glass-reader'>
+        <h3 style='color: #FFD700; text-align: center; margin-bottom: 30px;'>세 거인의 발자취를 따라, 함께 성장의 궤도에 오르기를 꿈꾸며</h3>
+        
+        <p>이 플랫폼은 제가 깊이 존경하는 세 분의 스승, <b>윌리엄 오닐, 마크 미너비니, 그리고 프라딥 본데</b>의 트레이딩 철학을 기리는 마음으로 시작되었습니다. 
+        주식이라는 거친 바다에서 길을 잃지 않도록 저 스스로를 다잡기 위한 '나침반'을 만들고 싶었습니다.</p>
+        
+        <p>저는 <b>"누구나 간절히 노력한다면 정규직의 꿈을 이룰 수 있고, 경제적 자유를 얻을 수 있다"</b>는 굳은 신념을 가지고 있습니다. 
+        비록 지금은 부족한 점이 많은 터미널이지만, 저와 같은 꿈을 꾸는 분들이 함께 부자가 되었으면 하는 진심 어린 마음을 담아 밤낮으로 코드를 짜고 로직을 다듬었습니다.</p>
+        
+        <p>이미 세상에는 훌륭한 책들이 많이 나와 있습니다. 그중에서도 윌리엄 오닐의 저서 <b>『최고의 주식, 최적의 타이밍(How to Make Money in Stocks)』</b>은 
+        제가 트레이딩의 본질을 깨닫게 해준 소중한 보물입니다. 저는 이 터미널이 그 거인들의 어깨 위에 올라타 시장을 바라보는 든든한 디딤돌이 되길 희망합니다.</p>
+        
+        <p>우리가 꿈꾸는 경제적 자유는 단순히 숫자의 늘어남이 아니라, 우리 삶의 주도권을 되찾는 과정입니다. 
+        이곳에서 여러분과 함께 성장의 궤도에 오르기를 진심으로 고대하겠습니다.</p>
+        
+        <div style='text-align:right; margin-top: 50px; border-top: 1px solid rgba(255,215,0,0.3); padding-top: 20px;'>
+            <span style='font-size: 1.2rem; color: #FFD700;'><b>거북이 드림</b></span><br>
+            <span style='color: #888;'><i>Sincerely, Turtle Dream</i></span><br>
+            <span style='color: #666; font-size: 0.8rem;'>Project DragonFly / Anti-Gravity Ops</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -212,5 +243,26 @@ elif page.startswith("13."):
     st.plotly_chart(fig, use_container_width=True)
 
 elif page.startswith("14."):
-    st.header("🌡️ 시장 심리 게이지")
-    st.plotly_chart(go.Figure(go.Indicator(mode="gauge+number", value=65, gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#FF4B4B"}})), use_container_width=True)
+    st.header("🌡️ 시장 심리 게이지 (Fear & Greed)")
+    val = 65  # 예시 값 (실제 로직 연동 가능)
+    
+    col1, col2 = st.columns([1.5, 1])
+    with col1:
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number", value=val,
+            gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#FFD700"},
+                   'steps': [{'range': [0, 20], 'color': "#FF4B4B"}, 
+                            {'range': [80, 100], 'color': "#00FF00"}]}))
+        st.plotly_chart(fig, use_container_width=True)
+        
+    with col2:
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        st.subheader("💡 게이지 판독 가이드")
+        if val < 20: st.error("🚨 극심한 공포 (Extreme Fear) - 주도주 매집 기회")
+        elif val < 40: st.warning("📉 공포 (Fear) - 시장 관망 및 타점 대기")
+        elif val < 60: st.info("⚖️ 중립 (Neutral) - 시장의 방향성 탐색 중")
+        elif val < 80: st.success("📈 탐욕 (Greed) - 추세 추종 및 수익 극대화")
+        else: st.error("🔥 극심한 탐욕 (Extreme Greed) - 과열 주의 및 리스크 관리")
+        
+        st.write("본 게이지는 시장 참여자들의 심리적 과열 상태를 나타내며, 반대로 생각할 때 가장 큰 기회가 옵니다.")
+        st.markdown("</div>", unsafe_allow_html=True)
