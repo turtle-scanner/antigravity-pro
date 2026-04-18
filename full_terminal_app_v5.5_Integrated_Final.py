@@ -117,25 +117,26 @@ if page.startswith("1."):
                 h = yf.download(tic, period="300d", progress=False)
                 if len(h) < 250: continue
                 
-                # [A] 1단계: 트렌드 템플릿 필터
+                # [A] 1단계: 트렌드 템플릿 필터 (완화 적용)
                 c = h['Close']
                 ma50, ma150, ma200 = c.rolling(50).mean(), c.rolling(150).mean(), c.rolling(200).mean()
                 cp, pp = c.iloc[-1], c.iloc[-2]
                 
+                # 정배열 조건 유지 (주도주 기본)
                 cond_a = (ma50.iloc[-1] > ma150.iloc[-1] > ma200.iloc[-1]) and (cp > ma50.iloc[-1])
-                cond_a2 = ma200.iloc[-1] > ma200.iloc[-20] # 200일선 상향
+                cond_a2 = ma200.iloc[-1] > ma200.iloc[-20] * 0.99 # 미세 하락도 허용
                 h52, l52 = c.max(), c.min()
-                cond_a3 = (cp >= h52 * 0.75) and (cp >= l52 * 1.3) # 52주 신고가 근접/신저가 이격
+                cond_a3 = (cp >= h52 * 0.65) and (cp >= l52 * 1.25) # 52주 고가 대비 35% 이내로 완화
                 
-                # [B] 2단계: EP 엔진 (당일 폭발)
+                # [B] 2단계: EP 엔진 (당일 폭발 - 완화)
                 ch = (cp/pp - 1) * 100
                 cv, va = h['Volume'].iloc[-1], h['Volume'].iloc[-20:-1].mean()
-                cond_b = (ch >= 4.0) and (cv >= va * 1.5) and (cv >= 100000)
+                cond_b = (ch >= 3.0) and (cv >= va * 1.3) and (cv >= 50000) # 3% / 130% 로 완화
                 
-                # [C] 3단계: VCP (전일 응축)
+                # [C] 3단계: VCP (전일 응축 - 완화)
                 pp_ch = (c.iloc[-2]/c.iloc[-3] - 1) * 100
                 pv, va10 = h['Volume'].iloc[-2], h['Volume'].iloc[-11:-1].mean()
-                cond_c = (abs(pp_ch) <= 2.0) and (pv <= va10 * 0.5) # 변동성 축소 & 거래량 고갈
+                cond_c = (abs(pp_ch) <= 3.5) and (pv <= va10 * 0.7) # 3.5% 변동 / 70% 거래량으로 완화
                 
                 fmt_p = f"{int(cp):,}원" if (".KS" in tic or ".KQ" in tic) else f"${cp:.2f}"
                 row = {"종목": tic, "현재가": fmt_p, "등락": f"{ch:.1f}%", "거래량": f"{int(cv):,}"}
@@ -255,9 +256,43 @@ elif page.startswith("6."):
     st.write("반도체(SOXX) 🟢 | 바이오(XBI) 🔴 | 빅테크(XLK) 🟢")
 
 elif page.startswith("7."):
-    st.header("📊 본데 감시 리스트")
-    st.write("전문가님이 수동으로 관리하는 50선 리포트입니다.")
-    st.table(pd.DataFrame({"No": [1, 2, 3], "Ticker": ["NVDA", "PLTR", "ARM"], "Status": ["공격", "대기", "매수"]}))
+    st.header("🎯 본데 최핵심 감시 리스트 (Top 3 Focus)")
+    SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
+    now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+    
+    with st.spinner("📡 데이터 센터에서 TOP 3 주도주 추출 중..."):
+        try:
+            df = pd.read_csv(SHEET_URL)
+            # ROE 10% 이상 필터링
+            if 'ROE' in df.columns:
+                df['ROE_VAL'] = df['ROE'].astype(str).str.replace('%','').astype(float)
+                df_top3 = df[df['ROE_VAL'] >= 10.0].head(3)
+            else:
+                df_top3 = df.head(3)
+            
+            st.markdown(f"<div class='glass-card'>📅 <b>{now_kst.strftime('%Y-%m-%d')} KST</b> | 사령부 최우선 공략 종목 3선</div>", unsafe_allow_html=True)
+            
+            cols = st.columns(3)
+            for i, (idx, row) in enumerate(df_top3.iterrows()):
+                with cols[i]:
+                    st.markdown(f"""
+                    <div style='background: rgba(255,215,0,0.1); border: 1px solid #FFD700; border-radius: 12px; padding: 15px; text-align: center;'>
+                        <h3 style='color: #FFD700; margin: 0;'>{row.get('종목명', 'N/A')}</h3>
+                        <p style='color: #888; font-size: 0.8rem;'>Rank TOP {i+1}</p>
+                        <hr style='border: 0.5px solid #444;'>
+                        <div style='text-align: left; font-size: 0.9rem;'>
+                            <b>🔥 ROE:</b> {row.get('ROE', 'N/A')}<br>
+                            <b>📊 RS:</b> {row.get('RS', 'N/A')}<br>
+                            <b>🎯 진입가:</b> {row.get('진입가', 'N/A')}<br>
+                            <b>🛡️ 손절가:</b> {row.get('손절가', 'N/A')}<br>
+                            <b>🚀 목표가:</b> {row.get('목표가', 'N/A')}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.success("✅ 사령부 데이터 동기화 완료!")
+        except Exception as e:
+            st.error(f"⚠️ 데이터 연동 실패: {e}")
 
 elif page.startswith("8."):
     st.header("👑 관리자 승인 센터")
