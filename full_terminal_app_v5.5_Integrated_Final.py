@@ -100,13 +100,41 @@ TICKER_NAME_MAP = {
     "005490.KS": "POSCO홀딩스", "000270.KS": "기아", "066570.KS": "LG전자", "035720.KS": "카카오", "035420.KS": "NAVER"
 }
 
-st.set_page_config(page_title="Pivot Master Pro", page_icon="⚖️", layout="wide")
+# --- 🌑 강제 다크 모드 및 하이엔드 디자인 주입 ---
+st.markdown("""
+    <style>
+    /* 전체 배경을 칠흑 같은 검정으로 고정 */
+    .stApp {
+        background-color: #000000 !important;
+        color: #FFFFFF !important;
+    }
+    /* 사이드바도 어둠 속으로 */
+    [data-testid="stSidebar"] {
+        background-color: #050505 !important;
+        border-right: 1px solid #333;
+    }
+    /* 텍스트 색상 및 강조색(황금) 설정 */
+    h1, h2, h3, h4, h5, p, span, div {
+        color: #FFFFFF !important;
+    }
+    .sidebar-title {
+        color: #FFD700 !important;
+        text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    }
+    /* 버튼 스타일 통일 */
+    .stButton>button {
+        background-color: #1a1a1a !important;
+        color: #FFD700 !important;
+        border: 1px solid #FFD700 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- 인증 시스템 ---
 if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 
 if not st.session_state["password_correct"]:
-    st.markdown("<div style='text-align: center; padding: 40px 0;'><h1 style='color: #FFD700;'>⚖️ Pivot Master Pro</h1></div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; padding: 40px 0;'><h1 style='color: #FFD700;'>⚖️ Pivot Master Pro</h1><p style='color: #888;'>Antigravity Trading Terminal</p></div>", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["🔐 로그인", "✨ 회원가입 신청"])
     
     with tab1:
@@ -134,6 +162,13 @@ if not st.session_state["password_correct"]:
     st.stop()
 
 # --- 사이드바 및 메뉴 ---
+st.sidebar.markdown("<h1 class='sidebar-title'>⚖️ Pivot Master Pro</h1>", unsafe_allow_html=True)
+
+# [고도화] 집중력 BGM 시스템
+if st.sidebar.checkbox("🎼 집중력 BGM (ASMR)", value=True):
+    st.sidebar.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3")
+    st.sidebar.caption("💡 재생 버튼을 클릭해야 노래가 흘러나옵니다.")
+
 u_all = load_users()
 curr_u_data = u_all.get(st.session_state.current_user, {})
 is_staff = curr_u_data.get("grade") in ["관리자", "방장"] or st.session_state.current_user == "cntfed"

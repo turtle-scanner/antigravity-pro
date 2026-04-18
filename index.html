@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Premium Terminal</title>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Antigravity Dashboard</h1>
+            <p>9개의 독립적인 모듈로 구성된 프리미엄 관리 화면</p>
+        </header>
+
+        <main class="banner-grid" id="bannerContainer">
+            <!-- 배너 1: VCP 모니터 -->
+            <section class="banner-item" id="banner-1">
+                <h3>01. VCP Monitor</h3>
+                <p>실시간 변동성 수축 종목</p>
+                <div class="mini-table-container">
+                    <table class="mini-table">
+                        <thead><tr><th>Symbol</th><th>Volatility</th></tr></thead>
+                        <tbody>
+                            <tr><td>TSLA</td><td class="pos">1.2%</td></tr>
+                            <tr><td>NVDA</td><td class="pos">0.8%</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 배너 2: 차트 분석 -->
+            <section class="banner-item" id="banner-2">
+                <h3>02. Technical Analysis</h3>
+                <p>주요 지수 및 종목 차트</p>
+                <div id="mini-chart" class="mini-chart-container">
+                    <!-- TradingView Widget Placeholder -->
+                </div>
+            </section>
+
+            <!-- 배너 3: 뉴스 피드 -->
+            <section class="banner-item" id="banner-3">
+                <h3>03. Market News</h3>
+                <p>실시간 브리핑</p>
+                <ul class="news-list">
+                    <li>Fed 금리 동결 시사...</li>
+                    <li>엔비디아 사상 최고가...</li>
+                    <li>S&P 500 전고점 돌파...</li>
+                </ul>
+            </section>
+
+            <!-- 배너 4: 포트폴리오 -->
+            <section class="banner-item" id="banner-4">
+                <h3>04. Portfolio Strategy</h3>
+                <p>목표 수익률 달성도</p>
+                <div class="progress-container">
+                    <div class="progress-bar" style="width: 72%;"></div>
+                    <span class="progress-text">72% Achieved</span>
+                </div>
+            </section>
+
+            <!-- 배너 5: 리스크 관리 -->
+            <section class="banner-item" id="banner-5">
+                <h3>05. Risk Management</h3>
+                <p>포지션 사이징 계산기</p>
+                <div class="quick-calc">
+                    <span>Target: 5,000,000원</span>
+                    <span>Risk: 1%</span>
+                </div>
+            </section>
+
+            <!-- 배너 6: 리더보드 -->
+            <section class="banner-item" id="banner-6">
+                <h3>06. Leaderboard</h3>
+                <p>전략별 수익률 랭킹</p>
+                <div class="ranking">
+                    <div>1. Bonde EP (+42%)</div>
+                    <div>2. VCP Breakout (+28%)</div>
+                </div>
+            </section>
+
+            <!-- 배너 7: 커뮤니티 -->
+            <section class="banner-item" id="banner-7">
+                <h3>07. Community Insight</h3>
+                <p>트레이더 집단 지성 리포트</p>
+                <div class="comment-bubble">"NVDA 950선 강력 지지..."</div>
+            </section>
+
+            <!-- 배너 8: 시스템 설정 -->
+            <section class="banner-item" id="banner-8">
+                <h3>08. System Settings</h3>
+                <p>API 및 알림 관리</p>
+                <div class="settings-icons">⚙️ 🔔 🔒</div>
+            </section>
+
+            <!-- 배너 9: 마인드 클리닉 -->
+            <section class="banner-item" id="banner-9">
+                <h3>09. Mind Clinic</h3>
+                <p>뇌동매매 방지 및 자가 진단</p>
+            </section>
+        </main>
+
+    </div>
+
+    <!-- Mind Clinic Modal -->
+    <div id="mindClinicModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2 id="modalTitle">🧘 Mind Clinic</h2>
+            <p>현재의 심리 상태를 진단하고 냉철한 매매 원칙을 유지하세요.</p>
+            
+            <div class="clinic-form">
+                <div class="form-group">
+                    <label>현재 감정 상태</label>
+                    <input type="range" id="emotionRange" min="1" max="5" value="3">
+                    <div class="range-labels">
+                        <span>매우 불안</span>
+                        <span>안정</span>
+                        <span>매우 안정</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>오늘의 손실액 (%)</label>
+                    <input type="number" id="lossInput" placeholder="예: -5" step="0.5">
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="revengeCheck">
+                    <label for="revengeCheck">손실을 복구하기 위한 추격 매수인가요?</label>
+                </div>
+
+                <button id="diagnoseBtn" class="premium-btn">심리 진단 받기</button>
+            </div>
+
+            <div id="diagnosisResult" class="result-area"></div>
+        </div>
+    </div>
+
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script src="js/app.js"></script>
+
+</body>
+</html>
