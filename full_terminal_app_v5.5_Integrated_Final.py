@@ -314,6 +314,49 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# --- 🛰️ 본데의 전술 지침 데이터 ---
+BONDE_WISDOM = [
+    {
+        "title": "🚫 '비밀 지표'나 '마법의 셋업'을 찾는 헛수고는 당장 집어치워라",
+        "content": "많은 초보자들이 나에게 완벽한 매수 타점이나 '비밀 지표'가 뭐냐고 묻는다. 그런 건 없다. 시장에서 돈을 버는 진정한 '엣지(Edge)'는 책 몇 권 읽는다고 생기는 것이 아니다. 당신이 돌파 매매(Breakout)에 단 1달러라도 걸기 전에, 과거에 성공했던 폭등주 차트 5,000개, 10,000개를 직접 파고들어라(Deep Dive). 500피트, 1,000피트, 5,000피트 깊이까지 파고들어야 비로소 시장이 어떻게 움직이는지 이해하기 시작할 것이다. 다른 사람의 종목 추천(Alert)에 의존하는 짓을 멈추고 당신 스스로 뇌에 패턴을 각인시켜라."
+    },
+    {
+        "title": "🚫 당신은 천재가 아니다. '섬의 환상(Island Mentality)'에서 깨어나라",
+        "content": "운 좋게 시장 환경이 좋은 몇 주 동안 20%의 수익을 내고 나면, 사람들은 자신이 천재인 줄 착각한다. 단번에 큰돈을 벌어 열대의 섬을 사고 페라리를 사겠다는 허황된 꿈(Island Mentality)에 빠져 이른바 '신 증후군(God Syndrome)'에 걸린다. 그렇게 자만하며 아무 때나 매매를 남발하다 보면, 결국 머리 위로 코코넛이 떨어져 계좌가 박살 날 것이다. 허황된 홈런을 노리지 말고, 짧고 확실한 수익(Singles)을 챙기며 복리로 굴리는 지루한 과정을 거쳐라."
+    },
+    {
+        "title": "🚫 쓰레기장 같은 장에서 매매하며 계좌를 갈아버리지 마라",
+        "content": "아무리 완벽해 보이는 에피소딕 피봇(EP)이나 모멘텀 버스트 셋업이라도 시장의 환경(날씨)이 나쁘면 무용지물이다. 당신은 매일 아침 '오늘 돌파 매매가 통하는 날인가?'를 스스로에게 묻고 있는가? 시장의 하락 종목 수가 상승 종목을 압도하고 돌파가 계속 실패하는 똥 같은 시장(Shit market)에서 계속 매매 버튼을 누르며 계좌를 산산조각(Chop to pieces) 내고 싶다면 마음대로 해라. 시장 환경이 나쁠 때는 제발 아무것도 하지 말고 손을 깔고 앉아 현금을 지켜라."
+    },
+    {
+        "title": "🚫 수익금(P&L)에 집착하지 말고 '프로세스'나 지켜라",
+        "content": "수익은 당신이 올바른 '프로세스'를 지켰을 때 따라오는 부산물일 뿐이다. 매수 후 3일 연속으로 상승한 주식을 뒤늦게 추격 매수하고 있는가? 축하한다, 당신은 곧 고점에 물린 '호구(Bag Holder)'가 될 것이다. 손절선을 내리지 마라. 손절선은 신성한 것이다. **'첫 번째 손실이 가장 좋은 손실'**임을 명심하고, 당신이 세운 2.5%~5%의 손절선, 혹은 당일 최저점(LOD)이 깨지면 기계처럼 잘라내라. 당신의 얄팍한 예측이나 감정을 개입시키지 말고 수치와 원칙, 철저한 프로세스만 남겨라."
+    }
+]
+
+# --- 🛰️ 전술 푸터용 랜덤 어록 데이터 ---
+BONDE_FOOTER_QUOTES = [
+    "트레이딩은 돈을 버는 것이 목적이 아니라, 완벽한 프로세스를 실행하는 것이 목적이다. 수익은 그 보상일 뿐이다.",
+    "당신이 똑똑하다는 것을 증명하려 하지 마라. 시장은 당신의 자존심에는 관심이 없다. 오직 당신의 잔고에만 관심이 있을 뿐이다.",
+    "홈런 한 방을 꿈꾸는 자는 결국 파산한다. 우리는 매일 안타를 쳐서 복리의 마법을 부리는 비즈니스맨이다.",
+    "손실 중인 종목은 월급만 축내고 회사를 망치고 있는 나쁜 직원이다. 정에 이끌리지 말고 지금 당장 해고(손절)하라.",
+    "희망(Hope)은 트레이딩 전략이 아니다. '본전 오면 팔겠다'는 생각은 시장에 당신의 전 재산을 기부하겠다는 선언과 같다.",
+    "수익이 나는 주식은 회사를 성장시키는 우수 사원이다. 그들에게 더 많은 자원(비중)을 배분하고 보너스(추세 추종)를 주어 끝까지 부려 먹어라.",
+    "시장의 폭(Breadth)이 죽었는데 매수 버튼을 누르는 것은 자살 행위다. 현금을 쥐고 아무것도 하지 않는 것도 위대한 포지션이다.",
+    "장중에 고민하지 마라. 고민은 장이 열리기 전 1,000개의 차트를 돌려보며 끝냈어야 한다. 실전은 반사 신경의 영역이다.",
+    "당신만의 엣지(Edge)가 없다면 당신은 트레이더가 아니라 기부천사일 뿐이다. 오늘 당장 딥 다이브(Deep Dive) 훈련을 시작하라."
+]
+
+def get_daily_wisdom():
+    day_idx = datetime.now().day % len(BONDE_WISDOM)
+    return BONDE_WISDOM[day_idx]
+
+def get_footer_quote():
+    # 날짜를 시드로 사용하여 매일 같은 랜덤 어록 선택
+    import random
+    random.seed(datetime.now().strftime("%Y%m%d"))
+    return random.choice(BONDE_FOOTER_QUOTES)
+
 # --- [PLACEHOLDER_LOGIC_START] ---
 if page.startswith("1."):
     st.header("🎯 주도주 VCP & EP 마스터 스캐너")
@@ -357,7 +400,7 @@ if page.startswith("1."):
                     display_name = TICKER_NAME_MAP.get(tic, tic) if not is_us else tic
                     
                     all_res.append({
-                        "T": display_name, "P": f"${cp:.2f}" if is_us else f"{int(cp):,}원",
+                        "T": display_name, "TIC": tic, "P": f"${cp:.2f}" if is_us else f"{int(cp):,}원",
                         "CH": f"{ch:+.1f}%", "ROE": roe, "RS": rs, "SCORE": score,
                         "MARKET": "USA 🇺🇸" if is_us else "KOREA 🇰🇷"
                     })
@@ -368,40 +411,50 @@ if page.startswith("1."):
             
         st_txt.empty()
         
-        if all_res:
             df = pd.DataFrame(all_res)
-            us_top = df[df['MARKET'].str.contains("USA")].sort_values("SCORE", ascending=False).head(5)
-            kr_top = df[df['MARKET'].str.contains("KOREA")].sort_values("SCORE", ascending=False).head(5)
-            
-            st.subheader("🔥 사령부 한/미 통합 주도주 TOP 10")
-            for i, row in pd.concat([us_top, kr_top]).iterrows():
-                st.markdown(f"""
-                <div class='glass-card' style='padding: 15px; border-left: 5px solid {"#00FF00" if "USA" in row["MARKET"] else "#FFD700"}; margin-bottom: 10px;'>
-                    <div style='display: flex; justify-content: space-between;'>
-                        <b style='font-size: 1.1rem;'>{row["MARKET"]} | {row["T"]}</b>
-                        <b style='color: {"#00FF00" if "+" in row["CH"] else "#FF4B4B"}; font-size: 1.1rem;'>{row["CH"]}</b>
-                    </div>
-                    <div style='margin-top: 8px; font-size: 0.95rem; color: #AAA;'>
-                        현가: {row["P"]} | 
-                        <span style='color: #FFD700;'>ROE: <b>{row["ROE"]:.1f}%</b></span> | 
-                        <span style='color: #55AAFF;'>RS (1yr): <b>{row["RS"]:.1f}%</b></span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # [UPGRADE] 상위 종목 자동 차트 분석
-            top_ticker = pd.concat([us_top, kr_top]).iloc[0]["T"]
-            # 한국 이름일 경우 실제 티커로 복원 필요하나, TradingView는 영문 티커 사용
-            # 여기서는 편의상 US TOP 1의 티커나 맵핑 역추적으로 차트 표시
-            st.divider()
-            st.subheader(f"🕯️ 사령부 정밀 전술 차트: {top_ticker}")
-            st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={top_ticker}&interval=D' width='100%' height='500'></iframe>", height=510)
-            st.success("✅ 글로벌 상위 실적/강세주 브리핑 및 실시간 차트 로드 완료!")
+            st.session_state.scan_results = df
+            st.success("✅ 스캔 완료! 아래 리스트에서 종목을 선택하여 차트 분석을 계속하십시오.")
         else:
             st.warning("분석 가능한 종목 데이터가 부족합니다. 잠시 후 다시 시도해 주세요.")
 
     if st.button("🚀 한/미 주도주 10선 정밀 스캔 시작"):
         run_4stage_sc()
+
+    if "scan_results" in st.session_state and st.session_state.scan_results is not None:
+        df = st.session_state.scan_results
+        us_top = df[df['MARKET'].str.contains("USA")].sort_values("SCORE", ascending=False).head(5)
+        kr_top = df[df['MARKET'].str.contains("KOREA")].sort_values("SCORE", ascending=False).head(5)
+        combined_top = pd.concat([us_top, kr_top])
+        
+        st.subheader("🔥 사령부 한/미 통합 주도주 TOP 10")
+        for i, row in combined_top.iterrows():
+            st.markdown(f"""
+            <div class='glass-card' style='padding: 15px; border-left: 5px solid {"#00FF00" if "USA" in row["MARKET"] else "#FFD700"}; margin-bottom: 10px;'>
+                <div style='display: flex; justify-content: space-between;'>
+                    <b style='font-size: 1.1rem;'>{row["MARKET"]} | {row["T"]} ({row["TIC"]})</b>
+                    <b style='color: {"#00FF00" if "+" in row["CH"] else "#FF4B4B"}; font-size: 1.1rem;'>{row["CH"]}</b>
+                </div>
+                <div style='margin-top: 8px; font-size: 0.95rem; color: #AAA;'>
+                    현가: {row["P"]} | 
+                    <span style='color: #FFD700;'>ROE: <b>{row["ROE"]:.1f}%</b></span> | 
+                    <span style='color: #55AAFF;'>RS (1yr): <b>{row["RS"]:.1f}%</b></span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.divider()
+        st.subheader("🕯️ 종목별 정밀 차트 분석 (Select Ticker)")
+        
+        # 종목 선택 옵션 생성 (이름 + 티커)
+        options = [f"{row['T']} ({row['TIC']})" for _, row in combined_top.iterrows()]
+        selected_option = st.selectbox("분석할 종목을 선택하세요", options)
+        
+        # 선택된 티커 추출
+        selected_ticker = combined_top[combined_top.apply(lambda r: f"{r['T']} ({r['TIC']})" == selected_option, axis=1)].iloc[0]["TIC"]
+        
+        st.markdown(f"<div style='background: rgba(255,215,0,0.1); padding: 10px; border-radius: 8px; border-left: 4px solid #FFD700; margin-bottom: 15px;'><b>🎯 타겟 분석 중: {selected_option}</b></div>", unsafe_allow_html=True)
+        st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={selected_ticker}&interval=D' width='100%' height='500'></iframe>", height=510)
+        st.success(f"✅ {selected_ticker} 실시간 차트 로드 완료!")
 
 elif page.startswith("2."):
     st.header("💬 사령부 소통 및 공지 (HQ Communication)")
@@ -890,11 +943,42 @@ elif page.startswith("14."):
         st.plotly_chart(fig, use_container_width=True)
     with col2:
         st.markdown("<div class='glass-card' style='padding:25px;'>", unsafe_allow_html=True)
-        st.subheader("💡 본데의 실시간 훈수")
-        if val <= 35: st.error("🔴 공포 구간: 비중 축소 및 현금 확보 권고.")
-        elif val <= 65: st.warning("🟡 중립 구간: 주도주 눌림목 타점만 선별 매수.")
-        else: st.success("🟢 적극 매수: 주도주 EP 돌파 시 적극적으로 물량을 확보하십시오.")
+        st.subheader("🐝 STOCKDragonfly: 본데의 실시간 뼈 때리는 훈수 (Bonde's Harsh Truth)")
+        if val <= 35: 
+            st.error("""
+            **🔴 하락장 (Defensive/Cash)**  
+            "떨어지는 칼날을 왜 잡으려 하나? 네가 시장보다 똑똑하다고 착각하지 마라. 
+            지금 네가 할 일은 스캐닝이 아니라 자본 보호다. 계좌 박살 내고 울지 말고 당장 HTS 꺼라. 
+            시장은 어디 안 간다, 네 돈이 도망갈 뿐이지."
+            """)
+        elif val <= 65: 
+            st.warning("""
+            **🟡 횡보장 (Selective/Choppy)**  
+            "지금 매수 버튼에 손이 가나? 그건 투자가 아니라 도박이다. 아무것도 하지 않는 것도 포지션이다. 
+            푼돈 벌려다 큰돈 잃지 말고, 확실한 A+ 셋업이 올 때까지 얌전히 현금 쥐고 기다려라. 
+            지루함을 못 견디면 파산뿐이다."
+            """)
+        else: 
+            st.success("""
+            **🟢 상승장 (Greed/Aggressive)**  
+            "수익 좀 났다고 네가 천재가 된 줄 아나? 시장이 좋은 것뿐이다. 
+            자만심(Ego)이 고개를 드는 순간, 시장은 네 계좌를 갈기갈기 찢어놓을 거다. 
+            익절 라인 올려 잡고 닥치고 프로세스나 지켜라."
+            """)
         st.markdown("</div>", unsafe_allow_html=True)
+        
+    st.divider()
+    # 🕵️ 본데의 일간 전술 교육 (Rotating Wisdom)
+    wisdom = get_daily_wisdom()
+    st.markdown(f"""
+    <div class='glass-card' style='border-left: 10px solid #FF4B4B; background: rgba(255,0,0,0.03);'>
+        <h3 style='color: #FF4B4B; margin-top: 0;'>📢 [긴급] 사령부 정신 교육: {wisdom['title']}</h3>
+        <p style='color: #DDD; font-size: 1.1rem; line-height: 1.8; font-style: italic;'>
+            "{wisdom['content']}"
+        </p>
+        <div style='text-align: right; color: #888; font-weight: 700;'>- Pradeep Bonde, Stockbee Matrix -</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 elif page.startswith("15."):
     st.header("🎖️ HQ 인적 자원 사령부 (Member HR Command)")
@@ -938,3 +1022,18 @@ elif page.startswith("15."):
     else:
         st.info("현재 사령부에 등록된 관리 대상 대원이 없습니다.")
     
+# --- 🛰️ 시스템 하단 글로벌 전술 푸터 (Global Footer) ---
+st.write("") # 스페이싱
+st.divider()
+f_quote = get_footer_quote()
+st.markdown(f"""
+<div style='text-align: center; padding: 20px; color: #666; font-size: 0.95rem; border-top: 1px solid #222;'>
+    <span style='color: #FFD700; font-weight: 700;'>🛡️ 본데의 일간 전술 통찰 (Daily Tactical Insight)</span><br>
+    <div style='margin-top: 10px; font-style: italic; color: #AAA; line-height: 1.6;'>
+        "{f_quote}"
+    </div>
+    <div style='margin-top: 20px; font-size: 0.75rem; color: #444;'>
+        © 2026 StockDragonfly Terminal v9.9 | Institutional System Operated by Global Expert Turtle
+    </div>
+</div>
+""", unsafe_allow_html=True)
