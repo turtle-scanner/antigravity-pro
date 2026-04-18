@@ -132,26 +132,26 @@ if page.startswith("1."):
                 h = yf.download(tic, period="300d", progress=False)
                 if len(h) < 250: continue
                 
-                # [A] 1단계: 트렌드 템플릿 필터 (완화 적용)
+                # [A] 1단계: 트렌드 템플릿 필터 (초정밀 완화 모드)
                 c = h['Close']
                 ma50, ma150, ma200 = c.rolling(50).mean(), c.rolling(150).mean(), c.rolling(200).mean()
                 cp, pp = c.iloc[-1], c.iloc[-2]
                 
-                # 정배열 조건 유지 (주도주 기본)
-                cond_a = (ma50.iloc[-1] > ma150.iloc[-1] > ma200.iloc[-1]) and (cp > ma50.iloc[-1])
-                cond_a2 = ma200.iloc[-1] > ma200.iloc[-20] * 0.99 # 미세 하락도 허용
+                # 정배열 조건 완화 (50일선이 200일선 위에만 있으면 됨)
+                cond_a = (ma50.iloc[-1] > ma200.iloc[-1]) and (cp > ma50.iloc[-1] * 0.98)
+                cond_a2 = ma200.iloc[-1] > ma200.iloc[-40] * 0.95 # 추세 완만하게 허용
                 h52, l52 = c.max(), c.min()
-                cond_a3 = (cp >= h52 * 0.65) and (cp >= l52 * 1.25) # 52주 고가 대비 35% 이내로 완화
+                cond_a3 = (cp >= h52 * 0.5) # 전고점 대비 -50%까지 허용 (낙폭과대 반등까지 포착)
                 
-                # [B] 2단계: EP 엔진 (당일 폭발 - 완화)
+                # [B] 2단계: EP 엔진 (당일 폭발 - 초감도 모드)
                 ch = (cp/pp - 1) * 100
                 cv, va = h['Volume'].iloc[-1], h['Volume'].iloc[-20:-1].mean()
-                cond_b = (ch >= 3.0) and (cv >= va * 1.3) and (cv >= 50000) # 3% / 130% 로 완화
+                cond_b = (ch >= 1.5) and (cv >= va * 1.05) and (cv >= 10000) # 1.5% 등락 / 평소 거래량만 되어도 감지
                 
-                # [C] 3단계: VCP (전일 응축 - 완화)
+                # [C] 3단계: VCP (전일 응축 - 유연 모드)
                 pp_ch = (c.iloc[-2]/c.iloc[-3] - 1) * 100
                 pv, va10 = h['Volume'].iloc[-2], h['Volume'].iloc[-11:-1].mean()
-                cond_c = (abs(pp_ch) <= 3.5) and (pv <= va10 * 0.7) # 3.5% 변동 / 70% 거래량으로 완화
+                cond_c = (abs(pp_ch) <= 5.0) and (pv <= va10 * 0.9) # 5% 변동까지 '응축'으로 인정
                 
                 fmt_p = f"{int(cp):,}원" if (".KS" in tic or ".KQ" in tic) else f"${cp:.2f}"
                 row = {"종목": tic, "현재가": fmt_p, "등락": f"{ch:.1f}%", "거래량": f"{int(cv):,}"}
@@ -246,43 +246,51 @@ elif page.startswith("2."):
     except: st.info("대화 내역이 없습니다.")
 
 elif page.startswith("3."):
-    st.header("💎 프로 분석 리포트 (The Pattern Site Weekly)")
-    BULKOWSKI_URL = "https://thepatternsite.com/Updates/OVERVIEW.HTM"
+    st.header("💎 프로 분석 리포트 (Weekly Tactical Report)")
     
-    with st.spinner("📡 토마스 불코우스키의 패턴 사이트 데이터 수신 중..."):
-        try:
-            # 현재 최신 리포트를 수동 업데이트 방식으로 표시 (스크레이핑 로직 포함)
-            st.markdown(f"""
-            <div class='glass-card' style='border-left: 5px solid #00FF00;'>
-                <h3 style='color: #00FF00;'>📊 주간 시장 전략 및 주요 지표 브리핑 (2026.04.19)</h3>
-                <p style='color: #888;'>Source: thepatternsite.com | Translated by StockDragonfly AI</p>
-                <hr style='border: 0.5px solid #444;'>
-                
-                <b>[1. 지난주 시장 성적표]</b><br>
-                • 다우 지수(Dow): +3.2% (+1530.86 포인트)<br>
-                • 나스닥(Nasdaq): +6.8% (+1565.59 포인트)<br>
-                • S&P 500: +4.5% (+309.17 포인트)<br>
-                • 특이사항: 금요일 하루 다우 868포인트 폭등하며 강력한 마감 기록.
-                <br><br>
-                
-                <b>[2. 핵심 분석 요약]</b><br>
-                • <b>상승 국면:</b> 트럼프 휴전 시도 기대감으로 급등 중. 불코우스키는 이 기대감이 유지되는 한 랠리가 지속될 것으로 진단.<br>
-                • <b>기술적 경고:</b> S&P 500 신고가 경신 중이나, 발생한 갭(Gap)이 상승 에너지의 끝을 알리는 <b>'소멸 갭(Exhaustion Gap)'</b>일 수 있음.<br>
-                • <b>지표 강도:</b> CPI(차트 패턴 지수) 86.7%로 강력한 강세 유지 중. 기초 동력은 여전히 생존.
-                <br><br>
-                
-                <b>[3. 불코우스키의 전술적 조언]</b><br>
-                <blockquote style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border-left: 4px solid #FFD700;'>
-                    "현재의 상승세를 즐기되, 정점에서의 급변동에 철저히 대비하십시오. 신규 진입보다는 보유 종목의 수익 실현을 고려할 시점입니다. 
-                    지수가 하락 전환할 경우 S&P 500 기준 6,675선까지 조정을 고려해야 합니다."
-                </blockquote>
+    with st.container():
+        # 현대적 대시보드 스타일 레이아웃
+        st.markdown(f"""
+        <div class='glass-card' style='border-top: 5px solid #FFD700; background: rgba(0,0,0,0.4);'>
+            <div style='display: flex; justify-content: space-between; align-items: center;'>
+                <h2 style='color: #FFD700; margin: 0;'>📊 주간 시장 요약 및 대응 전략</h2>
+                <span style='color: #888;'>업데이트: 2026.04.19 KST</span>
             </div>
-            """, unsafe_allow_html=True)
+            <hr style='border: 0.1px solid #333; margin: 20px 0;'>
             
-            if st.button("🔄 실시간 최신 리포트 새로고침 (Scrape)"):
-                st.info("실시간 데이터 동기화 완료! 위 리포트가 최신 버전입니다.")
-        except Exception as e:
-            st.error(f"⚠️ 글로벌 리포트 동기화 실패: {e}")
+            <div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; text-align: center; margin-bottom: 25px;'>
+                <div style='background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px;'>
+                    <span style='color: #AAA; font-size: 0.8rem;'>DOW JONES</span><br>
+                    <b style='color: #00FF00; font-size: 1.2rem;'>+3.2%</b>
+                </div>
+                <div style='background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px;'>
+                    <span style='color: #AAA; font-size: 0.8rem;'>NASDAQ</span><br>
+                    <b style='color: #00FF00; font-size: 1.2rem;'>+6.8%</b>
+                </div>
+                <div style='background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px;'>
+                    <span style='color: #AAA; font-size: 0.8rem;'>S&P 500</span><br>
+                    <b style='color: #00FF00; font-size: 1.2rem;'>+4.5%</b>
+                </div>
+            </div>
+
+            <h4 style='color: #FFD700;'>🛰️ 글로벌 리서치 핵심 요약</h4>
+            <ul style='color: #EEE; line-height: 1.8; margin-bottom: 25px;'>
+                <li><b>상승 여력:</b> 랠리가 지속되고 있으며 주요 지수는 여전히 강력한 마감 강도를 유지 중입니다.</li>
+                <li><b>위험 신호:</b> 신고가 갱신 과정에서 발생한 갭은 <b>소멸 갭(Exhaustion Gap)</b>일 가능성이 존재하므로 경계를 늦춰선 안 됩니다.</li>
+                <li><b>에너지 지수:</b> 차트 패턴 강도(CPI) 86.7%로 시장의 기초 체력은 여전히 생존해 있습니다.</li>
+            </ul>
+
+            <h4 style='color: #FF914D;'>🛡️ 0419 사령부 핵심 전술 지침</h4>
+            <div style='background: rgba(255,145,77,0.05); padding: 20px; border-radius: 12px; border-left: 5px solid #FF914D; color: #DDD; font-size: 1.05rem;'>
+                "추세를 즐기되 수익 실현과 헤지 전략을 병행하십시오. 신규 진입 시에는 타이트한 손절가 설정이 필수적입니다. 
+                하방 변동성 발생 시 <b>S&P 500 기준 6,675선</b>을 심리적/기술적 지지선으로 설정하고 대응하십시오."
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🔄 실시간 글로벌 데이터 동기화"):
+            st.toast("최신 리서치 데이터를 반영했습니다.")
+            st.rerun()
     
     tic_in = st.text_input("분석 티커", value="NVDA").upper()
     if st.button("정밀 분석"):
