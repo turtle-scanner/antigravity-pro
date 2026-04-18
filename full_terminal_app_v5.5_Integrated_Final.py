@@ -30,10 +30,17 @@ TICKER_NAME_MAP = {
 
 def load_users():
     if not os.path.exists(USER_DB_FILE):
-        init = {"cntfed": {"password": "cntfed", "status": "approved", "grade": "관리자"}}
+        init = {"cntfed": {"password": "cntfed", "status": "approved", "grade": "방장"}}
         with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(init, f)
         return init
-    with open(USER_DB_FILE, "r", encoding="utf-8") as f: return json.load(f)
+    with open(USER_DB_FILE, "r", encoding="utf-8") as f: 
+        users = json.load(f)
+        # 마스터 계정 권한 강제 보장 및 등급 통일
+        if "cntfed" in users:
+            users["cntfed"]["grade"] = "방장"
+            users["cntfed"]["status"] = "approved"
+            with open(USER_DB_FILE, "w", encoding="utf-8") as f2: json.dump(users, f2)
+        return users
 
 def gsheet_sync(sheet_name, headers, values):
     payload = {"sheetName": sheet_name, "headers": headers, "values": values}
@@ -104,78 +111,68 @@ if page.startswith("1."):
     st.markdown("<div class='glass-card'>미너비니의 VCP(변동성 축소)와 본데의 EP(에피소딕 피벗) 4단계 통합 검색 엔진입니다.</div>", unsafe_allow_html=True)
     
     def run_4stage_sc():
-        # 데이터 소스 및 유니버스 구성
-        SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
-        radar_tics = list(TICKER_NAME_MAP.keys())
-        try:
-            df_s = pd.read_csv(SHEET_URL)
-            for col in df_s.columns:
-                if "티커" in col or "Symbol" in col:
-                    radar_tics = list(set(radar_tics + df_s[col].dropna().tolist()))
-        except: pass
+        # 글로벌 리포트 유니버스 (한/미 핵심 주도주)
+        US_RADAR = ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "AVGO", "CRWD", "PLTR", "SMCI", "AMD", "NFLX", "STX", "WDC", "MSTR", "COIN", "MARA", "PANW", "SNOW"]
+        KR_RADAR = ["005930.KS", "000660.KS", "196170.KQ", "042700.KS", "105560.KS", "055550.KS", "005490.KS", "000270.KS", "066570.KS", "035720.KS", "005380.KS", "000810.KS"]
         
-        # NDX 10점 만점 및 핵심 주도주 (실시간 수집 데이터 기반)
-        ndx_core = [
-            "WDC", "STX", "INTC", "MRVL", "MPWR", "AMD", "ROST", "AVGO", "ARM", "NVDA", 
-            "MSFT", "AAPL", "AMZN", "META", "GOOGL", "TSLA", "NFLX", "COST", "ASML", 
-            "MSTR", "COIN", "MARA", "SMCI", "PANW", "CRWD", "SNOW", "PLTR", "DDOG"
-        ]
-        radar_tics = list(set(radar_tics + ndx_core))
-        
-        res_data = {"SUPREME": [], "VCP_READY": [], "EP_IGNITE": []}
+        all_res = []
         pb = st.progress(0); st_txt = st.empty()
         
-        for i, tic in enumerate(radar_tics):
+        full_list = US_RADAR + KR_RADAR
+        for i, tic in enumerate(full_list):
             try:
-                st_txt.text(f"📡 Analyzing {tic} (Stage 1-4 Analysis)...")
-                pb.progress((i+1)/len(radar_tics))
-                h = yf.download(tic, period="300d", progress=False)
+                st_txt.text(f"📡 Assessing {tic} (Global Ranking Analysis)...")
+                pb.progress((i+1)/len(full_list))
+                tk = yf.Ticker(tic)
+                h = tk.history(period="365d")
                 if len(h) < 250: continue
                 
-                # [A] 1단계: 트렌드 템플릿 필터 (초정밀 완화 모드)
-                c = h['Close']
-                ma50, ma150, ma200 = c.rolling(50).mean(), c.rolling(150).mean(), c.rolling(200).mean()
-                cp, pp = c.iloc[-1], c.iloc[-2]
+                info = tk.info
+                roe = info.get('returnOnEquity', 0) * 100
+                cp = h['Close'].iloc[-1]
+                pp = h['Close'].iloc[-2]
+                y_ago = h['Close'].iloc[0]
                 
-                # 정배열 조건 완화 (50일선이 200일선 위에만 있으면 됨)
-                cond_a = (ma50.iloc[-1] > ma200.iloc[-1]) and (cp > ma50.iloc[-1] * 0.98)
-                cond_a2 = ma200.iloc[-1] > ma200.iloc[-40] * 0.95 # 추세 완만하게 허용
-                h52, l52 = c.max(), c.min()
-                cond_a3 = (cp >= h52 * 0.5) # 전고점 대비 -50%까지 허용 (낙폭과대 반등까지 포착)
-                
-                # [B] 2단계: EP 엔진 (당일 폭발 - 초감도 모드)
                 ch = (cp/pp - 1) * 100
-                cv, va = h['Volume'].iloc[-1], h['Volume'].iloc[-20:-1].mean()
-                cond_b = (ch >= 1.5) and (cv >= va * 1.05) and (cv >= 10000) # 1.5% 등락 / 평소 거래량만 되어도 감지
+                rs = ((cp / y_ago) - 1) * 100 # 1년 상대적 강도 근사
+                score = rs + (roe * 1.5) # 전술적 가중치 합계
                 
-                # [C] 3단계: VCP (전일 응축 - 유연 모드)
-                pp_ch = (c.iloc[-2]/c.iloc[-3] - 1) * 100
-                pv, va10 = h['Volume'].iloc[-2], h['Volume'].iloc[-11:-1].mean()
-                cond_c = (abs(pp_ch) <= 5.0) and (pv <= va10 * 0.9) # 5% 변동까지 '응축'으로 인정
-                
-                fmt_p = f"{int(cp):,}원" if (".KS" in tic or ".KQ" in tic) else f"${cp:.2f}"
-                row = {"종목": tic, "현재가": fmt_p, "등락": f"{ch:.1f}%", "거래량": f"{int(cv):,}"}
-                
-                if cond_a and cond_a2 and cond_a3:
-                    if cond_b: res_data["SUPREME"].append(row) # A+B: 주도주 EP 점화
-                    elif cond_c: res_data["VCP_READY"].append(row) # A+C: VCP 용수철 응축
-                    else: res_data["EP_IGNITE"].append(row) # A: 트렌드 유지
+                is_us = (".KS" not in tic and ".KQ" not in tic)
+                all_res.append({
+                    "T": tic, "P": f"${cp:.2f}" if is_us else f"{int(cp):,}원",
+                    "CH": f"{ch:+.1f}%", "ROE": roe, "RS": rs, "SCORE": score,
+                    "MARKET": "USA 🇺🇸" if is_us else "KOREA 🇰🇷"
+                })
             except: continue
         pb.empty(); st_txt.empty()
-        return res_data
+        
+        if all_res:
+            df = pd.DataFrame(all_res)
+            # 결과 보장 로직 (US 5, KR 5)
+            us_top = df[df['MARKET'].str.contains("USA")].sort_values("SCORE", ascending=False).head(5)
+            kr_top = df[df['MARKET'].str.contains("KOREA")].sort_values("SCORE", ascending=False).head(5)
+            
+            st.subheader("🔥 사령부 한/미 통합 주도주 TOP 10")
+            for _, row in pd.concat([us_top, kr_top]).iterrows():
+                st.markdown(f"""
+                <div class='glass-card' style='padding: 15px; border-left: 5px solid {"#00FF00" if "USA" in row["MARKET"] else "#FFD700"}; margin-bottom: 10px;'>
+                    <div style='display: flex; justify-content: space-between;'>
+                        <b style='font-size: 1.1rem;'>{row["MARKET"]} | {row["T"]}</b>
+                        <b style='color: {"#00FF00" if "+" in row["CH"] else "#FF4B4B"}; font-size: 1.1rem;'>{row["CH"]}</b>
+                    </div>
+                    <div style='margin-top: 8px; font-size: 0.95rem; color: #AAA;'>
+                        현가: {row["P"]} | 
+                        <span style='color: #FFD700;'>ROE: <b>{row["ROE"]:.1f}%</b></span> | 
+                        <span style='color: #55AAFF;'>RS (1yr): <b>{row["RS"]:.1f}%</b></span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            st.success("✅ 글로벌 상위 실적/강세주 10선 브리핑이 완료되었습니다.")
+        else:
+            st.error("데이터 통신 중 오류가 발생했습니다.")
 
-    if st.button("🚀 4단계 통합 정밀 스캔 시작"):
-        res = run_4stage_sc()
-        t1, t2, t3 = st.tabs(["🔥 SUPREME EP (폭발)", "💎 VCP READY (응축)", "📈 TREND STAGE 2"])
-        with t1:
-            if res["SUPREME"]: st.dataframe(pd.DataFrame(res["SUPREME"]), use_container_width=True, hide_index=True)
-            else: st.info("현재 폭발 중인 SUPREME 종목 없음")
-        with t2:
-            if res["VCP_READY"]: st.dataframe(pd.DataFrame(res["VCP_READY"]), use_container_width=True, hide_index=True)
-            else: st.info("에너지를 응축 중인 VCP 종목 없음")
-        with t3:
-            if res["EP_IGNITE"]: st.dataframe(pd.DataFrame(res["EP_IGNITE"]), use_container_width=True, hide_index=True)
-            else: st.info("상승 추세 구간 종목 없음")
+    if st.button("🚀 한/미 주도주 10선 정밀 스캔 시작"):
+        run_4stage_sc()
 
 elif page.startswith("2."):
     st.header("💬 사령부 소통 및 공지 (HQ Communication)")
@@ -248,48 +245,49 @@ elif page.startswith("2."):
 elif page.startswith("3."):
     st.header("💎 프로 분석 리포트 (Weekly Tactical Report)")
     
+    # 렌더링 충돌 방지를 위한 독립 컨테이너 사용
     with st.container():
-        # 현대적 대시보드 스타일 레이아웃
-        st.markdown(f"""
-        <div class='glass-card' style='border-top: 5px solid #FFD700; background: rgba(0,0,0,0.4);'>
-            <div style='display: flex; justify-content: space-between; align-items: center;'>
-                <h2 style='color: #FFD700; margin: 0;'>📊 주간 시장 요약 및 대응 전략</h2>
-                <span style='color: #888;'>업데이트: 2026.04.19 KST</span>
-            </div>
-            <hr style='border: 0.1px solid #333; margin: 20px 0;'>
-            
-            <div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; text-align: center; margin-bottom: 25px;'>
-                <div style='background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px;'>
-                    <span style='color: #AAA; font-size: 0.8rem;'>DOW JONES</span><br>
-                    <b style='color: #00FF00; font-size: 1.2rem;'>+3.2%</b>
-                </div>
-                <div style='background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px;'>
-                    <span style='color: #AAA; font-size: 0.8rem;'>NASDAQ</span><br>
-                    <b style='color: #00FF00; font-size: 1.2rem;'>+6.8%</b>
-                </div>
-                <div style='background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px;'>
-                    <span style='color: #AAA; font-size: 0.8rem;'>S&P 500</span><br>
-                    <b style='color: #00FF00; font-size: 1.2rem;'>+4.5%</b>
-                </div>
-            </div>
-
-            <h4 style='color: #FFD700;'>🛰️ 글로벌 리서치 핵심 요약</h4>
-            <ul style='color: #EEE; line-height: 1.8; margin-bottom: 25px;'>
-                <li><b>상승 여력:</b> 랠리가 지속되고 있으며 주요 지수는 여전히 강력한 마감 강도를 유지 중입니다.</li>
-                <li><b>위험 신호:</b> 신고가 갱신 과정에서 발생한 갭은 <b>소멸 갭(Exhaustion Gap)</b>일 가능성이 존재하므로 경계를 늦춰선 안 됩니다.</li>
-                <li><b>에너지 지수:</b> 차트 패턴 강도(CPI) 86.7%로 시장의 기초 체력은 여전히 생존해 있습니다.</li>
-            </ul>
-
-            <h4 style='color: #FF914D;'>🛡️ 0419 사령부 핵심 전술 지침</h4>
-            <div style='background: rgba(255,145,77,0.05); padding: 20px; border-radius: 12px; border-left: 5px solid #FF914D; color: #DDD; font-size: 1.05rem;'>
-                "추세를 즐기되 수익 실현과 헤지 전략을 병행하십시오. 신규 진입 시에는 타이트한 손절가 설정이 필수적입니다. 
-                하방 변동성 발생 시 <b>S&P 500 기준 6,675선</b>을 심리적/기술적 지지선으로 설정하고 대응하십시오."
-            </div>
+        st.markdown("""
+<div style='background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,215,0,0.3); border-top: 5px solid #FFD700; border-radius: 15px; padding: 25px; backdrop-filter: blur(15px);'>
+    <div style='display: flex; justify-content: space-between; align-items: center;'>
+        <h2 style='color: #FFD700; margin: 0;'>📊 주간 시장 요약 및 대응 전략</h2>
+        <span style='color: #888; font-size: 0.9rem;'>업데이트: 2026.04.19 KST</span>
+    </div>
+    <hr style='border: 0.1px solid #333; margin: 20px 0;'>
+    
+    <div style='display: flex; justify-content: space-around; text-align: center; margin-bottom: 25px;'>
+        <div style='background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px; width: 30%;'>
+            <span style='color: #AAA; font-size: 0.8rem;'>DOW JONES</span><br>
+            <b style='color: #00FF00; font-size: 1.3rem;'>+3.2%</b>
         </div>
-        """, unsafe_allow_html=True)
+        <div style='background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px; width: 30%;'>
+            <span style='color: #AAA; font-size: 0.8rem;'>NASDAQ</span><br>
+            <b style='color: #00FF00; font-size: 1.3rem;'>+6.8%</b>
+        </div>
+        <div style='background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px; width: 30%;'>
+            <span style='color: #AAA; font-size: 0.8rem;'>S&P 500</span><br>
+            <b style='color: #00FF00; font-size: 1.3rem;'>+4.5%</b>
+        </div>
+    </div>
+
+    <h4 style='color: #FFD700; border-bottom: 1px solid #444; padding-bottom: 10px;'>🛰️ 글로벌 리서치 핵심 요약</h4>
+    <div style='color: #EEE; line-height: 1.8; margin-bottom: 25px; padding-left: 10px;'>
+        • <b>상승 여력:</b> 랠리가 지속되고 있으며 주요 지수는 강세 마감.<br>
+        • <b>위험 신호:</b> 신고가 경신 중 발생한 갭은 <b>소멸 갭(Exhaustion Gap)</b> 가능성 경계.<br>
+        • <b>에너지 지수:</b> 차트 패턴 강도(CPI) 86.7%로 강력한 체력 생존.
+    </div>
+
+    <h4 style='color: #FF914D; border-bottom: 1px solid #444; padding-bottom: 10px;'>🛡️ 0419 사령부 핵심 전술 지침</h4>
+    <div style='background: rgba(255,145,77,0.1); padding: 20px; border-radius: 12px; border-left: 5px solid #FF914D; color: #DDD; font-size: 1.05rem; line-height: 1.6;'>
+        "추세를 즐기되 수익 실현과 헤지 전략을 병행하십시오. 신규 진입 시에는 타이트한 손절가 설정이 필수적입니다. 
+        하방 변동성 발생 시 <b>S&P 500 기준 6,675선</b>을 심리적 지지선으로 설정하십시오."
+    </div>
+</div>
+""", unsafe_allow_html=True)
         
+        st.write("") # 스페이싱
         if st.button("🔄 실시간 글로벌 데이터 동기화"):
-            st.toast("최신 리서치 데이터를 반영했습니다.")
+            st.toast("사령부 리포트 데이터를 동적 갱신했습니다.")
             st.rerun()
     
     tic_in = st.text_input("분석 티커", value="NVDA").upper()
@@ -624,8 +622,36 @@ elif page.startswith("11."):
                 st.error("모든 항목을 작성해 주셔야 신청이 가능합니다.")
 
 elif page.startswith("12."):
-    st.header("🛡️ 포트폴리오 리스크 방패")
-    st.write("계좌 전체 리스크(Global Heat)를 6% 이내로 관리합니다.")
+    st.header("🛡️ 리스크 방패 (The -3% Iron Shield)")
+    st.markdown("""
+<div class='glass-card' style='border-left: 5px solid #FF4B4B; padding: 25px;'>
+    <h3 style='color: #FF4B4B;'>🛸 왜 본데는 '-3% 손절'을 생명처럼 여기는가?</h3>
+    <p style='color: #CCC; font-size: 1.1rem;'>스탁비(Pradeep Bonde) 트레이딩의 정수는 '공격'이 아닌 <b>'철저한 방어'</b>에 있습니다.</p>
+    <hr style='border: 0.1px solid #444; margin: 20px 0;'>
+    
+    <div style='line-height: 1.8; color: #EEE; font-size: 1rem;'>
+        <b>1. 복리의 마법을 지키는 유일한 방법</b><br>
+        자산이 50% 하락하면 원금을 회복하기 위해 100%의 수익이 필요합니다. 하지만 <b>3% 하락</b>은 단 한 번의 평범한 거래로도 즉시 복구가 가능합니다. 
+        본데는 큰 손실을 방어함으로써 복리가 역성장하는 것을 절대로 허용하지 않습니다.
+        <br><br>
+        
+        <b>2. '타점 오류'의 즉각적인 판독기</b><br>
+        본데의 EP나 모멘텀 버스트는 '폭발적인 힘'을 전제로 합니다. 만약 진입 후 주가가 -3% 밀렸다면, 그것은 <b>"사령부의 분석이 틀렸거나 시장의 타이밍이 아직 아니다"</b>라는 명확한 신호입니다. 
+        미련 없이 탈출하여 자본의 회전율을 높이는 것이 본데식 기동력의 핵심입니다.
+        <br><br>
+        
+        <b>3. '안타 전략(Hitters)'의 생존 조건</b><br>
+        우리는 홈런 한 방을 노리는 도박꾼이 아닙니다. 꾸준한 안타를 치는 타자입니다. 
+        작은 수익들을 쌓아가는 전략에서 <b>단 하나의 큰 손실(-10% 이상)</b>은 수십 번의 안타 수익을 순식간에 집어삼킵니다. -3%는 사령부 대원들의 생존을 위한 '최후의 방어선'입니다.
+    </div>
+    
+    <div style='margin-top: 35px; background: rgba(255,75,75,0.1); padding: 25px; border-radius: 12px; border: 1px dashed #FF4B4B; text-align: center;'>
+        <b style='color: #FF4B4B; font-size: 1.2rem;'>💡 사령부의 결론</b><br>
+        <p style='margin-top: 10px; color: #DDD;'>"손절은 패배가 아니라, 더 큰 승리를 위해 병력을 보존하는 <b>전략적 후퇴</b>입니다. <br>
+        -3%에서 멈추는 자만이 다음 폭등주를 잡을 자격이 있습니다."</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 elif page.startswith("13."):
     st.header("🗺️ 실시간 주도주 히트맵 (Market OverView)")
