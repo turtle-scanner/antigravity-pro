@@ -13,12 +13,14 @@ import requests
 import base64
 import time
 
-# --- 💾 데이터베이스 및 글로벌 설정 ---
-USER_DB_FILE = "users_db.json"
-MESSAGE_DB_FILE = "messages_db.json"
-VISITOR_FILE = "visitor_requests.csv"
-MSG_LOG_FILE = "messages_db.csv"
-PORTFOLIO_FILE = "portfolio_db.json"
+# --- 💾 데이터베이스 및 영구 보존 설정 ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+def get_db_path(f): return os.path.join(BASE_DIR, f)
+
+USER_DB_FILE = get_db_path("users_db.json")
+CHAT_FILE = get_db_path("chat_log.csv")
+BRIEF_FILE = get_db_path("market_briefs.csv")
+VISITOR_FILE = get_db_path("visitor_requests.csv")
 MASTER_GAS_URL = "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec"
 
 TICKER_NAME_MAP = {
@@ -33,14 +35,16 @@ def load_users():
         init = {"cntfed": {"password": "cntfed", "status": "approved", "grade": "방장"}}
         with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(init, f)
         return init
-    with open(USER_DB_FILE, "r", encoding="utf-8") as f: 
-        users = json.load(f)
-        # 마스터 계정 권한 강제 보장 및 등급 통일
-        if "cntfed" in users:
-            users["cntfed"]["grade"] = "방장"
-            users["cntfed"]["status"] = "approved"
-            with open(USER_DB_FILE, "w", encoding="utf-8") as f2: json.dump(users, f2)
-        return users
+    try:
+        with open(USER_DB_FILE, "r", encoding="utf-8") as f: 
+            users = json.load(f)
+            # 전문가님 권한은 시스템적으로 절대 보장 (지워짐 방지)
+            if "cntfed" in users:
+                users["cntfed"]["grade"] = "방장"
+                users["cntfed"]["status"] = "approved"
+                with open(USER_DB_FILE, "w", encoding="utf-8") as f2: json.dump(users, f2)
+            return users
+    except: return {"cntfed": {"password": "cntfed", "status": "approved", "grade": "방장"}}
 
 def gsheet_sync(sheet_name, headers, values):
     payload = {"sheetName": sheet_name, "headers": headers, "values": values}
@@ -145,9 +149,10 @@ if page.startswith("1."):
                     
                     score = rs + (roe * 1.2)
                     is_us = (".KS" not in tic and ".KQ" not in tic)
+                    display_name = TICKER_NAME_MAP.get(tic, tic) if not is_us else tic
                     
                     all_res.append({
-                        "T": tic, "P": f"${cp:.2f}" if is_us else f"{int(cp):,}원",
+                        "T": display_name, "P": f"${cp:.2f}" if is_us else f"{int(cp):,}원",
                         "CH": f"{ch:+.1f}%", "ROE": roe, "RS": rs, "SCORE": score,
                         "MARKET": "USA 🇺🇸" if is_us else "KOREA 🇰🇷"
                     })
@@ -486,36 +491,51 @@ elif page.startswith("8."):
         st.warning("❌ 이 구역은 사령부 최고 등급 전용입니다. 일반 대원은 접근할 수 없습니다.")
         st.stop()
         
+    # [A] 신규 가입 승인 섹션
     pending_users = [u for u, d in users.items() if d.get("status") == "pending"]
-
-    st.markdown(f"<div class='glass-card'>📡 현재 가입 대기 인원: <b>{len(pending_users)}명</b></div>", unsafe_allow_html=True)
-
+    st.subheader("📡 신규 가입 대기 인원")
     if pending_users:
         if st.button("🔥 대기 인원 전체 일괄 승인", use_container_width=True):
-            for u in pending_users:
-                users[u]["status"] = "approved"
+            for u in pending_users: users[u]["status"] = "approved"
             with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
-            st.success(f"🎊 총 {len(pending_users)}명의 대원이 사령부에 공식 소속되었습니다!")
+            st.success("🎊 모든 대기 인원이 공식 승인되었습니다.")
             st.rerun()
-
-        st.divider()
-        st.subheader("👤 개별 승인 리스트")
         for u in pending_users:
             c1, c2 = st.columns([7, 3])
-            with c1:
-                st.markdown(f"""
-                <div style='background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border-left: 3px solid #FFD700;'>
-                    <b>ID: {u}</b> | 가입 신청 접수됨
-                </div>
-                """, unsafe_allow_html=True)
+            with c1: st.info(f"ID: **{u}** | 가입 신청됨")
             with c2:
-                if st.button(f"✅ 승인 (ID:{u})", key=f"appr_{u}"):
+                if st.button(f"✅ 승인", key=f"appr_{u}"):
                     users[u]["status"] = "approved"
                     with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
-                    st.toast(f"{u} 대원 승인 완료!")
                     st.rerun()
-    else:
-        st.info("현재 승인 대기 중인 신규 회원이 없습니다.")
+    else: st.info("대기 중인 신규 회원이 없습니다.")
+
+    st.divider()
+
+    # [B] 정규직 승격 심사 섹션
+    st.subheader("🔥 정규직 승격 심사 센터")
+    if os.path.exists(VISITOR_FILE):
+        try:
+            req_df = pd.read_csv(VISITOR_FILE)
+            if not req_df.empty:
+                for idx, row in req_df.iloc[::-1].iterrows():
+                    user_id = row["아이디"]
+                    # 이미 정규직이면 통과
+                    if users.get(user_id, {}).get("grade") == "정규직": continue
+                    
+                    with st.expander(f"📥 [승격요청] {user_id} 대원의 신청서 ({row['시간']})", expanded=False):
+                        st.markdown(f"**1. 첫인사:** {row['첫인사']}")
+                        st.markdown(f"**2. 자기소개:** {row['자기소개']}")
+                        st.markdown(f"**3. 포부:** {row['포부']}")
+                        if st.button(f"🎖️ {user_id} 정규직 승격 발령", key=f"promo_{idx}"):
+                            if user_id in users:
+                                users[user_id]["grade"] = "정규직"
+                                with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                                st.success(f"🎊 {user_id} 대원이 '정규직'으로 승격되었습니다!")
+                                st.rerun()
+            else: st.info("현재 접수된 승격 신청서가 없습니다.")
+        except: st.info("접수된 신청서가 없습니다.")
+    else: st.info("접수된 신청서가 없습니다.")
 
 elif page.startswith("9."):
     st.markdown("<h1 style='text-align: center; color: #FFD700;'>🐝 프라딥 본데(StockBee)</h1>", unsafe_allow_html=True)
@@ -556,168 +576,89 @@ elif page.startswith("9."):
             """)
     
     st.divider()
-    st.caption("※ 본 내용은 Pradeep Bonde의 공개된 철학과 전략을 기반으로 재구성되었습니다.")
 
 elif page.startswith("10."):
     st.markdown("<h1 style='text-align: center; color: #FFD700;'>🏛️ 사령부 제작 동기</h1>", unsafe_allow_html=True)
     st.markdown("### 세 거인의 발자취를 따라, 함께 성장의 궤도에 오르기를 꿈꾸며")
-    
     st.divider()
-    
     st.write("""
     이 플랫폼은 제가 깊이 존경하는 세 분의 스승, **윌리엄 오닐, 마크 미너비니, 그리고 프라딥 본데**의 트레이딩 철학을 기리는 마음으로 시작되었습니다. 
-    주식이라는 거친 바다에서 길을 잃지 않도록 저 스스로를 다잡기 위한 '나침반'을 만들고 싶었습니다.
-    """)
-    
-    st.write("""
-    저는 **"누구나 간절히 노력한다면 정규직의 꿈을 이룰 수 있고, 경제적 자유를 얻을 수 있다"**는 굳은 신념을 가지고 있습니다. 
     비록 지금은 부족한 점이 많은 터미널이지만, 저와 같은 꿈을 꾸는 분들이 함께 부자가 되었으면 하는 진심 어린 마음을 담아 밤낮으로 코드를 짜고 로직을 다듬었습니다.
     """)
-    
     st.info("""
     📖 **오닐의 유산:** 윌리엄 오닐의 저서 『최고의 주식, 최적의 타이밍』은 제 트레이딩의 본질을 깨닫게 해준 보물입니다. 
     이 터미널이 그 거인들의 어깨 위에 올라타 시장을 바라보는 든든한 디딤돌이 되길 희망합니다.
     """)
-    
-    st.write("우리가 꿈꾸는 경제적 자유는 삶의 주도권을 되찾는 과정입니다. 여기서 여러분과 함께 성장하기를 고대합니다.")
-    
-    st.divider()
-
-    # 영문 버전 추가
-    st.markdown("### 🏛️ Corporate Mission (English Version)")
-    st.write("""
-    **Following the footsteps of the three giants, dreaming of a collective ascent.**
-    
-    This platform was born out of my profound respect for three masters: **William O'Neil, Mark Minervini, and Pradeep Bonde.** 
-    My goal was to build a "compass" to keep myself grounded and focused so as not to lose my way in the turbulent ocean of the stock market.
-    """)
-    
-    st.write("""
-    I hold a firm belief that **"anyone who puts in the sincere effort can achieve their professional dreams and reach financial freedom."** 
-    Although this terminal may still be a work in progress, I have poured my heart into writing every line of code and refining every logic, 
-    fueled by the sincere hope that those who share this dream can grow wealthy together.
-    """)
-    
-    st.markdown(f"""
-    <div style='background: rgba(255,215,0,0.05); padding: 20px; border-radius: 12px; border-left: 5px solid #FFD700; margin: 20px 0;'>
-        <b style='color: #FFD700;'>📖 Turtle’s Must-Read Recommendation</b><br>
-        There are already many excellent books available. Among them, I most highly recommend <b>"How to Make Money in Stocks" by William O'Neil.</b><br>
-        I hope you gain insights that pierce through the core of the market, going beyond mere technical analysis.
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.write("""
-    My wish is for this place to evolve into a "Stock Insight Platform" where we do more than just consume information—where we share valuable opinions, 
-    encourage one another, and ascend toward success together. I, too, will never stop learning and will continue this journey alongside you.
-    """)
-    
     st.markdown("""
     <div style='text-align: right; margin-top: 20px;'>
-        <span style='color: #888; font-size: 0.9rem;'>April 18, 2026, on a deepening spring evening at home.</span><br>
-        <b style='color: #FFD700; font-size: 1.2rem;'>Sincerely, Turtle</b>
+        <span style='color: #888; font-size: 0.9rem;'>2026년 4월 18일, 깊어가는 봄날 밤.</span><br>
+        <b style='color: #FFD700; font-size: 1.2rem;'>전문가거북이 드림</b>
     </div>
     """, unsafe_allow_html=True)
 
 elif page.startswith("11."):
-    st.header("🤝 방문자 정밀 신청서 (Member Application)")
-    st.markdown("<div class='glass-card'>사령부 정규직 승격을 위해 아래 3가지 항목을 자세히 작성해 주세요.</div>", unsafe_allow_html=True)
-    
+    st.header("🤝 방문자 승격 신청서 (Promotion Application)")
+    st.markdown("<div class='glass-card'>사령부 정규직 승격을 위해 아래 3가지 항목을 작성해 주세요. 전문가님이 직접 검토합니다.</div>", unsafe_allow_html=True)
     with st.form("greet_detailed", clear_on_submit=True):
-        st.subheader("1. 첫인사")
-        g1 = st.text_area("사령부에 처음 방문하신 소감과 첫인사를 남겨주세요.", placeholder="예: 안녕하세요! 유투브를 보고 사령부의 명성을 들어 찾아왔습니다.", height=80)
-        
-        st.subheader("2. 자기소개")
-        g2 = st.text_area("트레이딩 경력이나 현재 본인에 대해 소개해 주세요.", placeholder="예: 3년차 개인 투자자입니다. 오닐의 철학을 공부하며 실력을 쌓고 싶습니다.", height=100)
-        
-        st.subheader("3. 앞으로의 포부")
-        g3 = st.text_area("사령부에서 함께하며 이루고 싶은 목표와 각오를 적어주세요.", placeholder="예: 매일 딥다이브를 통해 차트 1000개를 읽어내는 트레이더가 되겠습니다.", height=100)
-        
+        g1 = st.text_area("1. 사령부 첫 방문 소감", placeholder="사령부를 처음 알게 된 계기와 소감을 남겨주세요.")
+        g2 = st.text_area("2. 트레이딩 경력 및 자기소개", placeholder="본인의 투자 경험이나 간단한 소개를 부탁드립니다.")
+        g3 = st.text_area("3. 정규직으로서의 포부", placeholder="사령부 정규직이 되어 이루고 싶은 목표를 적어주세요.")
         if st.form_submit_button("🛡️ 사령부 승격 신청 전송"):
             if g1 and g2 and g3:
-                t = datetime.now().strftime("%m/%d %H:%M")
+                t = datetime.now().strftime("%Y-%m-%d %H:%M")
                 u = st.session_state.current_user
-                # 구글 시트로 3개 항목 통합 전송
-                gsheet_sync("방문자_신청서", ["시간", "아이디", "첫인사", "자기소개", "포부"], [t, u, g1, g2, g3])
-                st.success("✅ 신청서가 성공적으로 전파되었습니다. 관리자 승인을 기다려 주세요!")
-            else:
-                st.error("모든 항목을 작성해 주셔야 신청이 가능합니다.")
+                # 로컬 영구 저장 (8번 배너와 연동)
+                new_req = pd.DataFrame([[t, u, g1, g2, g3]], columns=["시간", "아이디", "첫인사", "자기소개", "포부"])
+                new_req.to_csv(VISITOR_FILE, mode='a', header=not os.path.exists(VISITOR_FILE), index=False, encoding="utf-8-sig")
+                # 백업용 동기화
+                gsheet_sync("방문자_승격신청", ["시간", "아이디", "첫인사", "자기소개", "포부"], [t, u, g1, g2, g3])
+                st.success("✅ 승격 신청서가 성공적으로 관리자 승인센터로 전파되었습니다!")
+            else: st.error("모든 항목을 작성해 주셔야 신청이 가능합니다.")
 
 elif page.startswith("12."):
     st.header("🛡️ 리스크 방패 (The -3% Iron Shield)")
     st.divider()
-    
     st.subheader("🛸 왜 본데는 '-3% 손절'을 생명처럼 여기는가?")
     st.error("**1. 복리의 마법을 지키는 유일한 방법**")
-    st.write("자산이 50% 하락하면 원금을 회복하기 위해 100%의 수익이 필요합니다. 하지만 3% 하락은 단 한 번의 평범한 거래로도 즉시 복구가 가능합니다. 본데는 복리가 역성장하는 것을 절대 허용하지 않습니다.")
-    
+    st.write("3% 하락은 회복이 쉬우나, 큰 하락은 복구에 수배의 노력이 필요합니다. 본데는 복리의 역성장을 절대 허용하지 않습니다.")
     st.warning("**2. '타점 오류'의 즉각적인 판독기**")
-    st.write("본데의 매매는 '폭발적인 힘'을 전제로 합니다. 만약 진입 후 주가가 -3% 밀렸다면, 그것은 사령부의 분석이 틀렸거나 시장의 타이밍이 아니라는 명확한 신호입니다. 미련 없이 탈출하여 자본 회전율을 높여야 합니다.")
-    
+    st.write("진입 후 -3% 후퇴는 사령부의 타점이 틀렸거나 타이밍이 아니라는 시장의 명확한 신호입니다. 즉각 탈출하십시오.")
     st.info("**3. '안타 전략(Hitters)'의 생존 조건**")
-    st.write("우리는 홈런 한 방보다 꾸준한 안타를 노립니다. 작은 수익들을 쌓는 전략에서 단 하나의 큰 손실은 수십 번의 안타 수익을 순식간에 집어삼킵니다. -3%는 생존을 위한 최후의 방어선입니다.")
-    
-    st.divider()
-    st.success("""
-    💡 **사령부의 최종 결론**  
-    "손절은 패배가 아니라, 더 큰 승리를 위해 병력을 보존하는 **전략적 후퇴**입니다.  
-    -3%에서 멈추는 자만이 다음 주도주를 잡을 자격이 있습니다."
-    """)
+    st.write("작은 수익을 쌓는 전략에서 단 하나의 큰 손실은 모든 노력을 수포로 돌립니다. -3%는 사령부의 최후 방어선입니다.")
+    st.success("💡 **결론:** 손절은 패배가 아닌, 더 큰 승리를 위한 전략적 후퇴입니다.")
 
 elif page.startswith("13."):
     st.header("🗺️ 실시간 주도주 히트맵 (Market OverView)")
-    st.markdown("<div class='glass-card'>사령부 관리 종목 20선의 실시간 수급 실력을 시각화합니다. (초록: 상승 / 빨강: 하락)</div>", unsafe_allow_html=True)
-    
-    # 히트맵 데이터 동적 생성
-    heatmap_data = []
-    for tic, name in TICKER_NAME_MAP.items():
-        # 임시 데이터 (실제 데이터 연동 시 h['Close'] 기반 ch 사용)
-        fake_ch = np.random.uniform(-5, 5) 
-        heatmap_data.append({"Ticker": tic, "Name": name, "Change": fake_ch, "Size": 1})
-        
-    df_h = pd.DataFrame(heatmap_data)
-    fig = px.treemap(df_h, 
-                    path=['Name'], 
-                    values='Size', 
-                    color='Change', 
-                    hover_data=['Ticker'],
-                    color_continuous_scale='RdYlGn',
-                    color_continuous_midpoint=0)
-    
-    fig.update_layout(margin=dict(t=30, l=10, r=10, b=10), height=600)
-    st.plotly_chart(fig, use_container_width=True)
+    st.markdown("<div class='glass-card'>사령부 관리 종목 20선의 실시간 수급 현황입니다. (초록: 상승 / 빨강: 하락)</div>", unsafe_allow_html=True)
+    if st.button("🔄 실시간 히트맵 데이터 동기화"):
+        tics = list(TICKER_NAME_MAP.keys())
+        try:
+            with st.spinner("📡 데이터 수집 중..."):
+                h_data = yf.download(tics, period="2d", progress=False)['Close']
+                changes = ((h_data.iloc[-1] / h_data.iloc[-2]) - 1) * 100
+                df_h = pd.DataFrame([{"Name": TICKER_NAME_MAP.get(t, t), "Change": changes.get(t, 0), "Size": 1} for t in tics])
+                fig = px.treemap(df_h, path=['Name'], values='Size', color='Change', color_continuous_scale='RdYlGn', color_continuous_midpoint=0)
+                fig.update_layout(margin=dict(t=30, l=10, r=10, b=10), height=600)
+                st.plotly_chart(fig, use_container_width=True)
+        except Exception as e: st.error(f"오류 발생: {e}")
 
 elif page.startswith("14."):
     st.header("🌡️ 시장 심리 게이지 (Fear & Greed)")
-    val = 65  # 현재 시장 지수 연동
-    
+    try:
+        ndx = yf.download("^IXIC", period="2d", progress=False)['Close']
+        ndx_ch = ((ndx.iloc[-1] / ndx.iloc[-2]) - 1) * 100
+        val = int(min(max(55 + (ndx_ch * 10), 10), 90))
+    except: val = 50
     col1, col2 = st.columns([1.5, 1.2])
     with col1:
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number", value=val,
-            gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#FFD700"},
-                   'steps': [{'range': [0, 30], 'color': "#FF4B4B"}, 
-                            {'range': [71, 100], 'color': "#00FF00"}]}))
-        fig.update_layout(height=450)
+        fig = go.Figure(go.Indicator(mode="gauge+number", value=val, gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#FFD700"}, 'steps': [{'range': [0, 30], 'color': "#FF4B4B"}, {'range': [71, 100], 'color': "#00FF00"}]}))
         st.plotly_chart(fig, use_container_width=True)
-        
     with col2:
-        st.markdown("<div class='glass-card' style='padding:30px;'>", unsafe_allow_html=True)
-        st.subheader("💡 본데의 실시간 마켓 훈수")
-        
-        if val <= 30:
-            st.error("🔴 위기 구간 (Crisis)")
-            st.write("시장이 피를 흘릴 때 현금은 가장 강력한 무기가 됩니다. 현재 시장의 중력은 모든 것을 끌어내리고 있습니다. 무리하게 시장과 싸우려 하지 마십시오. 지금은 수익을 낼 때가 아니라 자산을 지킬 때입니다. 태풍이 완전히 지나가고 맑은 하늘이 보일 때까지 인내하며 기다리는 것이 진정한 프로의 자세입니다.")
-        elif val <= 50:
-            st.warning("🟠 주의 구간 (Warning)")
-            st.write("함부로 바닥을 예단하지 마십시오. 하락 추세 속에서 나타나는 일시적인 반등은 대중을 유혹하는 가짜 신호일 확률이 매우 높습니다. 섣부른 진입은 계좌에 치명적인 상처를 남깁니다. 시장의 체질을 근본적으로 바꿀 수 있는 강력한 EP 촉매제가 터지는 주도주가 등장할 때까지 사냥꾼의 마음으로 숨죽이고 기다리십시오.")
-        elif val <= 70:
-            st.info("🟡 중립 구간 (Neutral)")
-            st.write("지금의 구간은 탐욕으로 가는 위험한 기로입니다. 안일한 마음으로 감행하는 추격 매수는 계좌를 파괴하는 독약과 같습니다. 주가가 이동평균선과 멀어져 있다면 절대 손대지 마십시오. 오직 주가가 옆으로 기어 가며 에너지를 극도로 응축하는 타이트한 종목에만 집중하십시오. 응축이 없는 돌파는 사막의 신기루일 뿐입니다.")
-        elif val <= 90:
-            st.success("🟢 적극 구간 (Active)")
-            st.write("드디어 시장의 중력이 약해졌습니다! 우리가 기다려온 VCP 패턴을 정석으로 돌파하는 주도주들이 쏟아지는 축제의 구간입니다. 지금은 용기를 내어 공격적으로 수익을 취해야 할 때입니다. 다만, 자만은 금물입니다. 손절가는 어느 때보다 타이트하게 관리하되, 일단 추세를 탄 종목의 수익은 대담하게 끝까지 가져가십시오.")
-        else:
-            st.error("🔥 과열 구간 (Overheated)")
-            st.write("모두가 환호하며 승리에 취해 있을 때가 가장 위험한 순간입니다. 지금은 새로운 주식을 살 때가 아니라, 언제든 탈출할 수 있도록 팔 때를 고민해야 하는 시간입니다. 탐욕에 눈이 멀어 익절 기회를 놓치지 마십시오. 모든 종목의 익절가를 본절가 위로 바짝 올리고, 시장이 고개를 숙이기 전에 안전한 탈출로를 확보하십시오.")
-        
+        st.markdown("<div class='glass-card' style='padding:25px;'>", unsafe_allow_html=True)
+        st.subheader("💡 본데의 실시간 훈수")
+        if val <= 30: st.error("🔴 공포 구간: 자본 방어에 집중하십시오.")
+        elif val <= 50: st.warning("🟠 주의 구간: 섣부른 진입을 자제하십시오.")
+        elif val <= 75: st.info("🟡 중립 구간: 개별 주도주의 VCP에 집중하십시오.")
+        else: st.success("🟢 적극 구간: EP 돌파 종목에 올라타십시오.")
         st.markdown("</div>", unsafe_allow_html=True)
+    
