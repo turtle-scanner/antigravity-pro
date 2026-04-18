@@ -538,43 +538,46 @@ elif page.startswith("8."):
     else: st.info("접수된 신청서가 없습니다.")
 
 elif page.startswith("9."):
-    st.markdown("<h1 style='text-align: center; color: #FFD700;'>🐝 프라딥 본데(StockBee)</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #888;'>시스템으로 시장을 정복한 월가의 멘토</p>", unsafe_allow_html=True)
-    
+    st.markdown("<h1 style='text-align: center; color: #FFD700;'>🐝 월가의 멘토, 프라딥 본데(Pradeep Bonde)</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888; font-size: 1.2rem;'>시스템 트레이딩의 선구자: 스탁비(Stockbee)의 유산</p>", unsafe_allow_html=True)
     st.divider()
-    
-    with st.container():
-        st.markdown("### 📖 1. 물류 전문가에서 데이터 트레이더로의 변신")
-        with st.expander("성장 배경 전문 보기", expanded=False):
-            st.write("""
-            온라인에서 **스탁비(Stockbee)**라는 필명으로 더 잘 알려진 프라딥 본데는 24년 이상의 경력을 가진 전업 트레이더입니다. 
-            그는 인도에서 물류 산업의 효율성을 진두지휘하던 이력을 바탕으로, 주식 거래를 막연한 운이 아닌 
-            **철저하게 설계된 데이터 기반의 비즈니스 모델**로 재정의했습니다. 
-            그의 방식은 직관이나 감이 아닌, 수만 번의 과거 차트 백테스팅과 통계를 기반으로 합니다.
-            """)
 
-        st.markdown("### 💡 2. 스탁비를 지탱하는 4대 트레이딩 철학")
-        with st.expander("⚾ 안타 전략 (Hitters): 꾸준한 누적의 힘", expanded=False):
-            st.info("성공은 큰 홈런 한 방보다, 3~5%의 확실한 수익을 복리로 무한히 중첩시키는 과정에서 나옵니다. 자산을 지키는 것이 공격의 시작입니다.")
-        with st.expander("🛡️ 셀프 리더십: 스스로가 사령관이 되어라", expanded=False):
-            st.info("트레이딩의 모든 책임은 나에게 있습니다. 외부의 소음에 휘둘리지 않고 나만의 시스템을 믿고 실행하는 '심리적 독립'을 강조합니다.")
-        with st.expander("🧬 절차적 기억 (Deep Dive): 차트를 뇌에 박아라", expanded=False):
-            st.info("과거에 폭등했던 수천 개의 종목 차트를 반복해서 보며, 특정 패턴이 나타날 때 손가락이 즉각 반응하도록 훈련하는 '기계적 몰입'입니다.")
-        with st.expander("📊 상황 인식: 시장의 너비(Breadth)를 읽어라", expanded=False):
-            st.info("매일 장세의 폭을 분석하여 공격할 날(Green)과 현금을 피난처로 삼을 날(Red)을 엄격히 구분합니다. 시장과 싸우지 마십시오.")
+    st.write("""
+    프라딥 본데는 온라인에서 **스탁비(Stockbee)**라는 필명으로 활동하며 전 세계 트레이딩 커뮤니티에 거대한 유산을 남기고 있는 실전 트레이더입니다. 
+    그는 단순히 수익을 많이 내는 투자자를 넘어, 자신만의 독창적인 매매 프로세스를 체계화하여 후학을 양성하는 교육자로서의 면모를 강력하게 보여주고 있습니다.
+    """)
 
-        st.markdown("### ⚡ 3. 시장의 중력을 이기는 핵심 매매 기법")
-        with st.expander("🔥 EP (에피소딕 피벗): 폭발의 기폭제", expanded=False):
-            st.markdown("""
-            **핵심:** 강력한 펀더멘털의 변화(실적 서프라이즈, 대형 계약)와 역대급 거래량이 동반된 '갭 상승'의 초기 국면을 공략합니다.
-            - **전술:** 기관의 거대 자금이 유입되는 입구를 포착하여 추세의 시작점에 올라탑니다.
-            """)
-        with st.expander("🚀 Momentum Burst: 응축된 에너지의 분출", expanded=False):
-            st.markdown("""
-            **핵심:** 좁은 가격대에서 변동성을 죽이며 힘을 응축하던(VCP) 주식이 특정 임계점을 상향 돌파하는 순간을 포착합니다.
-            - **전술:** 매도세가 완전히 고갈된 'Dry-up' 구간 확인 후, 거래량이 실리는 돌파 시점에 진입합니다.
-            """)
-    
+    st.subheader("1. 비금융권 출신의 혁명적 시각")
+    st.info("""
+    본데의 이력에서 가장 흥미로운 점은 그가 정통 금융권 엘리트 코스를 밟지 않았다는 사실입니다. 그는 인도에서 DHL과 FedEx 같은 글로벌 물류 기업의 마케팅 책임자로 근무하며 경력을 쌓았습니다. 
+    물류 산업의 핵심인 **'시스템 최적화와 프로세스 관리'** 경험은 그가 주식 시장을 바라보는 시각을 완전히 바꾸어 놓았습니다. 그는 주식 매매를 막연한 예측의 영역이 아닌, 입력값에 따라 결과가 도출되는 비즈니스 모델로 접근했습니다.
+    """)
+
+    st.subheader("2. 스탁비의 4대 트레이딩 철학")
+    c1, c2 = st.columns(2)
+    with c1:
+        with st.expander("⚾ 안타(Singles) 전략", expanded=True):
+            st.write("일확천금을 노리는 홈런보다 작고 확실한 수익을 복리로 누적시키는 것이 부의 축적을 위한 가장 빠른 길입니다.")
+        with st.expander("🧬 딥 다이브 (Deep Dive)", expanded=True):
+            st.write("뇌가 고민하기 전에 손이 반응하도록 과거 폭등 차트 수천 개를 연구하여 패턴을 '절차적 기억'으로 뇌에 각인시킵니다.")
+    with c2:
+        with st.expander("🛡️ 셀프 리더십", expanded=True):
+            st.write("멘토의 조언보다 중요한 것은 스스로 문제를 해결하고 실행에 옮기는 자기 주도적 실행력입니다.")
+        with st.expander("📊 철저한 상황 인식", expanded=True):
+            st.write("매일 시장의 폭(Breadth)을 분석하여 공격할 때와 방어할 때를 구분하는 시스템적 방패를 가동합니다.")
+
+    st.subheader("3. 시장을 관통하는 핵심 매매 기법")
+    st.success("""
+    **🔥 에피소딕 피벗 (EP):** 기업의 펀더멘털을 근본적으로 바꾸는 강력한 뉴스나 실적이 터졌을 때, 폭발적인 거래량과 함께 진입하여 기관의 자금 유입 초기 국면을 공략합니다.  
+    **🚀 모멘텀 버스트:** 좁은 눌림목(VCP)에서 에너지가 분출하는 임계점을 포착합니다.  
+    **⚖️ MAGNA 53+ CAP 10x10:** 시가총액과 상장 기간, 상승률을 필터링하여 가볍고 빠른 '대장주'만을 골라내는 본데만의 전용 공식입니다.
+    """)
+
+    st.subheader("4. 제자들이 증명하는 실력의 가치")
+    st.write("""
+    본데의 위대함은 제자들의 수익률로 증명됩니다. **1,300억 원 이상의 자산을 달성한 크리스찬 쿨라매기(Kristjan Qullamaggi)**는 본데의 가르침을 통해 자신의 시스템을 완성했다고 공공연히 밝히고 있습니다. 
+    그는 화려한 마케팅 대신 오직 데이터와 결과로 승부하며, 현재도 실전 트레이딩 팩토리를 운영하며 시장의 살아있는 전설로 활동하고 있습니다.
+    """)
     st.divider()
 
 elif page.startswith("10."):
