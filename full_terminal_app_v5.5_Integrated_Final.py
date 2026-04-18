@@ -188,6 +188,7 @@ with st.sidebar:
 users = load_users()
 curr_user_data = users.get(st.session_state.current_user, {})
 curr_grade = curr_user_data.get("grade", "회원")
+is_admin = (curr_grade in ["관리자", "방장"])
 
 menu_ops = [
     "1. 🎯 주도주 타점 스캐너", "2. 💬 소통 대화방", "3. 💎 프로 분석 리포트", 
@@ -209,13 +210,18 @@ now_us = datetime.now(pytz.timezone('America/New_York'))
 
 @st.cache_data(ttl=600)
 def get_top_indices():
-    res = {}
+    res = {"NASDAQ": 0.0, "KOSPI": 0.0, "KOSDAQ": 0.0}
     for n, t in {"NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}.items():
         try:
-            h = yf.download(t, period="2d", progress=False)['Close']
-            c = ((h.iloc[-1] / h.iloc[-2]) - 1) * 100
-            res[n] = c
-        except: res[n] = 0.0
+            h = yf.download(t, period="5d", progress=False)['Close']
+            # 데이터가 DataFrame(MultiIndex)인 경우 첫 번째 컬럼 선택
+            if isinstance(h, pd.DataFrame):
+                h = h.iloc[:, 0]
+            h = h.dropna()
+            if len(h) >= 2:
+                c = ((h.iloc[-1] / h.iloc[-2]) - 1) * 100
+                res[n] = float(c)
+        except: pass
     return res
 
 idx_info = get_top_indices()
@@ -349,12 +355,9 @@ if page.startswith("1."):
 
 elif page.startswith("2."):
     st.header("💬 사령부 소통 및 공지 (HQ Communication)")
-    users = load_users()
-    user_grade = users.get(st.session_state.current_user, {}).get("grade", "회원")
-    is_admin = (user_grade in ["관리자", "방장"]) # 관리자 또는 방장 여부
+    # 현재 세션 유저 정보 (전역 curr_grade, is_admin 사용)
 
-    # 로컬 저장소 준비
-    CHAT_FILE = "chat_log.csv"
+    # 로컬 저장소 준비 (전역 변수 USER_DB_FILE, CHAT_FILE 사용)
     if not os.path.exists(CHAT_FILE):
         pd.DataFrame(columns=["시간", "유저", "내용", "등급"]).to_csv(CHAT_FILE, index=False, encoding="utf-8-sig")
 
@@ -375,7 +378,7 @@ elif page.startswith("2."):
                 t = now_kst.strftime("%m/%d %H:%M")
                 u = st.session_state.current_user
                 # 로컬 저장
-                new_msg = pd.DataFrame([[t, u, ms, user_grade]], columns=["시간", "유저", "내용", "등급"])
+                new_msg = pd.DataFrame([[t, u, ms, curr_grade]], columns=["시간", "유저", "내용", "등급"])
                 new_msg.to_csv(CHAT_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
                 # 구글 시트 백업
                 gsheet_sync("소통기록_통합", ["시간", "유저", "내용", "등급"], [t, u, ms, user_grade])
@@ -383,10 +386,8 @@ elif page.startswith("2."):
                 st.rerun()
 
     st.divider()
-    st.subheader("📡 최근 수신 메시지 (HQ Live Feed)")
-    
     try:
-        chat_df = pd.read_csv(CHAT_FILE).tail(30) # 최근 30개만 표시
+        chat_df = pd.read_csv(CHAT_FILE, encoding="utf-8-sig").tail(30) # 최근 30개만 표시
         for _, row in chat_df.iloc[::-1].iterrows(): # 역순 출력
             is_leader = row["등급"] in ["방장", "관리자"]
             bg_color = "rgba(255,215,0,0.1)" if is_leader else "rgba(255,255,255,0.05)"
@@ -406,42 +407,6 @@ elif page.startswith("2."):
             """, unsafe_allow_html=True)
     except:
         st.info("현재 수신된 메시지가 없습니다.")
-    
-    # 예시 데이터 (실제 데이터 연동 권장)
-    chat_data = [
-        {"T": "04/19 01:05", "U": "전문가거북이", "M": "금일 주도주 NDX 9점 이상 종목들 집중 모니터링 시작합니다.", "G": "방장"},
-        {"T": "04/19 01:06", "U": "회원1", "M": "알겠습니다! 차트 분석 들어갑니다.", "G": "회원"}
-    ]
-    
-    for c in chat_data:
-        if c["G"] in ["방장", "관리자"]:
-            st.markdown(f"""
-            <div style='border: 2px solid #FFD700; border-radius: 12px; padding: 15px; margin-bottom: 10px; background: rgba(255,215,0,0.05);'>
-                <span style='color: #FFD700;'>👑 [{c['G']}] {c['U']}</span> <span style='color: #888; font-size: 0.8rem;'>{c['T']}</span><br>
-                <div style='margin-top: 10px; font-size: 1.1rem;'><b>{c['M']}</b></div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div style='border: 1px solid #444; border-radius: 10px; padding: 10px; margin-bottom: 10px; background: rgba(255,255,255,0.02);'>
-                <span style='color: #AAA;'>👤 [{c['G']}] {c['U']}</span> <span style='color: #666; font-size: 0.7rem;'>{c['T']}</span><br>
-                <div style='margin-top: 5px; color: #EEE;'>{c['M']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    st.markdown("---")
-    try:
-        df_c = pd.read_csv(MSG_LOG_FILE, encoding="utf-8-sig").tail(15)
-        for _, r in df_c.iloc[::-1].iterrows():
-            badge = "👑 [방장]" if r['등급'] == "관리자" else "👤 [회원]"
-            color = "rgba(255, 215, 0, 0.15)" if r['등급'] == "관리자" else "rgba(255, 255, 255, 0.05)"
-            border = "1px solid #FFD700" if r['등급'] == "관리자" else "none"
-            st.markdown(f"""
-            <div style='background:{color}; border:{border}; padding:12px; border-radius:10px; margin-bottom:10px;'>
-                <span style='color: #888; font-size: 0.8rem;'>[{r['시간']}]</span> <b>{badge} {r['작성자']}</b>: <br>{r['내용']}
-            </div>
-            """, unsafe_allow_html=True)
-    except: st.info("대화 내역이 없습니다.")
 
 elif page.startswith("3."):
     st.header("💎 프로 분석 리포트 (Weekly Tactical Report)")
@@ -545,18 +510,13 @@ elif page.startswith("5."):
 
 elif page.startswith("6."):
     st.header("📈 데일리 마켓 트렌드 브리핑 (Daily Briefing)")
-    BRIEF_FILE = "market_briefs.csv"
-    users = load_users()
-    user_grade = users.get(st.session_state.current_user, {}).get("grade", "회원")
-    is_admin = (user_grade in ["관리자", "방장"])
-
-    # 브리핑 전용 데이터 로드
+    # 브리핑 전용 데이터 로드 (전역 BRIEF_FILE 사용)
     if not os.path.exists(BRIEF_FILE):
         pd.DataFrame(columns=["날짜", "작성자", "내용"]).to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
     
     # 관리자 입력창 (더욱 직관적으로 변경)
     if is_admin:
-        st.markdown(f"<div style='background: rgba(255,215,0,0.1); padding: 15px; border-radius: 12px; border: 1px solid #FFD700; margin-bottom: 20px;'><b>👑 {user_grade} 전용 - 데일리 마켓 브리핑 센터</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background: rgba(255,215,0,0.1); padding: 15px; border-radius: 12px; border: 1px solid #FFD700; margin-bottom: 20px;'><b>👑 {curr_grade} 전용 - 데일리 마켓 브리핑 센터</b></div>", unsafe_allow_html=True)
         with st.form("brief_form", clear_on_submit=True):
             content = st.text_area("오늘의 시장 요약 및 트렌드 분석을 작성하세요", height=150, placeholder="여기에 내용을 입력하시면 사령부 전역에 브리핑이 전파됩니다.")
             if st.form_submit_button("📢 브리핑 전파하기"):
@@ -663,10 +623,8 @@ elif page.startswith("7."):
 
 elif page.startswith("8."):
     st.header("👑 관리자 승인 센터 (HQ Member Approval)")
-    users = load_users()
-    current_grade = users.get(st.session_state.current_user, {}).get("grade", "회원")
     
-    if current_grade not in ["관리자", "방장"]:
+    if not is_admin:
         st.warning("❌ 이 구역은 사령부 최고 등급 전용입니다. 일반 대원은 접근할 수 없습니다.")
         st.stop()
         
