@@ -351,19 +351,19 @@ elif page.startswith("6."):
     if not os.path.exists(BRIEF_FILE):
         pd.DataFrame(columns=["날짜", "작성자", "내용"]).to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
     
-    # 관리자 입력창
+    # 관리자 입력창 (더욱 직관적으로 변경)
     if is_admin:
-        with st.expander("📝 오늘의 데일리 브리핑 작성 (관리자 전용)", expanded=False):
-            with st.form("brief_form"):
-                content = st.text_area("시장 요약 및 트렌드 분석", height=150)
-                if st.form_submit_button("📢 브리핑 전파"):
-                    if content:
-                        now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
-                        t = now_kst.strftime("%Y-%m-%d %H:%M")
-                        new_b = pd.DataFrame([[t, st.session_state.current_user, content]], columns=["날짜", "작성자", "내용"])
-                        new_b.to_csv(BRIEF_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
-                        st.success("브리핑이 성공적으로 전파되었습니다!")
-                        st.rerun()
+        st.markdown(f"<div style='background: rgba(255,215,0,0.1); padding: 15px; border-radius: 12px; border: 1px solid #FFD700; margin-bottom: 20px;'><b>👑 {user_grade} 전용 - 데일리 마켓 브리핑 센터</b></div>", unsafe_allow_html=True)
+        with st.form("brief_form", clear_on_submit=True):
+            content = st.text_area("오늘의 시장 요약 및 트렌드 분석을 작성하세요", height=150, placeholder="여기에 내용을 입력하시면 사령부 전역에 브리핑이 전파됩니다.")
+            if st.form_submit_button("📢 브리핑 전파하기"):
+                if content:
+                    now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+                    t = now_kst.strftime("%Y-%m-%d %H:%M")
+                    new_b = pd.DataFrame([[t, st.session_state.current_user, content]], columns=["날짜", "작성자", "내용"])
+                    new_b.to_csv(BRIEF_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                    st.success("✅ 사령부 브리핑이 성공적으로 전송되었습니다.")
+                    st.rerun()
 
     st.divider()
 
@@ -459,11 +459,44 @@ elif page.startswith("7."):
             st.error(f"⚠️ 데이터 분석 실패: {e}")
 
 elif page.startswith("8."):
-    st.header("👑 관리자 승인 센터")
-    if st.session_state.current_user == "cntfed":
-        st.write("신규 가입 대기 회원 리스트입니다.")
-        st.button("신규 회원 일괄 승인")
-    else: st.warning("권한이 없습니다.")
+    st.header("👑 관리자 승인 센터 (HQ Member Approval)")
+    users = load_users()
+    current_grade = users.get(st.session_state.current_user, {}).get("grade", "회원")
+    
+    if current_grade not in ["관리자", "방장"]:
+        st.warning("❌ 이 구역은 사령부 최고 등급 전용입니다. 일반 대원은 접근할 수 없습니다.")
+        st.stop()
+        
+    pending_users = [u for u, d in users.items() if d.get("status") == "pending"]
+
+    st.markdown(f"<div class='glass-card'>📡 현재 가입 대기 인원: <b>{len(pending_users)}명</b></div>", unsafe_allow_html=True)
+
+    if pending_users:
+        if st.button("🔥 대기 인원 전체 일괄 승인", use_container_width=True):
+            for u in pending_users:
+                users[u]["status"] = "approved"
+            with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+            st.success(f"🎊 총 {len(pending_users)}명의 대원이 사령부에 공식 소속되었습니다!")
+            st.rerun()
+
+        st.divider()
+        st.subheader("👤 개별 승인 리스트")
+        for u in pending_users:
+            c1, c2 = st.columns([7, 3])
+            with c1:
+                st.markdown(f"""
+                <div style='background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border-left: 3px solid #FFD700;'>
+                    <b>ID: {u}</b> | 가입 신청 접수됨
+                </div>
+                """, unsafe_allow_html=True)
+            with c2:
+                if st.button(f"✅ 승인 (ID:{u})", key=f"appr_{u}"):
+                    users[u]["status"] = "approved"
+                    with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                    st.toast(f"{u} 대원 승인 완료!")
+                    st.rerun()
+    else:
+        st.info("현재 승인 대기 중인 신규 회원이 없습니다.")
 
 elif page.startswith("9."):
     st.markdown("<h1 style='text-align: center; color: #FFD700;'>🐝 프라딥 본데(StockBee)</h1>", unsafe_allow_html=True)
@@ -473,21 +506,35 @@ elif page.startswith("9."):
     
     with st.container():
         st.markdown("### 📖 1. 물류 전문가에서 데이터 트레이더로의 변신")
-        st.write("""
-        온라인에서 **스탁비(Stockbee)**라는 필명으로 더 잘 알려진 프라딥 본데는 24년 이상의 경력을 가진 전업 트레이더입니다. 
-        그는 인도에서 물류 산업의 효율성을 진두지휘하던 이력을 바탕으로, 주식 거래를 막연한 운이 아닌 
-        **철저하게 설계된 데이터 기반의 비즈니스 모델**로 재정의했습니다.
-        """)
+        with st.expander("성장 배경 전문 보기", expanded=False):
+            st.write("""
+            온라인에서 **스탁비(Stockbee)**라는 필명으로 더 잘 알려진 프라딥 본데는 24년 이상의 경력을 가진 전업 트레이더입니다. 
+            그는 인도에서 물류 산업의 효율성을 진두지휘하던 이력을 바탕으로, 주식 거래를 막연한 운이 아닌 
+            **철저하게 설계된 데이터 기반의 비즈니스 모델**로 재정의했습니다. 
+            그의 방식은 직관이나 감이 아닌, 수만 번의 과거 차트 백테스팅과 통계를 기반으로 합니다.
+            """)
 
         st.markdown("### 💡 2. 스탁비를 지탱하는 4대 트레이딩 철학")
-        st.info("**안타 전략 (Hitters):** 큰 홈런보다 확실한 수익을 복리로 누적시키는 것이 성공의 핵심입니다.")
-        st.info("**셀프 리더십:** 트레이딩의 주도권은 본인에게 있어야 하며, 스스로 문제를 해결하는 의지가 필요합니다.")
-        st.info("**절차적 기억 (Deep Dive):** 과거 폭등했던 수천 개의 차트를 뇌에 각인시키는 혹독한 훈련을 강조합니다.")
-        st.info("**상황 인식:** 매일 장세의 폭(Breadth)을 분석하여 공격할 날과 지킬 날을 엄격히 구분합니다.")
+        with st.expander("⚾ 안타 전략 (Hitters): 꾸준한 누적의 힘", expanded=False):
+            st.info("성공은 큰 홈런 한 방보다, 3~5%의 확실한 수익을 복리로 무한히 중첩시키는 과정에서 나옵니다. 자산을 지키는 것이 공격의 시작입니다.")
+        with st.expander("🛡️ 셀프 리더십: 스스로가 사령관이 되어라", expanded=False):
+            st.info("트레이딩의 모든 책임은 나에게 있습니다. 외부의 소음에 휘둘리지 않고 나만의 시스템을 믿고 실행하는 '심리적 독립'을 강조합니다.")
+        with st.expander("🧬 절차적 기억 (Deep Dive): 차트를 뇌에 박아라", expanded=False):
+            st.info("과거에 폭등했던 수천 개의 종목 차트를 반복해서 보며, 특정 패턴이 나타날 때 손가락이 즉각 반응하도록 훈련하는 '기계적 몰입'입니다.")
+        with st.expander("📊 상황 인식: 시장의 너비(Breadth)를 읽어라", expanded=False):
+            st.info("매일 장세의 폭을 분석하여 공격할 날(Green)과 현금을 피난처로 삼을 날(Red)을 엄격히 구분합니다. 시장과 싸우지 마십시오.")
 
         st.markdown("### ⚡ 3. 시장의 중력을 이기는 핵심 매매 기법")
-        st.warning("**EP (에피소딕 피벗):** 강력한 펀더멘털 변화와 거래량 폭발을 동반한 갭 상승 초기 국면 공략")
-        st.warning("**Momentum Burst:** 좁은 구간에서 힘을 응축하던 주식이 분출하는 순간을 포착")
+        with st.expander("🔥 EP (에피소딕 피벗): 폭발의 기폭제", expanded=False):
+            st.markdown("""
+            **핵심:** 강력한 펀더멘털의 변화(실적 서프라이즈, 대형 계약)와 역대급 거래량이 동반된 '갭 상승'의 초기 국면을 공략합니다.
+            - **전술:** 기관의 거대 자금이 유입되는 입구를 포착하여 추세의 시작점에 올라탑니다.
+            """)
+        with st.expander("🚀 Momentum Burst: 응축된 에너지의 분출", expanded=False):
+            st.markdown("""
+            **핵심:** 좁은 가격대에서 변동성을 죽이며 힘을 응축하던(VCP) 주식이 특정 임계점을 상향 돌파하는 순간을 포착합니다.
+            - **전술:** 매도세가 완전히 고갈된 'Dry-up' 구간 확인 후, 거래량이 실리는 돌파 시점에 진입합니다.
+            """)
     
     st.divider()
     st.caption("※ 본 내용은 Pradeep Bonde의 공개된 철학과 전략을 기반으로 재구성되었습니다.")
