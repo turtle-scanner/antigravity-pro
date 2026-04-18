@@ -51,7 +51,7 @@ def gsheet_sync(sheet_name, headers, values):
     try: requests.post(MASTER_GAS_URL, json=payload, timeout=5)
     except: pass
 
-st.set_page_config(page_title="StockDragonfly Pro", page_icon="🛸", layout="wide")
+st.set_page_config(page_title="StockDragonfly Pro", page_icon="🐉", layout="wide")
 
 # --- 🌑 프리미엄 스타일 디자인 ---
 bg_b64 = ""
@@ -60,6 +60,7 @@ if os.path.exists("StockDragonfly2.png"):
 
 st.markdown(f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap');
     .stApp {{ background-color: #000; {f'background-image: linear-gradient(rgba(0,0,0,0.88), rgba(0,0,0,0.88)), url("data:image/png;base64,{bg_b64}");' if bg_b64 else ""} background-size: cover; background-attachment: fixed; }}
     [data-testid="stSidebar"] {{ background-color: rgba(5,5,5,0.96) !important; border-right: 1px solid #FFD70033; backdrop-filter: blur(25px); }}
     h1, h2 {{ color: #FFD700 !important; font-weight: 900; }}
@@ -74,6 +75,7 @@ if "password_correct" not in st.session_state: st.session_state["password_correc
 if not st.session_state["password_correct"]:
     c1, m, c2 = st.columns([1, 2, 1])
     with m:
+        st.markdown("<h1 style='text-align: center; color: #FFD700; font-size: 4rem; margin-top: 0; margin-bottom: 10px; font-family: \"Outfit\", sans-serif; text-shadow: 0 0 30px rgba(255,215,0,0.4);'>🐉 StockDragonfly</h1>", unsafe_allow_html=True)
         if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png", use_container_width=True)
         tab1, tab2 = st.tabs(["🚀 Terminal Log-In", "📝 Join Command (자격 시험)"])
         
@@ -173,7 +175,7 @@ if not st.session_state["password_correct"]:
 
 with st.sidebar:
     if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png")
-    st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🛸 StockDragonfly v9.9</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🐉 StockDragonfly v9.9</p>", unsafe_allow_html=True)
     st.divider()
     bgms = {"🔇 OFF": None, "✨ You Raise": "YouRaise.mp3", "😊 Happy": "happy.mp3", "🌅 Hope": "hope.mp3", "🐱 Cute": "cute.mp3", "🎻 Petty": "petty.mp3", "🎙️ Ajussi": "나의아저씨.mp3"}
     sel_bgm = st.selectbox("Radio", list(bgms.keys()), label_visibility="collapsed")
@@ -274,7 +276,7 @@ if page.startswith("1."):
             kr_top = df[df['MARKET'].str.contains("KOREA")].sort_values("SCORE", ascending=False).head(5)
             
             st.subheader("🔥 사령부 한/미 통합 주도주 TOP 10")
-            for _, row in pd.concat([us_top, kr_top]).iterrows():
+            for i, row in pd.concat([us_top, kr_top]).iterrows():
                 st.markdown(f"""
                 <div class='glass-card' style='padding: 15px; border-left: 5px solid {"#00FF00" if "USA" in row["MARKET"] else "#FFD700"}; margin-bottom: 10px;'>
                     <div style='display: flex; justify-content: space-between;'>
@@ -288,7 +290,15 @@ if page.startswith("1."):
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-            st.success("✅ 글로벌 상위 실적/강세주 10선 브리핑 완료!")
+            
+            # [UPGRADE] 상위 종목 자동 차트 분석
+            top_ticker = pd.concat([us_top, kr_top]).iloc[0]["T"]
+            # 한국 이름일 경우 실제 티커로 복원 필요하나, TradingView는 영문 티커 사용
+            # 여기서는 편의상 US TOP 1의 티커나 맵핑 역추적으로 차트 표시
+            st.divider()
+            st.subheader(f"🕯️ 사령부 정밀 전술 차트: {top_ticker}")
+            st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={top_ticker}&interval=D' width='100%' height='500'></iframe>", height=510)
+            st.success("✅ 글로벌 상위 실적/강세주 브리핑 및 실시간 차트 로드 완료!")
         else:
             st.warning("분석 가능한 종목 데이터가 부족합니다. 잠시 후 다시 시도해 주세요.")
 
