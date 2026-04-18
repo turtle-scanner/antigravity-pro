@@ -163,25 +163,58 @@ if page.startswith("1."):
             else: st.info("상승 추세 구간 종목 없음")
 
 elif page.startswith("2."):
-    st.header("💬 소통 대화방 (HQ Control)")
+    st.header("💬 사령부 소통 및 공지 (HQ Communication)")
     users = load_users()
     user_grade = users.get(st.session_state.current_user, {}).get("grade", "회원")
-    is_admin = (user_grade == "관리자")
+    is_admin = (user_grade in ["관리자", "방장"]) # 관리자 또는 방장 여부
 
-    if not os.path.exists(MSG_LOG_FILE):
-        pd.DataFrame(columns=["시간", "작성자", "내용", "등급"]).to_csv(MSG_LOG_FILE, index=False, encoding="utf-8-sig")
+    # 입력창 차별화
+    st.markdown(f"<div class='glass-card'>현재 권한: <b>{user_grade}</b></div>", unsafe_allow_html=True)
     
-    with st.form("chat_form", clear_on_submit=True):
-        label = "📢 [관리자] 중요 게시물/공지 작성" if is_admin else "💬 자유 메시지 작성"
-        ms = st.text_input(label)
-        if st.form_submit_button("전파"):
+    with st.form("hq_chat_form", clear_on_submit=True):
+        if is_admin:
+            ms = st.text_area("📢 [방장/관리자] 주요 포스팅 및 공지 작성", placeholder="사령부 회원들에게 전파할 핵심 내용을 작성하세요.")
+            btn_label = "🚀 공지 전파"
+        else:
+            ms = st.text_input("💬 [회원] 댓글 및 메시지 작성", placeholder="관리자의 공지에 대한 의견이나 메시지를 남겨주세요.")
+            btn_label = "✉️ 전송"
+            
+        if st.form_submit_button(btn_label):
             if ms:
-                t = datetime.now().strftime("%m/%d %H:%M")
+                now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+                t = now_kst.strftime("%m/%d %H:%M")
                 u = st.session_state.current_user
-                gsheet_sync("소통대화방_기록", ["시간", "유저", "내용", "등급"], [t, u, ms, user_grade])
-                new_m = pd.DataFrame([[t, u, ms, user_grade]], columns=["시간", "작성자", "내용", "등급"])
-                new_m.to_csv(MSG_LOG_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                gsheet_sync("소통기록_통합", ["시간", "유저", "내용", "등급"], [t, u, ms, user_grade])
+                # 로컬 세션용 저장 (CSV 생략 가능 시 바로 동기화)
                 st.rerun()
+
+    st.divider()
+    
+    # 메시지 리스트 표시 (역순)
+    # 실제 운영 시 로컬 DB 또는 시트에서 긁어와 표시
+    st.subheader("📡 최근 수신 메시지")
+    
+    # 예시 데이터 (실제 데이터 연동 권장)
+    chat_data = [
+        {"T": "04/19 01:05", "U": "전문가거북이", "M": "금일 주도주 NDX 9점 이상 종목들 집중 모니터링 시작합니다.", "G": "방장"},
+        {"T": "04/19 01:06", "U": "회원1", "M": "알겠습니다! 차트 분석 들어갑니다.", "G": "회원"}
+    ]
+    
+    for c in chat_data:
+        if c["G"] in ["방장", "관리자"]:
+            st.markdown(f"""
+            <div style='border: 2px solid #FFD700; border-radius: 12px; padding: 15px; margin-bottom: 10px; background: rgba(255,215,0,0.05);'>
+                <span style='color: #FFD700;'>👑 [{c['G']}] {c['U']}</span> <span style='color: #888; font-size: 0.8rem;'>{c['T']}</span><br>
+                <div style='margin-top: 10px; font-size: 1.1rem;'><b>{c['M']}</b></div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div style='border: 1px solid #444; border-radius: 10px; padding: 10px; margin-bottom: 10px; background: rgba(255,255,255,0.02);'>
+                <span style='color: #AAA;'>👤 [{c['G']}] {c['U']}</span> <span style='color: #666; font-size: 0.7rem;'>{c['T']}</span><br>
+                <div style='margin-top: 5px; color: #EEE;'>{c['M']}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
     st.markdown("---")
     try:
