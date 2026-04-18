@@ -85,8 +85,26 @@ if not st.session_state["password_correct"]:
 
 # --- 사이드바 ---
 st.sidebar.markdown("<h1 class='sidebar-title'>⚖️ 사령부 v6.0</h1>", unsafe_allow_html=True)
-if st.sidebar.checkbox("🎼 집중력 BGM (ASMR)", value=True):
-    st.sidebar.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3")
+
+# --- BGM 플레이어 (로컬 파일 연동) ---
+st.sidebar.markdown("---")
+bgm_files = {
+    "✨ You Raise Me Up": "YouRaise.mp3",
+    "😊 행복한 하루": "happy.mp3",
+    "🌅 희망의 소리": "hope.mp3",
+    "🐱 귀여운 감성": "cute.mp3",
+    "🎻 잔잔한 선율": "petty.mp3",
+    "🎙️ 나의 아저씨": "나의아저씨.mp3"
+}
+
+st.sidebar.subheader("🎼 집중력 BGM (ASMR)")
+selected_bgm = st.sidebar.selectbox("곡을 선택하세요", list(bgm_files.keys()))
+if st.sidebar.checkbox("BGM 가동", value=True):
+    audio_path = bgm_files[selected_bgm]
+    if os.path.exists(audio_path):
+        st.sidebar.audio(audio_path)
+    else:
+        st.sidebar.warning(f"⚠️ {audio_path} 파일을 찾을 수 없습니다. 경로를 확인해주세요.")
 
 u_all = load_users(); curr_u = u_all.get(st.session_state.current_user, {})
 is_staff = curr_u.get("grade") in ["관리자", "방장"] or st.session_state.current_user == "cntfed"
