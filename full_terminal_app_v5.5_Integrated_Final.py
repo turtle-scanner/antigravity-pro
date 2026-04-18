@@ -105,50 +105,69 @@ if not st.session_state["password_correct"]:
             reg_moti = st.text_area("주식을 하는 이유와 사령부에 임하는 각오", placeholder="예: 경제적 자유를 얻어 가족들에게 헌신하고 싶습니다.")
             
             st.divider()
-            st.markdown("#### 📝 [필수] 실전 매매 전략 테스트")
-            q1 = st.radio("Q1. MAGNA 53 공식에서 'G'는 무엇을 의미할까요?", ["Growth (꾸준한 성장)", "Gap Up (갭 상승)", "Gold (금 관련주)", "Gamma (옵션 지표)"], index=None)
-            q2 = st.radio("Q2. 적극적 매수에 참여해야 하는 스탠 와인스타인의 단계는?", ["1단계 (기초 지역)", "2단계 (상승 국면)", "3단계 (최정상 지역)", "4단계 (쇠퇴 국면)"], index=None)
-            q3 = st.radio("Q3. RSI 보조지표에서 '과매도(Oversold)' 기준 수치는?", ["20 이하", "30 이하", "50 이하", "70 이하"], index=None)
-            q4 = st.radio("Q4. 부분 익절 후 남은 물량의 손절선(Stop-loss) 설정은?", ["최초 손절가 유지", "매수한 가격(본절)으로 상향", "현재가 -10% 하향", "손절선 제거 및 장기투자"], index=None)
-            q5 = st.radio("Q5. 모멘텀 버스트 룰에 따라 추격 매수를 금지하는 최소 연속 상승 일수는?", ["2일 연속", "3일 연속", "5일 연속", "10일 연속"], index=None)
+            st.markdown("#### 📝 [필수] 사령부 정예 요원 자격 시험 (15문항)")
+            st.info("기초 10문제 + 전술 5문제 중 13문제 이상 맞혀야 승인이 완료됩니다.")
+            
+            # 기초 10문제 (Q1-Q10)
+            q1 = st.radio("Q1. 우리나라 주식 차트에서 '빨간색 양초(캔들)' 그림은 무슨 뜻일까요?", ["올랐다 (상승)", "떨어졌다 (하락)", "변동 없다", "거래 중지"], index=None)
+            q2 = st.radio("Q2. 파란색 양초(캔들) 그림은 무슨 뜻일까요?", ["상승 국면", "하락 국면", "보합 국면", "매수 신호"], index=None)
+            q3 = st.radio("Q3. 하루 동안 사람들이 주식을 얼마나 많이 사고팔았는지 알려주는 지표는?", ["거래량", "배당금", "회전율", "수익률"], index=None)
+            q4 = st.radio("Q4. 양초 모양을 닮은 막대기들로 그린 차트의 이름은 무엇일까요?", ["막대 차트", "캔들 차트", "라인 차트", "그림 차트"], index=None)
+            q5 = st.radio("Q5. 주식 명언 중 가장 잘 알려진 원칙은?", ["발바닥에서 사서 정수리에서 팔아라", "무릎에서 사서 어깨에서 팔아라", "언제든 사고 언제든 팔아라", "사두면 언젠가 오른다"], index=None)
+            q6 = st.radio("Q6. 주식 가격의 평균을 내서 선으로 이은 그림을 무엇이라고 할까요?", ["이동평균선(이평선)", "추세 지탱선", "가격 유동선", "거래 지표선"], index=None)
+            q7 = st.radio("Q7. 단기 이평선이 장기 이평선을 뚫고 올라가는 아주 좋은 신호는?", ["실버크로스", "골든크로스", "다이아크로스", "엔젤크로스"], index=None)
+            q8 = st.radio("Q8. 반대로 단기 이평선이 장기 이평선 아래로 푹 꺼지는 나쁜 신호는?", ["다크크로스", "데드크로스", "블랙크로스", "폴링크로스"], index=None)
+            q9 = st.radio("Q9. 주식 가격이 제일 낮을 때와 제일 높을 때를 각각 무엇이라 할까요?", ["바닥/천장", "저점/고점", "하단/상단", "출발/종착"], index=None)
+            q10 = st.radio("Q10. 장기적으로 주식 시장의 가격은 보통 어떻게 움직일까요?", ["아래로 떨어진다", "위로 올라간다 (우상향)", "계속 횡보한다", "예측 불가능하다"], index=None)
+            
+            st.markdown("---")
+            # 전술 5문제 (Q11-Q15)
+            q11 = st.radio("Q11. MAGNA 53 공식에서 'G'는 무엇을 의미할까요?", ["Growth (성장)", "Gap Up (갭 상승)", "Gold (금)", "Gamma (옵션)"], index=None)
+            q12 = st.radio("Q12. 적극적 매수에 참여해야 하는 스탠 와인스타인의 단계는?", ["1단계 (기초)", "2단계 (상승)", "3단계 (최정상)", "4단계 (쇠퇴)"], index=None)
+            q13 = st.radio("Q13. RSI 보조지표에서 '과매도(Oversold)' 기준 수치는?", ["20 이하", "30 이하", "50 이하", "70 이하"], index=None)
+            q14 = st.radio("Q14. 부분 익절 후 남은 물량의 손절선(Stop-loss) 설정은?", ["최초 손절가 유지", "매수한 가격(본절)으로 상향", "현재가 -10% 하향", "손절선 제거 및 장기투자"], index=None)
+            q15 = st.radio("Q15. 모멘텀 버스트 룰에 따라 추격 매수를 금지하는 최소 연속 상승 일수는?", ["2일 연속", "3일 연속", "5일 연속", "10일 연속"], index=None)
             
             if st.button("🛡️ 요원 임명 신청 및 채점", use_container_width=True):
                 if not new_id or not new_pw or not reg_moti:
                     st.error("❌ 아이디, 비밀번호, 가치관을 모두 작성해 주세요.")
                 else:
-                    ans = [q1, q2, q3, q4, q5]
-                    correct = ["Gap Up (갭 상승)", "2단계 (상승 국면)", "30 이하", "매수한 가격(본절)으로 상향", "3일 연속"]
+                    ans = [q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14, q15]
+                    correct = [
+                        "올랐다 (상승)", "하락 국면", "거래량", "캔들 차트", "무릎에서 사서 어깨에서 팔아라", 
+                        "이동평균선(이평선)", "골든크로스", "데드크로스", "저점/고점", "위로 올라간다 (우상향)",
+                        "Gap Up (갭 상승)", "2단계 (상승 국면)", "30 이하", "매수한 가격(본절)으로 상향", "3일 연속"
+                    ]
                     score = sum([1 for a, c in zip(ans, correct) if a == c])
                     
-                    if score == 5:
+                    if score >= 13:
                         users = load_users()
                         if new_id in users: st.error("❌ 이미 존재하는 대원 코드(ID)입니다.")
                         else:
                             users[new_id] = {
-                                "password": new_pw, 
-                                "status": "approved", 
-                                "grade": "회원",
+                                "password": new_pw, "status": "approved", "grade": "회원",
                                 "info": {
-                                    "region": reg_region,
-                                    "age": reg_age,
-                                    "gender": reg_gender,
-                                    "exp": reg_exp,
-                                    "motivation": reg_moti,
-                                    "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                                    "region": reg_region, "age": reg_age, "gender": reg_gender,
+                                    "exp": reg_exp, "motivation": reg_moti, "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M")
                                 }
                             }
                             with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
-                            st.success("🎊 만점입니다! 전문가님의 철학을 계승할 자격을 증명하셨습니다. 지금 바로 로그인해 주십시오.")
+                            st.success(f"🎊 {score}/15점! 훌륭합니다. 사령부의 지혜를 계승할 자격을 증명하셨습니다. 로그인을 진행해 주십시오.")
                             st.balloons()
                     else:
-                        st.error(f"❌ {score}/5문항 정답. 사령부의 철학을 더 공부하고 오십시오!")
-                        with st.expander("📝 자격 시험 해설 보기", expanded=True):
+                        st.error(f"❌ {score}/15점. 사령부의 철학을 더 공부하고 와주시기 바랍니다. (13점 이상 합격)")
+                        with st.expander("📝 15관문 자격 시험 정답 및 해설 보기", expanded=True):
                             st.markdown("""
-                            - **Q1:** MAGNA의 G는 **Gap Up**을 의미합니다. 기관의 강력한 매수 신호입니다.
-                            - **Q2:** **2단계(Mark-up)**가 우리가 공격해야 할 유일한 전장입니다.
-                            - **Q3:** **30 이하**가 매도세가 과도한 과매도 상태입니다.
-                            - **Q4:** 부분 익절 후에는 **본절(Break-even)**로 올려서 계좌를 무위험 상태로 만들어야 합니다.
-                            - **Q5:** **3일 연속** 상승한 주식은 소유자의 영역이지, 추격 매수자의 영역이 아닙니다.
+                            - **Q1-2:** 양봉(빨강)은 상승, 음봉(파란)은 하락입니다.
+                            - **Q3-4:** 거래량은 관심의 지표이며, 캔들 차트는 시세의 흐름을 보여줍니다.
+                            - **Q5-6:** 무릎에 사서 어깨에 파는 겸손한 원칙과 이동평균선의 방향을 추종하십시오.
+                            - **Q7-8:** 골든크로스는 황금빛 매수 신호, 데드크로스는 죽음의 매도 신호입니다.
+                            - **Q9-10:** 저점과 고점을 파악하고 인플레이션으로 인한 시장의 우상향을 믿으십시오.
+                            - **Q11:** MAGNA의 G는 **Gap Up**입니다. 강력한 기관 수급의 증거입니다.
+                            - **Q12:** 수익은 오직 **2단계 (Mark-up)** 에서만 창출됩니다.
+                            - **Q13:** RSI **30 이하**는 매도세가 소멸되는 과매도 구간입니다.
+                            - **Q14:** 부분 익절 후에는 손절선을 **본절(Break-even)**로 올려 무위험 상태를 만드십시오.
+                            - **Q15:** **3일 연속** 상승한 종목은 절대 추격 매수하지 않는 것이 사령부의 철칙입니다.
                             """)
     st.stop()
 
@@ -163,7 +182,23 @@ with st.sidebar:
         with open(bgms[sel_bgm], "rb") as f: b64 = base64.b64encode(f.read()).decode()
         st.components.v1.html(f"<audio id='aud' autoplay loop><source src='data:audio/mp3;base64,{b64}' type='audio/mp3'></audio><script>document.getElementById('aud').volume = {vol};</script>", height=0)
 
-menu_ops = ["1. 🎯 주도주 타점 스캐너", "2. 💬 소통 대화방", "3. 💎 프로 분석 리포트", "4. 🚀 주도주 랭킹 TOP 50", "5. 🧮 리스크 계산기", "6. 📈 마켓 트렌드 요약", "7. 📊 본데 감시 리스트", "8. 👑 관리자 승인 센터", "9. 🐝 본데는 누구인가?", "10. 🏛️ 사이트 제작 동기", "11. 🤝 방문자 인사말 신청", "12. 🛡️ 리스크 방패", "13. 🗺️ 실시간 히트맵", "14. 🌡️ 시장 심리 게이지"]
+# --- 유저 등급 판독 ---
+users = load_users()
+curr_user_data = users.get(st.session_state.current_user, {})
+curr_grade = curr_user_data.get("grade", "회원")
+
+menu_ops = [
+    "1. 🎯 주도주 타점 스캐너", "2. 💬 소통 대화방", "3. 💎 프로 분석 리포트", 
+    "4. 🚀 주도주 랭킹 TOP 50", "5. 🧮 리스크 계산기", "6. 📈 마켓 트렌드 요약", 
+    "7. 📊 본데 감시 리스트", "8. 👑 관리자 승인 센터", "9. 🐝 본데는 누구인가?", 
+    "10. 🏛️ 사이트 제작 동기", "11. 🤝 방문자 인사말 신청", "12. 🛡️ 리스크 방패", 
+    "13. 🗺️ 실시간 히트맵", "14. 🌡️ 시장 심리 게이지"
+]
+
+# 오직 방장(전문가님)에게만 15번 메뉴 노출
+if curr_grade == "방장":
+    menu_ops.append("15. 🎖️ HQ 인적 자원 사령부")
+
 page = st.sidebar.radio("Mission Control", menu_ops)
 
 # --- 🛰️ 마켓 게이지 헤더 ---
@@ -424,15 +459,37 @@ elif page.startswith("4."):
             st.info("시트가 '링크가 있는 모든 사용자에게 공개(뷰어)' 상태인지 확인해 주세요.")
 
 elif page.startswith("5."):
-    st.header("🧮 리스크 계산기")
-    total_c = st.number_input("총 자산 (USD)", value=10000)
-    entry_p = st.number_input("진입 가격 ($)", value=100.0)
-    stop_p = entry_p * 0.97
-    st.write(f"🛑 손절가 (-3%): **${stop_p:.2f}**")
-    if st.button("수량 계산"):
-        risk_p = entry_p - stop_p
-        shares = int((total_c * 0.01) / risk_p)
-        st.success(f"🎯 매수 수량: **{shares}주** (1% 리스크)")
+    st.header("🧮 포지션 규모 결정 시스템 (Institutional Position Sizing)")
+    st.markdown("<div class='glass-card'>손절 발생 시 총 자산의 몇 %를 잃을 것인지 결정하십시오. (본데 추천: 0.25% ~ 1%)</div>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        total_balance = st.number_input("💵 총 운용 자산 (USD)", value=10000, step=1000)
+        risk_per_trade_pct = st.slider("⚖️ 매매당 허용 리스크 (%)", 0.1, 2.0, 0.5, step=0.1)
+    with col2:
+        entry_price = st.number_input("🎯 진입 가액 ($)", value=250.0, step=0.1)
+        stop_loss_price = st.number_input("🛡️ 손절 가액 ($)", value=242.5, step=0.1) # 기본 -3% 수준 설정
+
+    st.divider()
+    
+    risk_per_share = entry_price - stop_loss_price
+    if risk_per_share <= 0:
+        st.error("⚠️ 손절가는 반드시 진입가보다 낮아야 합니다. 전술적 오류입니다.")
+    else:
+        total_risk_amount = total_balance * (risk_per_trade_pct / 100)
+        shares_to_buy = int(total_risk_amount / risk_per_share)
+        total_investment = shares_to_buy * entry_price
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("허용 손실액", f"${total_risk_amount:,.2f}")
+        c2.metric("최적 매수 수량", f"{shares_to_buy:,} 주")
+        c3.metric("총 투입 금액", f"${total_investment:,.2f}")
+        
+        portfolio_weight = (total_investment / total_balance) * 100 if total_balance > 0 else 0
+        st.info(f"""
+        💡 **전략 보고:** {total_balance:,.0f}불의 자산에서 이 종목을 **{shares_to_buy:,}주** 매수하십시오.  
+        이 경우 손절 시 정확히 {total_risk_amount:,.1f}불({risk_per_trade_pct}%)만 잃게 되며, 현재 이 종목은 전체 포트폴리오의 **{portfolio_weight:.1f}%** 비중을 차지하게 됩니다.
+        """)
 
 elif page.startswith("6."):
     st.header("📈 데일리 마켓 트렌드 브리핑 (Daily Briefing)")
@@ -590,9 +647,7 @@ elif page.startswith("8."):
             if not req_df.empty:
                 for idx, row in req_df.iloc[::-1].iterrows():
                     user_id = row["아이디"]
-                    # 이미 정규직이면 통과
                     if users.get(user_id, {}).get("grade") == "정규직": continue
-                    
                     with st.expander(f"📥 [승격요청] {user_id} 대원의 신청서 ({row['시간']})", expanded=False):
                         st.markdown(f"**1. 첫인사:** {row['첫인사']}")
                         st.markdown(f"**2. 자기소개:** {row['자기소개']}")
@@ -606,6 +661,25 @@ elif page.startswith("8."):
             else: st.info("현재 접수된 승격 신청서가 없습니다.")
         except: st.info("접수된 신청서가 없습니다.")
     else: st.info("접수된 신청서가 없습니다.")
+
+    st.divider()
+
+    # [C] 사령부 전체 대원 명부 (Staff Directory)
+    st.subheader("📋 사령부 전체 대원 명부")
+    all_rows = []
+    for uid, udata in users.items():
+        info = udata.get("info", {})
+        all_rows.append({
+            "아이디": uid,
+            "등급": udata.get("grade", "회원"),
+            "지역": info.get("region", "-"),
+            "경력": info.get("exp", "-"),
+            "연령": info.get("age", "-"),
+            "매매 동기": info.get("motivation", "-"),
+            "합류일": info.get("joined_at", "-")
+        })
+    df_users = pd.DataFrame(all_rows)
+    st.dataframe(df_users, use_container_width=True, hide_index=True)
 
 elif page.startswith("9."):
     st.markdown("<h1 style='text-align: center; color: #FFD700;'>🐝 월가의 멘토, 프라딥 본데(Pradeep Bonde)</h1>", unsafe_allow_html=True)
@@ -734,4 +808,46 @@ elif page.startswith("14."):
         elif val <= 75: st.info("🟡 중립 구간: 개별 주도주의 VCP에 집중하십시오.")
         else: st.success("🟢 적극 구간: EP 돌파 종목에 올라타십시오.")
         st.markdown("</div>", unsafe_allow_html=True)
+
+elif page.startswith("15."):
+    st.header("🎖️ HQ 인적 자원 사령부 (Member HR Command)")
+    users = load_users()
+    
+    # 사령관(방장) 전용 보안
+    if users.get(st.session_state.current_user, {}).get("grade") != "방장":
+        st.error("❌ 이 전술 구역은 사령관(방장) 전용입니다. 권한이 없습니다.")
+        st.stop()
+        
+    st.markdown("<div class='glass-card'>사령관의 권위로 대원의 등급을 조정하거나 사령부에서 즉각 제명(삭제)하는 인사권을 행사합니다.</div>", unsafe_allow_html=True)
+    
+    # 자신을 제외한 대원 리스트
+    m_list = [u for u in users.keys() if u != st.session_state.current_user]
+    
+    if m_list:
+        for u in m_list:
+            udata = users[u]
+            uinfo = udata.get("info", {})
+            with st.expander(f"👤 요원 코드: {u} (현재 보직: {udata.get('grade', '회원')})"):
+                c1, c2, c3 = st.columns([2, 1.5, 1])
+                with c1:
+                    st.write(f"📍 거주지: {uinfo.get('region', '-')}")
+                    st.write(f"📊 경력: {uinfo.get('exp', '-')}")
+                    st.write(f"🕯️ 나이: {uinfo.get('age', '-')}")
+                with c2:
+                    current_idx = ["회원", "정규직", "관리자"].index(udata.get("grade", "회원")) if udata.get("grade") in ["회원", "정규직", "관리자"] else 0
+                    new_grade = st.selectbox(f"보직 변경 (ID:{u})", ["회원", "정규직", "관리자"], key=f"grade_sel_{u}", index=current_idx)
+                    if st.button(f"인사발령 (ID:{u})", key=f"btn_grade_{u}"):
+                        users[u]["grade"] = new_grade
+                        with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                        st.success(f"✅ {u} 요원이 {new_grade}(으)로 발령되었습니다.")
+                        st.rerun()
+                with c3:
+                    st.write("") # 정렬용
+                    if st.button("🔥 즉각 제명", key=f"del_{u}"):
+                        del users[u]
+                        with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                        st.warning(f"⚠️ {u} 요원이 명부에서 삭제되었습니다.")
+                        st.rerun()
+    else:
+        st.info("현재 사령부에 등록된 관리 대상 대원이 없습니다.")
     
