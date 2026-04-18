@@ -67,6 +67,17 @@ st.markdown(f"""
     .stButton>button {{ background: #1a1a1a !important; color: #FFD700 !important; border: 1px solid #FFD700 !important; border-radius: 10px; font-weight: 800; }}
     .stButton>button:hover {{ background: #FFD700 !important; color: #000 !important; transform: translateY(-3px); box-shadow: 0 8px 25px rgba(255, 215, 0, 0.6); }}
     .glass-card {{ background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 25px; backdrop-filter: blur(15px); margin-bottom: 30px; }}
+    
+    /* 모바일 최적화 */
+    @media (max-width: 768px) {{
+        .stApp {{ background-attachment: scroll; }}
+        h1 {{ font-size: 1.8rem !important; }}
+        h2 {{ font-size: 1.4rem !important; }}
+        .glass-card {{ padding: 15px; }}
+        .mobile-header {{ font-size: 2.2rem !important; }}
+        .responsive-bar {{ flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; padding: 15px !important; }}
+        .responsive-indices {{ width: 100% !important; justify-content: space-between !important; gap: 10px !important; }}
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -75,7 +86,7 @@ if "password_correct" not in st.session_state: st.session_state["password_correc
 if not st.session_state["password_correct"]:
     c1, m, c2 = st.columns([1, 2, 1])
     with m:
-        st.markdown("<h1 style='text-align: center; color: #FFD700; font-size: 4rem; margin-top: 0; margin-bottom: 10px; font-family: \"Outfit\", sans-serif; text-shadow: 0 0 30px rgba(255,215,0,0.4);'>🛸 StockDragonfly</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 class='mobile-header' style='text-align: center; color: #FFD700; font-size: 4rem; margin-top: 0; margin-bottom: 10px; font-family: \"Outfit\", sans-serif; text-shadow: 0 0 30px rgba(255,215,0,0.4);'>🛸 StockDragonfly</h1>", unsafe_allow_html=True)
         if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png", use_container_width=True)
         tab1, tab2 = st.tabs(["🚀 Terminal Log-In", "📝 Join Command (자격 시험)"])
         
@@ -208,44 +219,54 @@ page = st.sidebar.radio("Mission Control", menu_ops)
 now_kr = datetime.now(pytz.timezone('Asia/Seoul'))
 now_us = datetime.now(pytz.timezone('America/New_York'))
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def get_top_indices():
-    res = {"NASDAQ": 0.0, "KOSPI": 0.0, "KOSDAQ": 0.0}
+    res = {"NASDAQ": [0.0, 0.0], "KOSPI": [0.0, 0.0], "KOSDAQ": [0.0, 0.0]}
     for n, t in {"NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}.items():
         try:
-            h = yf.download(t, period="5d", progress=False)['Close']
-            # 데이터가 DataFrame(MultiIndex)인 경우 첫 번째 컬럼 선택
-            if isinstance(h, pd.DataFrame):
-                h = h.iloc[:, 0]
-            h = h.dropna()
-            if len(h) >= 2:
-                c = ((h.iloc[-1] / h.iloc[-2]) - 1) * 100
-                res[n] = float(c)
+            h = yf.download(t, period="5d", progress=False)
+            close_data = h['Close']
+            if isinstance(close_data, pd.DataFrame):
+                close_data = close_data.iloc[:, 0]
+            close_data = close_data.dropna()
+            if len(close_data) >= 2:
+                curr = close_data.iloc[-1]
+                prev = close_data.iloc[-2]
+                pct = ((curr / prev) - 1) * 100
+                res[n] = [float(curr), float(pct)]
         except: pass
     return res
 
 idx_info = get_top_indices()
 
 st.markdown(f"""
-<div style='background: rgba(10,10,10,0.9); border-radius: 12px; padding: 12px 25px; border: 1px solid #333; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);'>
+<div class='responsive-bar' style='background: rgba(10,10,10,0.9); border-radius: 12px; padding: 12px 25px; border: 1px solid #333; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);'>
     <div style='font-family: inherit;'>
-        <span style='color: #888; font-size: 0.85rem;'>TIME OPS</span><br>
-        <span style='color: #EEE; font-size: 0.95rem; font-weight: 600;'>🇰🇷 {now_kr.strftime('%m/%d %H:%M')}</span>
-        <span style='color: #444; margin: 0 10px;'>|</span>
-        <span style='color: #EEE; font-size: 0.95rem; font-weight: 600;'>🇺🇸 {now_us.strftime('%m/%d %H:%M')}</span>
+        <div style='display: flex; align-items: center; gap: 8px;'>
+            <div style='width: 8px; height: 8px; background: #00FF00; border-radius: 50%; box-shadow: 0 0 10px #00FF00;'></div>
+            <span style='color: #888; font-size: 0.85rem; letter-spacing: 1px;'>LIVE OPS CENTER</span>
+        </div>
+        <div style='margin-top: 5px;'>
+            <span style='color: #EEE; font-size: 1rem; font-weight: 700;'>🇰🇷 {now_kr.strftime('%H:%M:%S')}</span>
+            <span style='color: #444; margin: 0 10px;'>|</span>
+            <span style='color: #EEE; font-size: 1rem; font-weight: 700;'>🇺🇸 {now_us.strftime('%H:%M:%S')}</span>
+        </div>
     </div>
-    <div style='display: flex; gap: 30px;'>
+    <div class='responsive-indices' style='display: flex; gap: 30px;'>
         <div style='text-align: right;'>
             <span style='color: #888; font-size: 0.8rem;'>NASDAQ</span><br>
-            <span style='color: {"#00FF00" if idx_info["NASDAQ"]>=0 else "#FF4B4B"}; font-weight: 700;'>{idx_info["NASDAQ"]:+.2f}%</span>
+            <span style='color: #EEE; font-size: 0.9rem; font-weight: 500;'>{idx_info["NASDAQ"][0]:,.1f}</span>
+            <span style='color: {"#00FF00" if idx_info["NASDAQ"][1]>=0 else "#FF4B4B"}; font-weight: 700; margin-left: 5px;'>{idx_info["NASDAQ"][1]:+.2f}%</span>
         </div>
         <div style='text-align: right;'>
             <span style='color: #888; font-size: 0.8rem;'>KOSPI</span><br>
-            <span style='color: {"#00FF00" if idx_info["KOSPI"]>=0 else "#FF4B4B"}; font-weight: 700;'>{idx_info["KOSPI"]:+.2f}%</span>
+            <span style='color: #EEE; font-size: 0.9rem; font-weight: 500;'>{idx_info["KOSPI"][0]:,.1f}</span>
+            <span style='color: {"#00FF00" if idx_info["KOSPI"][1]>=0 else "#FF4B4B"}; font-weight: 700; margin-left: 5px;'>{idx_info["KOSPI"][1]:+.2f}%</span>
         </div>
         <div style='text-align: right;'>
             <span style='color: #888; font-size: 0.8rem;'>KOSDAQ</span><br>
-            <span style='color: {"#00FF00" if idx_info["KOSDAQ"]>=0 else "#FF4B4B"}; font-weight: 700;'>{idx_info["KOSDAQ"]:+.2f}%</span>
+            <span style='color: #EEE; font-size: 0.9rem; font-weight: 500;'>{idx_info["KOSDAQ"][0]:,.1f}</span>
+            <span style='color: {"#00FF00" if idx_info["KOSDAQ"][1]>=0 else "#FF4B4B"}; font-weight: 700; margin-left: 5px;'>{idx_info["KOSDAQ"][1]:+.2f}%</span>
         </div>
     </div>
 </div>
