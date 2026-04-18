@@ -90,58 +90,76 @@ st.markdown("<div style='background: rgba(0,0,0,0.7); border: 2px solid #FFD700;
 
 # --- [PLACEHOLDER_LOGIC_START] ---
 if page.startswith("1."):
-    st.header("🎯 주도주 타점 스캐너 (Master Scanner)")
-    st.markdown("<div class='glass-card'>거래량 9,000,000주 이상 & 10% 이상 상승한 괴물 주도주를 자동 탐지합니다.</div>", unsafe_allow_html=True)
+    st.header("🎯 주도주 VCP & EP 마스터 스캐너")
+    st.markdown("<div class='glass-card'>미너비니의 VCP(변동성 축소)와 본데의 EP(에피소딕 피벗) 4단계 통합 검색 엔진입니다.</div>", unsafe_allow_html=True)
     
-    def run_master_sc():
-        # 데이터 소스: 구글 시트
+    def run_4stage_sc():
+        # 데이터 소스 및 유니버스 구성
         SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
         radar_tics = list(TICKER_NAME_MAP.keys())
         try:
             df_s = pd.read_csv(SHEET_URL)
-            # 티커 또는 종목명 컬럼 추출
             for col in df_s.columns:
-                if "티커" in col or "Symbol" in col or "종목" in col:
+                if "티커" in col or "Symbol" in col:
                     radar_tics = list(set(radar_tics + df_s[col].dropna().tolist()))
         except: pass
         
-        # NDX 9점이상 (핵심 리스트)
         ndx_core = ["NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "TSLA", "AVGO", "COST", "NFLX", "AMD", "PLTR", "ARM"]
         radar_tics = list(set(radar_tics + ndx_core))
         
-        data = {"MONSTER": [], "NORMAL": []}
+        res_data = {"SUPREME": [], "VCP_READY": [], "EP_IGNITE": []}
         pb = st.progress(0); st_txt = st.empty()
         
         for i, tic in enumerate(radar_tics):
             try:
-                st_txt.text(f"📡 Scanning {tic}...")
+                st_txt.text(f"📡 Analyzing {tic} (Stage 1-4 Analysis)...")
                 pb.progress((i+1)/len(radar_tics))
-                h = yf.download(tic, period="5d", progress=False)
-                if len(h) < 2: continue
+                h = yf.download(tic, period="300d", progress=False)
+                if len(h) < 250: continue
                 
-                cp, pp = h['Close'].iloc[-1], h['Close'].iloc[-2]
+                # [A] 1단계: 트렌드 템플릿 필터
+                c = h['Close']
+                ma50, ma150, ma200 = c.rolling(50).mean(), c.rolling(150).mean(), c.rolling(200).mean()
+                cp, pp = c.iloc[-1], c.iloc[-2]
+                
+                cond_a = (ma50.iloc[-1] > ma150.iloc[-1] > ma200.iloc[-1]) and (cp > ma50.iloc[-1])
+                cond_a2 = ma200.iloc[-1] > ma200.iloc[-20] # 200일선 상향
+                h52, l52 = c.max(), c.min()
+                cond_a3 = (cp >= h52 * 0.75) and (cp >= l52 * 1.3) # 52주 신고가 근접/신저가 이격
+                
+                # [B] 2단계: EP 엔진 (당일 폭발)
                 ch = (cp/pp - 1) * 100
-                cv = int(h['Volume'].iloc[-1])
+                cv, va = h['Volume'].iloc[-1], h['Volume'].iloc[-20:-1].mean()
+                cond_b = (ch >= 4.0) and (cv >= va * 1.5) and (cv >= 100000)
                 
-                # [전문가님 필터] 900만주 & 10% 이상
-                if cv >= 9000000 and ch >= 10.0:
-                    fmt_p = f"{int(cp):,}원" if (".KS" in tic or ".KQ" in tic) else f"${cp:.2f}"
-                    data["MONSTER"].append({"종목": tic, "현재가": fmt_p, "거래량": f"{cv:,}", "등락": f"{ch:.1f}%"})
-                elif ch >= 4.0:
-                    data["NORMAL"].append({"종목": tic, "현재가": cp, "거래량": f"{cv:,}", "등락": f"{ch:.1f}%"})
+                # [C] 3단계: VCP (전일 응축)
+                pp_ch = (c.iloc[-2]/c.iloc[-3] - 1) * 100
+                pv, va10 = h['Volume'].iloc[-2], h['Volume'].iloc[-11:-1].mean()
+                cond_c = (abs(pp_ch) <= 2.0) and (pv <= va10 * 0.5) # 변동성 축소 & 거래량 고갈
+                
+                fmt_p = f"{int(cp):,}원" if (".KS" in tic or ".KQ" in tic) else f"${cp:.2f}"
+                row = {"종목": tic, "현재가": fmt_p, "등락": f"{ch:.1f}%", "거래량": f"{int(cv):,}"}
+                
+                if cond_a and cond_a2 and cond_a3:
+                    if cond_b: res_data["SUPREME"].append(row) # A+B: 주도주 EP 점화
+                    elif cond_c: res_data["VCP_READY"].append(row) # A+C: VCP 용수철 응축
+                    else: res_data["EP_IGNITE"].append(row) # A: 트렌드 유지
             except: continue
         pb.empty(); st_txt.empty()
-        return data
+        return res_data
 
-    if st.button("🚀 괴물 종목 정밀 스캔 시작"):
-        res = run_master_sc()
-        t1, t2 = st.tabs(["🔥 괴물급 (9M+/10%+)", "📈 일반 모멘텀 (4%+)"])
+    if st.button("🚀 4단계 통합 정밀 스캔 시작"):
+        res = run_4stage_sc()
+        t1, t2, t3 = st.tabs(["🔥 SUPREME EP (폭발)", "💎 VCP READY (응축)", "📈 TREND STAGE 2"])
         with t1:
-            if res["MONSTER"]: st.dataframe(pd.DataFrame(res["MONSTER"]), use_container_width=True, hide_index=True)
-            else: st.info("조건을 만족하는 괴물 종목이 현재 없습니다.")
+            if res["SUPREME"]: st.dataframe(pd.DataFrame(res["SUPREME"]), use_container_width=True, hide_index=True)
+            else: st.info("현재 폭발 중인 SUPREME 종목 없음")
         with t2:
-            if res["NORMAL"]: st.dataframe(pd.DataFrame(res["NORMAL"]), use_container_width=True, hide_index=True)
-            else: st.info("상승 추세 종목 없음")
+            if res["VCP_READY"]: st.dataframe(pd.DataFrame(res["VCP_READY"]), use_container_width=True, hide_index=True)
+            else: st.info("에너지를 응축 중인 VCP 종목 없음")
+        with t3:
+            if res["EP_IGNITE"]: st.dataframe(pd.DataFrame(res["EP_IGNITE"]), use_container_width=True, hide_index=True)
+            else: st.info("상승 추세 구간 종목 없음")
 
 elif page.startswith("2."):
     st.header("💬 소통 대화방 (HQ Control)")
@@ -315,10 +333,12 @@ elif page.startswith("10."):
     fueled by the sincere hope that those who share this dream can grow wealthy together.
     """)
     
-    st.info("""
-    📖 **Turtle’s Must-Read Recommendation**<br>
-    There are already many excellent books available. Among them, I most highly recommend **"How to Make Money in Stocks" by William O'Neil.** 
-    I hope you gain insights that pierce through the core of the market, going beyond mere technical analysis.
+    st.markdown(f"""
+    <div style='background: rgba(255,215,0,0.05); padding: 20px; border-radius: 12px; border-left: 5px solid #FFD700; margin: 20px 0;'>
+        <b style='color: #FFD700;'>📖 Turtle’s Must-Read Recommendation</b><br>
+        There are already many excellent books available. Among them, I most highly recommend <b>"How to Make Money in Stocks" by William O'Neil.</b><br>
+        I hope you gain insights that pierce through the core of the market, going beyond mere technical analysis.
+    </div>
     """, unsafe_allow_html=True)
     
     st.write("""
