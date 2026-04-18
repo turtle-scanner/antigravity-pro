@@ -411,6 +411,7 @@ if page.startswith("1."):
             
         st_txt.empty()
         
+        if all_res:
             df = pd.DataFrame(all_res)
             st.session_state.scan_results = df
             st.success("✅ 스캔 완료! 아래 리스트에서 종목을 선택하여 차트 분석을 계속하십시오.")
