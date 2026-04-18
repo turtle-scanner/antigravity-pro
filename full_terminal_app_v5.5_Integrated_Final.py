@@ -72,14 +72,84 @@ st.markdown(f"""
 # --- 인증 & 사이드바 ---
 if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 if not st.session_state["password_correct"]:
-    c1, m, c2 = st.columns([1, 1.8, 1])
+    c1, m, c2 = st.columns([1, 2, 1])
     with m:
         if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png", use_container_width=True)
-        login_id = st.text_input("아이디"); login_pw = st.text_input("비밀번호", type="password")
-        if st.button("Terminal Operation Start", use_container_width=True):
-            users = load_users()
-            if login_id in users and users[login_id]["password"] == login_pw:
-                st.session_state["password_correct"] = True; st.session_state.current_user = login_id; st.rerun()
+        tab1, tab2 = st.tabs(["🚀 Terminal Log-In", "📝 Join Command (자격 시험)"])
+        
+        with tab1:
+            login_id = st.text_input("사령부 아이디", key="l_id")
+            login_pw = st.text_input("액세스 키 (PW)", type="password", key="l_pw")
+            if st.button("Terminal Operation Start", use_container_width=True):
+                users = load_users()
+                if login_id in users and users[login_id]["password"] == login_pw:
+                    st.session_state["password_correct"] = True
+                    st.session_state.current_user = login_id
+                    st.rerun()
+                else: st.error("❌ 등록되지 않은 정보이거나 보안 코드가 일치하지 않습니다.")
+        
+        with tab2:
+            st.markdown("### 🏹 사령부 정예 요원 입성 자격 시험")
+            st.info("개인 정보와 자격 시험 만점(5/5)을 획득해야 사령부 승인이 완료됩니다.")
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                new_id = st.text_input("희망 아이디", key="s_id")
+                new_pw = st.text_input("희망 비밀번호", type="password", key="s_pw")
+                reg_region = st.selectbox("거주 지역", ["서울", "경기", "인천", "부산", "대구", "대전", "광주", "울산", "강원", "충청", "전라", "경상", "제주", "해외"])
+            with c2:
+                reg_age = st.selectbox("연령대", ["20대 이하", "30대", "40대", "50대", "60대 이상"])
+                reg_gender = st.radio("성별", ["남성", "여성"], horizontal=True)
+                reg_exp = st.selectbox("주식 경력", ["1년 미만", "1-3년", "3-5년", "5-10년", "10년 이상"])
+            
+            reg_moti = st.text_area("주식을 하는 이유와 사령부에 임하는 각오", placeholder="예: 경제적 자유를 얻어 가족들에게 헌신하고 싶습니다.")
+            
+            st.divider()
+            st.markdown("#### 📝 [필수] 실전 매매 전략 테스트")
+            q1 = st.radio("Q1. MAGNA 53 공식에서 'G'는 무엇을 의미할까요?", ["Growth (꾸준한 성장)", "Gap Up (갭 상승)", "Gold (금 관련주)", "Gamma (옵션 지표)"], index=None)
+            q2 = st.radio("Q2. 적극적 매수에 참여해야 하는 스탠 와인스타인의 단계는?", ["1단계 (기초 지역)", "2단계 (상승 국면)", "3단계 (최정상 지역)", "4단계 (쇠퇴 국면)"], index=None)
+            q3 = st.radio("Q3. RSI 보조지표에서 '과매도(Oversold)' 기준 수치는?", ["20 이하", "30 이하", "50 이하", "70 이하"], index=None)
+            q4 = st.radio("Q4. 부분 익절 후 남은 물량의 손절선(Stop-loss) 설정은?", ["최초 손절가 유지", "매수한 가격(본절)으로 상향", "현재가 -10% 하향", "손절선 제거 및 장기투자"], index=None)
+            q5 = st.radio("Q5. 모멘텀 버스트 룰에 따라 추격 매수를 금지하는 최소 연속 상승 일수는?", ["2일 연속", "3일 연속", "5일 연속", "10일 연속"], index=None)
+            
+            if st.button("🛡️ 요원 임명 신청 및 채점", use_container_width=True):
+                if not new_id or not new_pw or not reg_moti:
+                    st.error("❌ 아이디, 비밀번호, 가치관을 모두 작성해 주세요.")
+                else:
+                    ans = [q1, q2, q3, q4, q5]
+                    correct = ["Gap Up (갭 상승)", "2단계 (상승 국면)", "30 이하", "매수한 가격(본절)으로 상향", "3일 연속"]
+                    score = sum([1 for a, c in zip(ans, correct) if a == c])
+                    
+                    if score == 5:
+                        users = load_users()
+                        if new_id in users: st.error("❌ 이미 존재하는 대원 코드(ID)입니다.")
+                        else:
+                            users[new_id] = {
+                                "password": new_pw, 
+                                "status": "approved", 
+                                "grade": "회원",
+                                "info": {
+                                    "region": reg_region,
+                                    "age": reg_age,
+                                    "gender": reg_gender,
+                                    "exp": reg_exp,
+                                    "motivation": reg_moti,
+                                    "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                                }
+                            }
+                            with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                            st.success("🎊 만점입니다! 전문가님의 철학을 계승할 자격을 증명하셨습니다. 지금 바로 로그인해 주십시오.")
+                            st.balloons()
+                    else:
+                        st.error(f"❌ {score}/5문항 정답. 사령부의 철학을 더 공부하고 오십시오!")
+                        with st.expander("📝 자격 시험 해설 보기", expanded=True):
+                            st.markdown("""
+                            - **Q1:** MAGNA의 G는 **Gap Up**을 의미합니다. 기관의 강력한 매수 신호입니다.
+                            - **Q2:** **2단계(Mark-up)**가 우리가 공격해야 할 유일한 전장입니다.
+                            - **Q3:** **30 이하**가 매도세가 과도한 과매도 상태입니다.
+                            - **Q4:** 부분 익절 후에는 **본절(Break-even)**로 올려서 계좌를 무위험 상태로 만들어야 합니다.
+                            - **Q5:** **3일 연속** 상승한 주식은 소유자의 영역이지, 추격 매수자의 영역이 아닙니다.
+                            """)
     st.stop()
 
 with st.sidebar:
