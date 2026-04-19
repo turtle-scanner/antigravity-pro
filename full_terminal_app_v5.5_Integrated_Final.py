@@ -1522,13 +1522,19 @@ elif page.startswith("5-e."):
             
             if st.form_submit_button("🚀 전리품 등록 (자랑하기)"):
                 if tic and roi and p_val:
-                    t = now_kst.strftime("%Y-%m-%d %H:%M")
+                    t_now = now_kst.strftime("%Y-%m-%d %H:%M")
+                    d_str, t_str = t_now.split(" ")
                     u = st.session_state.current_user
                     pid = f"P_{int(time.time())}_{u}"
-                    new_p = pd.DataFrame([[pid, t, u, tic, roi, p_val, msg]], columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
+                    new_p = pd.DataFrame([[pid, t_now, u, tic, roi, p_val, msg]], columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
                     new_p.to_csv(PROFIT_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
-                    gsheet_sync("익절자랑_통합", ["ID", "시간", "아이디", "종목", "수익률", "수익금", "소감"], [pid, t, u, tic, roi, p_val, msg])
-                    st.success("🎊 대원님의 위대한 승리 기록이 본부에 등록되었습니다!")
+                    
+                    # 전문가님 요청 양식에 맞춰 구글 시트 동기화 (익절방 탭)
+                    gsheet_sync("익절방", 
+                        ["날짜", "시간", "회원명", "종목명/티커", "수익률", "수익금", "승리소감 및 노하우"], 
+                        [d_str, t_str, u, tic, roi, p_val, msg]
+                    )
+                    st.success("🎊 대원님의 위대한 승리 기록이 사령부 통합 시트에 등록되었습니다!")
                     st.balloons()
                     st.rerun()
                 else: st.error("종목, 수익률, 수익금은 필수 항목입니다.")
@@ -1610,6 +1616,7 @@ elif page.startswith("5-e."):
                             u = st.session_state.current_user
                             c_new = pd.DataFrame([[pid, t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
                             c_new.to_csv(COMMENTS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                            gsheet_sync("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, t, u, new_c])
                             st.rerun()
                 st.write("") # 스페이싱
         else: st.info("아직 도착한 익절 첩보가 없습니다. 첫 주인공이 되어보세요!")
@@ -1645,12 +1652,18 @@ elif page.startswith("5-f."):
             
             if st.form_submit_button("🛡️ 복기 완료 및 마음 다잡기"):
                 if l_tic and l_roi and l_msg:
-                    t = now_kst.strftime("%Y-%m-%d %H:%M")
+                    t_now = now_kst.strftime("%Y-%m-%d %H:%M")
+                    d_str, t_str = t_now.split(" ")
                     u = st.session_state.current_user
                     lid = f"L_{int(time.time())}_{u}"
-                    new_l = pd.DataFrame([[lid, t, u, l_tic, l_roi, l_reason, l_msg]], columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
+                    new_l = pd.DataFrame([[lid, t_now, u, l_tic, l_roi, l_reason, l_msg]], columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
                     new_l.to_csv(LOSS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
-                    gsheet_sync("손실복기_통합", ["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"], [lid, t, u, l_tic, l_roi, l_reason, l_msg])
+                    
+                    # 전문가님 요청 양식에 맞춰 구글 시트 동기화 (손절방 탭)
+                    gsheet_sync("손절방", 
+                        ["날짜", "시간", "회원명", "종목명/티커", "손실률", "과오원인", "구체적인 상황 복기 및 향후 다짐"], 
+                        [d_str, t_str, u, l_tic, l_roi, l_reason, l_msg]
+                    )
                     st.toast("사령부가 대원님의 용기 있는 성찰을 응원합니다. 훌훌 털어내십시오.")
                     st.rerun()
                 else: st.error("필수 항목을 모두 입력해 주세요.")
@@ -1726,6 +1739,7 @@ elif page.startswith("5-f."):
                             u = st.session_state.current_user
                             c_new = pd.DataFrame([[pid, t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
                             c_new.to_csv(COMMENTS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                            gsheet_sync("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, t, u, new_c])
                             st.rerun()
                 st.write("") # 스페이싱
         else:
