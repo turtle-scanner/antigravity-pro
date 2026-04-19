@@ -1386,36 +1386,44 @@ elif page.startswith("1-b."):
         
     st.markdown("<div class='glass-card'>사령관의 권위로 대원의 등급을 조정하거나 사령부에서 즉각 제명(삭제)하는 인사권을 행사합니다.</div>", unsafe_allow_html=True)
     
-    # 🛡️ 사령부 데이터 영구 보존 센터 (위쪽으로 이동)
-    st.subheader("🛡️ 사령부 데이터 영구 보존 센터")
-    with st.expander("📊 [필수] 데이터 이관 및 실시간 백업 가동", expanded=True):
+    # 🛡️ 사령부 데이터 동기화 및 복구 센터 (통합 관리)
+    st.subheader("🛡️ 클라우드 데이터 동기화 및 복구 센터")
+    with st.expander("📊 구글 시트 양방향 동기화 (불러오기 / 백업)", expanded=True):
         st.markdown("""
-        현재 사령부 명부에 등록된 모든 대원 정보를 구글 시트로 백업합니다. 
-        **깃허브 업데이트나 서버 리셋 시에도 회원 정보를 지키기 위해 반드시 클릭해 주세요.**
+        사령부 명부와 구글 시트 데이터를 동기화합니다. 
+        - **불러오기 (Import):** 구글 시트에 저장된 최신 명단을 가져와 현재 터미널을 업데이트합니다.
+        - **백업 (Export):** 현재 터미널의 모든 대원 정보를 구글 시트(클라우드)로 안전하게 전송합니다.
         """)
         
-        # 상태 확인
-        if USERS_SHEET_URL:
-            st.success(f"✅ 구글 시트 복구 엔진 연결됨")
-        else:
-            st.warning("⚠️ 구글 시트 주소가 설정되지 않았습니다. 파일 상단을 확인해 주세요.")
-            
-        if st.button("🚀 모든 대원 정보 구글 시트로 즉시 백업", use_container_width=True, key="top_migration_btn"):
-            with st.spinner("사령부 명부 대조 및 전송 중..."):
-                count = 0
-                for uid, udata in users.items():
-                    info = udata.get("info", {})
-                    gsheet_sync("회원명단", 
-                        ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
-                        [
-                            uid, udata.get("password", ""), udata.get("status", "approved"), 
-                            udata.get("grade", "회원"), info.get("region", "-"), info.get("age", "-"), 
-                            info.get("gender", "-"), info.get("exp", "-"), info.get("joined_at", "-"), info.get("motivation", "-")
-                        ]
-                    )
-                    count += 1
-                st.success(f"🎊 총 {count}명의 대원 정보가 구글 시트로 안전하게 백업되었습니다!")
-                st.balloons()
+        c_sync1, c_sync2 = st.columns(2)
+        with c_sync1:
+            if st.button("🚀 클라우드 명단 불러오기 (Import)", use_container_width=True, key="import_btn"):
+                with st.spinner("구글 시트 데이터 수신 중..."):
+                    load_users.clear()
+                    users = load_users()
+                    if users:
+                        st.success(f"🎊 클라우드에서 {len(users)}명의 대원 정보를 성공적으로 수신하여 동기화했습니다.")
+                        st.rerun()
+                    else:
+                        st.error("❌ 데이터를 가져오는 데 실패했거나 시트가 비어 있습니다.")
+        
+        with c_sync2:
+            if st.button("📌 현재 명단 클라우드 백업 (Export)", use_container_width=True, key="export_btn"):
+                with st.spinner("사령부 명부 데이터 전송 중..."):
+                    count = 0
+                    for uid, udata in users.items():
+                        info = udata.get("info", {})
+                        gsheet_sync("회원명단", 
+                            ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
+                            [
+                                uid, udata.get("password", ""), udata.get("status", "approved"), 
+                                udata.get("grade", "회원"), info.get("region", "-"), info.get("age", "-"), 
+                                info.get("gender", "-"), info.get("exp", "-"), info.get("joined_at", "-"), info.get("motivation", "-")
+                            ]
+                        )
+                        count += 1
+                    st.success(f"🎊 총 {count}명의 대원 정보가 구글 시트에 안전하게 백업되었습니다!")
+                    st.balloons()
     
     st.divider()
     st.subheader("📋 전체 대원 리스트 관리")
@@ -1438,49 +1446,19 @@ elif page.startswith("1-b."):
                     new_grade = st.selectbox(f"보직 변경 (ID:{u})", ["회원", "정규직", "관리자"], key=f"grade_sel_{u}", index=current_idx)
                     if st.button(f"인사발령 (ID:{u})", key=f"btn_grade_{u}"):
                         users[u]["grade"] = new_grade
-                        with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                        save_users(users)
                         st.success(f"✅ {u} 요원이 {new_grade}(으)로 발령되었습니다.")
                         st.rerun()
                 with c3:
                     st.write("") # 정렬용
                     if st.button("🔥 즉각 제명", key=f"del_{u}"):
                         del users[u]
-                        with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                        save_users(users)
                         st.warning(f"⚠️ {u} 요원이 명부에서 삭제되었습니다.")
                         st.rerun()
-        
-        st.divider()
-        st.subheader("🛡️ 사령부 데이터 영구 보존 센터")
-        with st.expander("📊 데이터 이관 및 백업 도구 (Migration Tool)", expanded=True):
-            st.markdown("""
-            가입한 모든 대원의 정보를 구글 시트로 일괄 전송하여 영구 백업합니다. 
-            서버 리셋이나 깃허브 업데이트 시 정보를 보호하기 위한 필수 절차입니다.
-            """)
-            
-            # 상태 확인
-            if USERS_SHEET_URL:
-                st.success("✅ 구글 시트 복구 엔진 연결됨")
-            else:
-                st.warning("⚠️ 구글 시트 복구 엔진이 연결되지 않았습니다. (URL 미설정)")
-            
-            if st.button("🚀 모든 대원 정보 구글 시트로 백업 시작", use_container_width=True):
-                with st.spinner("사령부 명부 대조 및 전송 중..."):
-                    count = 0
-                    for uid, udata in users.items():
-                        info = udata.get("info", {})
-                        gsheet_sync("회원명단", 
-                            ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
-                            [
-                                uid, udata.get("password", ""), udata.get("status", "approved"), 
-                                udata.get("grade", "회원"), info.get("region", "-"), info.get("age", "-"), 
-                                info.get("gender", "-"), info.get("exp", "-"), info.get("joined_at", "-"), info.get("motivation", "-")
-                            ]
-                        )
-                        count += 1
-                    st.success(f"🎊 총 {count}명의 대원 정보가 구글 시트로 안전하게 백업되었습니다!")
-                    st.balloons()
     else:
         st.info("현재 사령부에서 관리할 대원이 없습니다.")
+
 
 elif page.startswith("5-b."):
     st.markdown("<h1 style='color: #FFD700; text-align: center; font-size: 3rem;'>🏛️ StockDragonfly 차트 아카데미</h1>", unsafe_allow_html=True)
