@@ -106,13 +106,40 @@ def check_login():
                     else: st.error("❌ 정보 불일치")
             if st.button("🤝 신입 요원 자격 심사 신청"): st.session_state.show_signup = True; st.rerun()
         else:
+            st.markdown("<div class='glass-card' style='border: 1px solid #6366f1;'><h2 style='text-align: center; color: #6366f1;'>📝 신입 요원 자격 심사 (15 Munhang)</h2></div>", unsafe_allow_html=True)
             with st.form("sg_f"):
-                new_id = st.text_input("아이디")
-                new_pw = st.text_input("비밀번호", type="password")
-                if st.form_submit_button("🛰️ 임관 신청"):
-                    if new_id in users: st.error("이미 존재")
-                    else: users[new_id] = {"password": new_pw, "status": "pending", "grade": "회원"}; save_users(users); sync_user_to_cloud(new_id, users[new_id]); st.success("신청 완료"); time.sleep(2); st.session_state.show_signup = False; st.rerun()
-            if st.button("⬅️ 돌아가기"): st.session_state.show_signup = False; st.rerun()
+                new_id = st.text_input("🎖️ 희망 요원 아이디")
+                new_pw = st.text_input("🔐 희망 보안 코드", type="password")
+                st.divider()
+                st.info("⚠️ 아래 15개 전술 퀴즈를 모두 풀어야 임관 신청이 가능합니다.")
+                
+                # 15문항 자격 심사 (원본 로직 복구)
+                q1 = st.radio("1. 주도주 매매의 창시자, 윌리엄 오닐의 핵심 전략은?", ["CANSLIM", "BUY & HOLD"], index=None)
+                q2 = st.radio("2. 마크 미너비니가 강조한 'VCP' 패턴의 핵심은?", ["동동성 수축(Volatility Contraction)", "이동평균선 골든크로스"], index=None)
+                q3 = st.radio("3. 본데의 '에피소딕 피벗(EP)' 발생 시 가장 중요한 요소는?", ["역대급 거래량과 펀더멘털의 변화", "보조지표 RSI의 과매도"], index=None)
+                q4 = st.radio("4. 손절매의 원칙으로 가장 적절한 것은?", ["기계적으로 -3% 이내 수행", "본전이 올 때까지 인내"], index=None)
+                q5 = st.radio("5. 주도주를 찾기 위한 지표 'RS'의 의미는?", ["Relative Strength(상대적 강도)", "Return on Stocks(주식 수익률)"], index=None)
+                q6 = st.radio("6. 시장의 온도(Market Breadth)를 체크하는 이유는?", ["공격적 투자 시기를 판별하기 위해", "실적 발표일을 확인하기 위해"], index=None)
+                q7 = st.radio("7. 계좌의 총 위험도(Total Heat)는 최대 몇 %를 권장하는가?", ["6% 이내", "50% 이내"], index=None)
+                q8 = st.radio("8. 매수 후 3~5일간 반응이 없다면 어떻게 해야 하는가?", ["시간 정지 원칙에 따라 매도 고려", "추가 매수(물타기)"], index=None)
+                q9 = st.radio("9. 돌파 매매 시 진입 시점은?", ["긴 횡보 끝에 거래량을 실은 돌파 시", "바닥에서 첫 양봉이 나올 때"], index=None)
+                q10 = st.radio("10. 주식 매매를 무엇으로 정의해야 하는가?", ["확률 기반의 비즈니스(Business)", "대박을 노리는 한판 승부"], index=None)
+                q11 = st.radio("11. 차트 분석 전 가장 먼저 확인해야 할 요소는?", ["글로벌 시장 레짐(Market Regime)", "최근 뉴스 검색"], index=None)
+                q12 = st.radio("12. 본데의 'MAGNA' 필터는 무엇을 판별하는가?", ["기업의 펀더멘털과 성장세", "주가의 변동성"], index=None)
+                q13 = st.radio("13. 윌리엄 오닐이 강조한 'L'은 무엇인가?", ["Leader(주도주)", "Low Price(저가주)"], index=None)
+                q14 = st.radio("14. 분산 투자에 대한 안티그래비티의 철학은?", ["소수 정예 종목에 집중 투자", "수십 개 종목에 골고루 분산"], index=None)
+                q15 = st.radio("15. 당신은 원칙을 목숨처럼 지키겠습니까?", ["예 (I AM A WARRIOR)", "아니오"], index=None)
+
+                if st.form_submit_button("🛰️ 임관 신청서 최종 제출"):
+                    if not new_id or not new_pw: st.error("정보 입력 필수")
+                    elif any(q is None for q in [q1,q2,q3,q4,q5,q6,q7,q8,q9,q10,q11,q12,q13,q14,q15]): st.warning("모든 퀴즈에 답해야 합니다.")
+                    else:
+                        users = load_users()
+                        if new_id in users: st.error("이미 사용 중인 ID")
+                        else:
+                            users[new_id] = {"password": new_pw, "status": "pending", "grade": "회원", "quiz": "PASSED"}
+                            save_users(users); sync_user_to_cloud(new_id, users[new_id]); st.success("임관 신청 완료! 심사 결과를 기다리세요."); time.sleep(2); st.session_state.show_signup = False; st.rerun()
+            if st.button("⬅️ 로그인 화면으로 복귀"): st.session_state.show_signup = False; st.rerun()
 
 if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 if not st.session_state["password_correct"]: check_login(); st.stop()
@@ -162,11 +189,46 @@ if page.startswith("1-a."):
         if st.button(f"승인: {u}"): users[u]["status"] = "approved"; save_users(users); sync_user_to_cloud(u, users[u]); st.rerun()
 
 elif page.startswith("2-a."):
-    st.header("📈 마켓 트렌드 요약")
-    indices = ["^IXIC", "^GSPC", "NVDA", "TSLA"]
-    data = yf.download(indices, period="1d", progress=False)['Close']
+    st.markdown("<h2 style='color: #00FF00;'>📈 마켓 트렌드 및 데일리 전술 점검</h2>", unsafe_allow_html=True)
+    
+    # 📊 주요 지수 실시간 대시보드
+    indices = {"NASDAQ": "^IXIC", "S&P 500": "^GSPC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
     cols = st.columns(4)
-    for i, idx in enumerate(indices): cols[i].metric(idx, f"{data[idx].iloc[-1]:,.2f}")
+    try:
+        data = yf.download(list(indices.values()), period="5d", progress=False)['Close']
+        for i, (name, tic) in enumerate(indices.items()):
+            curr = data[tic].iloc[-1]
+            prev = data[tic].iloc[-2]
+            chg = (curr/prev - 1) * 100
+            cols[i].metric(name, f"{curr:,.2f}", f"{chg:.2f}%")
+    except: st.warning("지수 데이터 로딩 중...")
+
+    st.divider()
+    
+    # 📑 데일리 전술 체크리스트 (15개 문항 복구)
+    st.markdown("### 📋 오늘의 전술 체크리스트")
+    with st.expander("🛡️ 작전 개시 전 반드시 확인 (클릭하여 전술 점검)", expanded=True):
+        st.markdown("""
+        <div style='background: rgba(0, 255, 0, 0.05); padding: 15px; border-radius: 10px; border: 1px solid #00FF00;'>
+            <p>✅ <b>[1] 마켓 레짐:</b> 지수가 20일선 위에 있는가? (GREEN LIGHT?)</p>
+            <p>✅ <b>[2] 주도 섹터:</b> 오늘 시장을 이끄는 섹터가 명확한가?</p>
+            <p>✅ <b>[3] EP 포착:</b> 어닝 서프라이즈와 함께 갭 상승한 종목이 있는가?</p>
+            <p>✅ <b>[4] 거래량:</b> 돌파 시 평균 거래량의 150% 이상이 실렸는가?</p>
+            <p>✅ <b>[5] 손절 원칙:</b> 모든 포지션에 -3% 하드 스탑이 걸려 있는가?</p>
+            <p>✅ <b>[6] 자금 관리:</b> 한 종목에 자산의 20% 이상을 배정하지 않았는가?</p>
+            <p>✅ <b>[7] 펀더멘털:</b> MAGNA 필터(매출/이익 성장)를 통과했는가?</p>
+            <p>✅ <b>[8] VCP 패턴:</b> 변동성이 수축되며 매수 타점을 형성했는가?</p>
+            <p>✅ <b>[9] RS 점수:</b> 지수 대비 강력한 상대 강도를 유지하고 있는가?</p>
+            <p>✅ <b>[10] 시간 지지:</b> 매수 후 3~5일 내에 반응이 오지 않으면 정리할 준비가 되었는가?</p>
+            <p>✅ <b>[11] 심리 조절:</b> 포모(FOMO)에 휩싸여 추격 매수하고 있지 않은가?</p>
+            <p>✅ <b>[12] 뉴스 필터:</b> 시장의 소음을 제외하고 가격과 거래량에만 집중하는가?</p>
+            <p>✅ <b>[13] 기록:</b> 모든 매매 진입 이유를 매매 일지에 기록했는가?</p>
+            <p>✅ <b>[14] 루틴:</b> 전날 밤 미리 관심 종목 리스트를 확정했는가?</p>
+            <p>✅ <b>[15] 원칙 준수:</b> 오늘 하루도 감정이 아닌 원칙으로 매매할 것인가?</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.info("💡 **전술 지침:** 체크리스트 중 12개 이상이 통과되지 않는다면, 현금을 보유하고 관망하는 것이 가장 훌륭한 전략입니다.")
 
 elif page.startswith("3-a."):
     st.header("🎯 주도주 타점 및 RS 스캐너")
