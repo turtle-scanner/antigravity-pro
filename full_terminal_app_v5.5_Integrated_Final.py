@@ -223,8 +223,8 @@ st.set_page_config(page_title="StockDragonfly Pro", page_icon="🐉", layout="wi
 
 # --- 🌑 프리미엄 스타일 디자인 ---
 bg_b64 = ""
-if os.path.exists("StockDragonfly2.png"):
-    with open("StockDragonfly2.png", "rb") as imm: bg_b64 = base64.b64encode(imm.read()).decode()
+if os.path.exists("StockDragonfly.png"):
+    with open("StockDragonfly.png", "rb") as imm: bg_b64 = base64.b64encode(imm.read()).decode()
 
 st.markdown(f"""
     <style>
