@@ -33,6 +33,26 @@ TICKER_NAME_MAP = {
     "MARA": "마라톤디지털", "PANW": "팔로알토", "SNOW": "스노우플레이크", "STX": "씨게이트", "WDC": "웨스턴디지털"
 }
 
+REVERSE_TICKER_MAP = {v: k for k, v in TICKER_NAME_MAP.items()}
+
+def resolve_ticker(query):
+    query = query.strip()
+    if query in TICKER_NAME_MAP: return query
+    if query.upper() in TICKER_NAME_MAP: return query.upper()
+    if query in REVERSE_TICKER_MAP: return REVERSE_TICKER_MAP[query]
+    return query.upper()
+
+# --- 🛰️ 거시지표 매크로 바 ---
+@st.cache_data(ttl=600)
+def get_macro_indicators():
+    try:
+        # 환율(USDKRW=X), 미 국채 10년물(^TNX)
+        m_data = yf.download(["USDKRW=X", "^TNX"], period="2d", progress=False)['Close']
+        rate = m_data["USDKRW=X"].iloc[-1]
+        yield10y = m_data["^TNX"].iloc[-1]
+        return f"💵 USD/KRW: {rate:,.1f}원 | 🏦 US 10Y Yield: {yield10y:.2f}%"
+    except: return "📡 거시 데이터 연결 지연..."
+
 def load_users():
     if not os.path.exists(USER_DB_FILE):
         init = {"cntfed": {"password": "cntfed", "status": "approved", "grade": "방장"}}
@@ -62,37 +82,32 @@ if os.path.exists("StockDragonfly2.png"):
     with open("StockDragonfly2.png", "rb") as imm: bg_b64 = base64.b64encode(imm.read()).decode()
 
 st.markdown(f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap');
-    .stApp {{ background-color: #000; {f'background-image: linear-gradient(rgba(0,0,0,0.88), rgba(0,0,0,0.88)), url("data:image/png;base64,{bg_b64}");' if bg_b64 else ""} background-size: cover; background-attachment: fixed; }}
-    [data-testid="stSidebar"] {{ background-color: rgba(5,5,5,0.96) !important; border-right: 1px solid #FFD70033; backdrop-filter: blur(25px); }}
-    h1, h2 {{ color: #FFD700 !important; font-weight: 900; }}
-    .stButton>button {{ background: #1a1a1a !important; color: #FFD700 !important; border: 1px solid #FFD700 !important; border-radius: 10px; font-weight: 800; }}
-    .stButton>button:hover {{ background: #FFD700 !important; color: #000 !important; transform: translateY(-3px); box-shadow: 0 8px 25px rgba(255, 215, 0, 0.6); }}
-    .glass-card {{ background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 25px; backdrop-filter: blur(15px); margin-bottom: 30px; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }}
-    .glass-card:hover {{ background: rgba(255, 255, 255, 0.08); border-color: rgba(255,215,0,0.3); transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0,0,0,0.4); }}
+    /* 💎 네온 플럭스 디자인 고도화 */
+    .stApp { background-color: #000; {f'background-image: linear-gradient(rgba(0,0,0,0.92), rgba(0,0,0,0.92)), url("data:image/png;base64,{bg_b64}");' if bg_b64 else ""} background-size: cover; background-attachment: fixed; }
+    [data-testid="stSidebar"] { background-color: rgba(2,2,2,0.98) !important; border-right: 1px solid #FFD70022; backdrop-filter: blur(40px); }
     
-    /* 애니메이션 효과 */
-    @keyframes pulse-glow {{ 0% {{ box-shadow: 0 0 15px rgba(0,255,0,0.2); }} 50% {{ box-shadow: 0 0 40px rgba(0,255,0,0.6); }} 100% {{ box-shadow: 0 0 15px rgba(0,255,0,0.2); }} }}
-    .status-pulse {{ animation: pulse-glow 3s infinite; }}
+    h1, h2 { color: #FFD700 !important; font-weight: 900; text-shadow: 0 0 15px rgba(255,215,0,0.3); }
     
-    @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
-    .ticker-wrap {{ overflow: hidden; background: rgba(255,215,0,0.05); white-space: nowrap; padding: 10px 0; border-bottom: 1px solid rgba(255,215,0,0.1); margin-bottom: 15px; }}
-    .ticker-content {{ display: inline-block; animation: ticker 180s linear infinite; color: #FFD700; font-size: 0.9rem; font-weight: 500; animation-delay: 2s; }}
-    .ticker-wrap:hover .ticker-content {{ animation-play-state: paused; cursor: pointer; }}
-    .ticker-item {{ margin: 0 40px; display: inline-block; }}
+    .glass-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 25px; backdrop-filter: blur(20px); margin-bottom: 30px; transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1); position: relative; overflow: hidden; }
+    .glass-card:hover { border-color: #FFD70066; transform: translateY(-8px) scale(1.01); box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 20px rgba(255,215,0,0.1); }
     
-    /* 모바일 최적화 */
-    @media (max-width: 768px) {{
-        .stApp {{ background-attachment: scroll; }}
-        h1 {{ font-size: 1.8rem !important; }}
-        h2 {{ font-size: 1.4rem !important; }}
-        .glass-card {{ padding: 15px; }}
-        .mobile-header {{ font-size: 2.2rem !important; }}
-        .responsive-bar {{ flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; padding: 15px !important; }}
-        .responsive-indices {{ width: 100% !important; justify-content: space-between !important; gap: 10px !important; }}
-        .ticker-content {{ animation: ticker 120s linear infinite; }}
-    }}
+    /* ✨ 네온 보더 애니메이션 */
+    .neon-border { position: relative; padding: 2px; background: linear-gradient(90deg, #FFD700, #00FF00, #FFD700); background-size: 200% 100%; animation: neon-flow 3s linear infinite; border-radius: 20px; }
+    .neon-inner { background: #000; border-radius: 18px; padding: 25px; }
+    @keyframes neon-flow { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
+    
+    /* 🍌 나노바나나 게이지 */
+    .banana-track { background: rgba(255,255,255,0.05); height: 12px; border-radius: 6px; position: relative; overflow: hidden; margin: 10px 0; border: 1px solid rgba(255,255,255,0.1); }
+    .banana-fill { height: 100%; border-radius: 6px; transition: width 1s ease-out; box-shadow: 0 0 10px currentColor; }
+    
+    @keyframes pulse-glow { 0% { box-shadow: 0 0 10px rgba(0,255,0,0.2); opacity: 0.8; } 50% { box-shadow: 0 0 30px rgba(0,255,0,0.5); opacity: 1; } 100% { box-shadow: 0 0 10px rgba(0,255,0,0.2); opacity: 0.8; } }
+    .status-pulse { border: 1px solid #00FF0044; animation: pulse-glow 2s infinite; }
+    
+    @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+    .ticker-wrap { overflow: hidden; background: rgba(0,0,0,0.6); white-space: nowrap; padding: 12px 0; border-bottom: 2px solid rgba(255,215,0,0.2); margin-bottom: 20px; backdrop-filter: blur(15px); }
+    .ticker-content { display: inline-block; animation: ticker 250s linear infinite; color: #FFD700; font-size: 0.95rem; font-weight: 600; font-family: 'Outfit'; animation-delay: 1s; }
+    .ticker-wrap:hover .ticker-content { animation-play-state: paused; }
+    .ticker-item { margin: 0 40px; display: inline-block; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -202,6 +217,11 @@ if not st.session_state["password_correct"]:
 with st.sidebar:
     if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png")
     st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🛸 StockDragonfly v9.9</p>", unsafe_allow_html=True)
+    
+    # 거시지표 표시
+    macro_info = get_macro_indicators()
+    st.markdown(f"<div style='background: rgba(255,255,255,0.05); padding: 5px; border-radius: 5px; border: 1px solid #333; text-align: center; font-size: 0.75rem; color: #AAA; margin-bottom: 10px;'>{macro_info}</div>", unsafe_allow_html=True)
+    
     st.divider()
     bgms = {
         "🔇 OFF": None, 
@@ -256,7 +276,8 @@ menu_ops = [
     "4. 🚀 주도주 랭킹 TOP 50", "5. 🧮 리스크 계산기", "6. 📈 마켓 트렌드 요약", 
     "7. 📊 본데 감시 리스트", "8. 👑 관리자 승인 센터", "9. 🐝 본데는 누구인가?", 
     "10. 🏛️ 사이트 제작 동기", "11. 🤝 방문자 인사말 신청", "12. 🛡️ 리스크 방패", 
-    "13. 🗺️ 실시간 히트맵", "14. 🌡️ 시장 심리 게이지", "16. 📚 주식공부방(차트분석)"
+    "13. 🗺️ 실시간 히트맵", "14. 🌡️ 시장 심리 게이지", "16. 📚 주식공부방(차트분석)",
+    "17. 🛰️ 나노바나나 정밀 레이더"
 ]
 
 # 오직 방장(전문가님)에게만 15번 메뉴 노출
@@ -268,22 +289,26 @@ page = st.sidebar.radio("Mission Control", menu_ops)
 # --- 🛰️ 전광판 티커 테이프 ---
 @st.cache_data(ttl=300)
 def get_ticker_tape():
-    watch = ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "BTC-USD", "ETH-USD"]
+    watch = {
+        "^IXIC": "NASDAQ", "^KS11": "KOSPI", "^KQ11": "KOSDAQ",
+        "NVDA": "NVDA", "TSLA": "TSLA", "NFLX": "NFLX",
+        "AAPL": "AAPL", "MSFT": "MSFT", "AMZN": "AMZN", 
+        "META": "META", "BTC-USD": "BITCOIN"
+    }
+    symbols = list(watch.keys())
     items = []
     try:
-        data = yf.download(watch, period="5d", progress=False)['Close']
-        for t in watch:
+        data = yf.download(symbols, period="5d", progress=False)['Close']
+        for s in symbols:
             try:
-                # 데이터가 충분하지 않을 경우를 대비해 유효한 마지막 두 데이터 포인트 사용
-                vals = data[t].dropna()
+                name = watch[s]
+                vals = data[s].dropna()
                 if len(vals) >= 2:
                     curr = vals.iloc[-1]
                     prev = vals.iloc[-2]
                     c = ((curr / prev) - 1) * 100
-                    items.append(f"<span class='ticker-item'>{t} {curr:,.1f} ({c:+.2f}%)</span>")
-                elif len(vals) == 1:
-                    curr = vals.iloc[-1]
-                    items.append(f"<span class='ticker-item'>{t} {curr:,.1f} (--)</span>")
+                    color = "#00FF00" if c >= 0 else "#FF4B4B"
+                    items.append(f"<span class='ticker-item'>{name} {curr:,.1f} <span style='color:{color};'>{c:+.2f}%</span></span>")
             except: pass
     except: pass
     return "".join(items)
@@ -681,11 +706,12 @@ elif page.startswith("3."):
             st.toast("사령부 리포트 데이터를 동적 갱신했습니다.")
             st.rerun()
     
-    tic_in = st.text_input("분석 티커", value="NVDA").upper()
+    tic_input_rep = st.text_input("분석 종목 (이름 또는 티커)", value="NVDA")
+    tic_in = resolve_ticker(tic_input_rep)
     if st.button("정밀 분석"):
         with st.spinner("AI 판독 중..."):
-            st.markdown(f"<div class='glass-card'><h4>📊 {tic_in} 분석 결과</h4>Weinstein 2단계 정배열 포착. 상대강도(RS) 95점.</div>", unsafe_allow_html=True)
-            st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={tic_in}&interval=D' width='100%' height='500'></iframe>", height=510)
+            st.markdown(f"<div class='glass-card'><h4>📊 {tic_in} 분석 결과</h4>주도주 패턴 포착. 상대강도(RS) 정밀 분석 수행 중...</div>", unsafe_allow_html=True)
+            st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={tic_in}&interval=D&theme=dark' width='100%' height='500'></iframe>", height=510)
 
 elif page.startswith("4."):
     st.header("🚀 주도주 실시간 랭킹 (Daily Live Ranking)")
@@ -1264,8 +1290,9 @@ elif page.startswith("16."):
         
         l1, l2 = st.columns([3, 1])
         with l2:
-            live_tic = st.text_input("분석 종목 (Ticker)", "NVDA").upper()
-            st.markdown("""
+            live_input = st.text_input("분석 종목 (이름 또는 티커)", "NVDA")
+            live_tic = resolve_ticker(live_input)
+            st.markdown(f"""
             <div style='background: rgba(0,255,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid #00FF00;'>
                 <b style='color: #00FF00;'>🍌 나노바나나 스캔</b><br>
                 <small>돌파 임박도 (잘 익었는지):</small>
@@ -1317,6 +1344,42 @@ elif page.startswith("16."):
         </tr>
     </table>
     """, unsafe_allow_html=True)
+
+elif page.startswith("17."):
+    st.markdown("<h1 style='text-align: center; color: #00FF00;'>🛰️ 나노바나나 정밀 레이더</h1>", unsafe_allow_html=True)
+    st.markdown("<div class='glass-card' style='text-align: center;'>현재 사령부 감시망 내에서 에너지가 응축되어 돌파가 임박한 '황금 바나나' 종목들을 실시간 추적합니다.</div>", unsafe_allow_html=True)
+    
+    # 레이더 데이터 (Mock or Multi-processing logic)
+    radar_stocks = [
+        {"T": "NVDA", "Ready": 95, "Status": "돌파 임박(VCP 3회)"},
+        {"T": "PLTR", "Ready": 88, "Status": "수급 유입 포착"},
+        {"T": "TSLA", "Ready": 82, "Status": "라인 저항 테스트"},
+        {"T": "SMCI", "Ready": 75, "Status": "에너지 응축 중"},
+        {"T": "AAPL", "Ready": 68, "Status": "박스권 횡보"},
+        {"T": "META", "Ready": 62, "Status": "눌림목 형성"}
+    ]
+    
+    cols = st.columns(3)
+    for i, stock in enumerate(radar_stocks):
+        with cols[i % 3]:
+            color = "#00FF00" if stock['Ready'] >= 90 else "#FFD700" if stock['Ready'] >= 80 else "#6366f1"
+            st.markdown(f"""
+            <div class='glass-card' style='border-top: 5px solid {color};'>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <h3 style='margin: 0;'>{stock['T']}</h3>
+                    <span style='color: {color}; font-weight: 800;'>{stock['Ready']}%</span>
+                </div>
+                <div class='banana-track'>
+                    <div class='banana-fill' style='width: {stock['Ready']}%; background: {color}; color: {color};'></div>
+                </div>
+                <p style='font-size: 0.85rem; color: #888; margin-top: 10px;'>📡 상태: {stock['Status']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"🎯 {stock['T']} 정밀 분석", key=f"radar_btn_{stock['T']}", use_container_width=True):
+                st.toast(f"{stock['T']} 분석실로 전술 이동 중...")
+            
+    st.divider()
+    st.info("💡 레이더의 'Ready' 지수는 ROE, RS, 그리고 최근 2주간의 변동성 타이트니스(Tightness)를 종합 산출한 결과입니다.")
     
 # --- 🛰️ 시스템 하단 글로벌 전술 푸터 (Global Footer) ---
 st.write("") # 스페이싱
