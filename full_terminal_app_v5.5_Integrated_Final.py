@@ -224,6 +224,45 @@ with st.sidebar:
         st.session_state["password_correct"] = False
         st.rerun()
 
+# --- 📢 글로벌 전술 공지 및 시스템 팝업 ---
+def show_major_announcement():
+    # '다시 열지 않기' 상태 확인
+    if "hide_major_notice" not in st.session_state:
+        st.session_state.hide_major_notice = False
+    
+    if not st.session_state.hide_major_notice:
+        st.markdown(f"""
+        <div class='glass-card' style='border: 2px solid #00FF00; background: rgba(0,0,0,0.8);'>
+            <h2 style='color: #00FF00; text-align: center;'>📢 StockDragonfly 시스템 고도화 및 보안 업데이트 안내</h2>
+            <p style='font-size: 1.1rem; line-height: 1.6;'>
+                안녕하세요, 관리자입니다.<br><br>
+                더 쾌적하고 나노 단위로 정교한 서비스 제공을 위해 <b>시스템 엔진을 전면 개편</b>하였습니다.<br>
+                이 과정에서 보안 강화 및 데이터 최적화를 위해 모든 회원의 임시 비밀번호가 <b>1234</b>로 초기화되었습니다.<br>
+                이용에 불편을 드려 진심으로 사과드립니다.<br><br>
+                <b>[조치 방법]</b><br>
+                상단 <span style='color: #00FF00;'>[1. 본부 사령부]</span> -> <span style='color: #00FF00;'>[1-c 계정보안설정(비밀번호 변경가능)]</span><br><br>
+                여러분의 우상향하는 수익을 위해 끊임없이 진화하는 StockDragonfly가 되겠습니다.<br>
+                감사합니다.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("❌ 내용 확인 (다시 열지 않기)"):
+            st.session_state.hide_major_notice = True
+            st.rerun()
+
+def show_global_notice():
+    # [v10.6] 사령부 긴급 보안 지침
+    notice_text = "🚨 긴급 보안 지침: 공용 보안 코드가 '1234'로 갱신되었습니다. 본부 사령부(1-c)에서 변경하십시오."
+    st.markdown(f"""
+    <div style='background: rgba(0, 255, 0, 0.05); border-left: 5px solid #00FF00; padding: 15px; border-radius: 10px; margin-bottom: 25px;'>
+        <span style='color: #00FF00; font-weight: 800;'>[사령부 긴급 공지]</span> 
+        <span style='color: #e2e8f0; margin-left: 10px;'>{notice_text}</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+show_major_announcement()
+show_global_notice()
+
 # --- 🚀 페이지별 전술 전개 로직 (Category 1, 2, 3) ---
 if page.startswith("1-a."):
     st.header("👑 신입 요원 임관 심사 (Approval Center)")
