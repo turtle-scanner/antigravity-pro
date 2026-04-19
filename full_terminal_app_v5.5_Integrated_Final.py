@@ -1053,35 +1053,35 @@ elif page.startswith("3-b."):
                 # 사령부 지휘 지침 추가
                 st.divider()
                 st.markdown(f"""
-                <div class='glass-card' style='border-left: 5px solid #FFD700;'>
-                    <h3 style='color: #FFD700; margin-top: 0;'>🚁 StockDragonfly 지휘 지침: 본데 50선 실전 매뉴얼</h3>
-                    <p style='color: #AAA; font-size: 0.95rem;'>거북이투자전문가님, 4월 20일 월요일 새벽 1시 40분입니다. 새로운 한 주가 시작되는 장 개시 전, StockDragonfly의 지휘관으로서 꼭 숙지해야 할 본데 50선의 핵심 운용 원칙을 요점 정리해 드립니다.</p>
-                </div>
-                
-                <div style='background: rgba(255,255,255,0.03); padding: 20px; border-radius: 15px; margin-top: 20px;'>
-                    <h4 style='color: #EEE;'>1. 상위 주식 vs 하위 주식의 의미</h4>
-                    <p style='color: #CCC;'>전문가님의 스프레드시트 순위는 모멘텀의 강도와 A+ 셋업 완성도를 나노 단위로 점수화한 결과입니다.</p>
-                    <ul style='color: #BBB;'>
-                        <li><b>상위 주식 (TOP 1~10):</b> 현재 시장에서 가장 강력한 대장주(Leader)들입니다. 이미 폭발적인 거래량과 함께 신고가를 경신하며 안티그래비티 상태에 진입한 종목들로, 시장의 모든 자금을 빨아들이고 있습니다.</li>
-                        <li><b>하위 주식:</b> 주도주가 될 잠재력은 충분하지만, 아직 에너지를 응축(횡보)하고 있거나 기관의 매집(Accumulation) 단계에 있는 종목들입니다. 이들이 상위 순위로 치고 올라올 때가 진짜 정석 타점입니다.</li>
-                    </ul>
+<div class='glass-card' style='border-left: 5px solid #FFD700;'>
+    <h3 style='color: #FFD700; margin-top: 0;'>🚁 StockDragonfly 지휘 지침: 본데 50선 실전 매뉴얼</h3>
+    <p style='color: #AAA; font-size: 0.95rem;'>거북이투자전문가님, 4월 20일 월요일 새벽 1시 40분입니다. 새로운 한 주가 시작되는 장 개시 전, StockDragonfly의 지휘관으로서 꼭 숙지해야 할 본데 50선의 핵심 운용 원칙을 요점 정리해 드립니다.</p>
+</div>
 
-                    <h4 style='color: #EEE; margin-top: 30px;'>2. 매수 진단 프로토콜 (The Entry Protocol)</h4>
-                    <p style='color: #CCC;'>대가들은 급등할 때 사지 말고, 힘을 모을 때를 노려라고 했습니다. 전문가님의 원칙대로 VCP 최종 단계를 포착해야 합니다.</p>
-                    <ul style='color: #BBB;'>
-                        <li><b>불합격:</b> 거래량이 터지며 20~30% 급등한 직후에 추격 매수하는 것은 불합격입니다. 이는 중력에 노출되는 가장 위험한 행동입니다.</li>
-                        <li><b>합격 (The Tightness):</b> 급등 후 주가가 옆으로 기어가며(횡보) 힘을 모으는 구간을 기다리세요. 캔들의 크기가 깨알처럼 작아지고, 거래량이 먼지처럼 말라붙는 Dry-up 현상이 나타날 때가 A+ 셋업입니다.</li>
-                        <li><b>정석 타점:</b> 이 응축 구간이 끝나고, 전고점(Pivot)을 아주 작은 거래량으로도 뚫어버리기 직전이나, 뚫어내는 첫 번째 거래량 폭발 시점이 무중력 상태로 날아오르는 순간입니다.</li>
-                    </ul>
+<div style='background: rgba(255,255,255,0.03); padding: 20px; border-radius: 15px; margin-top: 20px;'>
+    <h4 style='color: #EEE;'>1. 상위 주식 vs 하위 주식의 의미</h4>
+    <p style='color: #CCC;'>전문가님의 스프레드시트 순위는 모멘텀의 강도와 A+ 셋업 완성도를 나노 단위로 점수화한 결과입니다.</p>
+    <ul style='color: #BBB;'>
+        <li><b>상위 주식 (TOP 1~10):</b> 현재 시장에서 가장 강력한 대장주(Leader)들입니다. 이미 폭발적인 거래량과 함께 신고가를 경신하며 안티그래비티 상태에 진입한 종목들로, 시장의 모든 자금을 빨아들이고 있습니다.</li>
+        <li><b>하위 주식:</b> 주도주가 될 잠재력은 충분하지만, 아직 에너지를 응축(횡보)하고 있거나 기관의 매집(Accumulation) 단계에 있는 종목들입니다. 이들이 상위 순위로 치고 올라올 때가 진짜 정석 타점입니다.</li>
+    </ul>
 
-                    <h4 style='color: #EEE; margin-top: 30px;'>3. 리스크 방패 및 손절 지지선 (The Exit Shield)</h4>
-                    <p style='color: #CCC;'>안티그래비티 시스템의 가장 강력한 지지선은 기계적인 손절입니다. 본데는 나쁜 직원은 즉시 해고하라고 했습니다.</p>
-                    <ul style='color: #BBB;'>
-                        <li><b>시간 손절:</b> 매수 후 3일 동안 주가가 옆으로 기거나 반응이 없다면, 전문가님의 판단이 틀렸거나 시장의 관심이 떠난 것입니다. 미련 없이 매도하여 현금을 확보하십시오.</li>
-                        <li><b>가격 손절:</b> 매수가 대비 -3% 이하로 떨어지면, 시스템은 즉시 자동 매도 주문을 실행합니다. 이는 더 큰 손실로부터 전문가님의 자산을 무중력 상태로 보호하는 최후의 방어선입니다.</li>
-                    </ul>
-                </div>
-                """, unsafe_allow_html=True)
+    <h4 style='color: #EEE; margin-top: 30px;'>2. 매수 진단 프로토콜 (The Entry Protocol)</h4>
+    <p style='color: #CCC;'>대가들은 급등할 때 사지 말고, 힘을 모을 때를 노려라고 했습니다. 전문가님의 원칙대로 VCP 최종 단계를 포착해야 합니다.</p>
+    <ul style='color: #BBB;'>
+        <li><b>불합격:</b> 거래량이 터지며 20~30% 급등한 직후에 추격 매수하는 것은 불합격입니다. 이는 중력에 노출되는 가장 위험한 행동입니다.</li>
+        <li><b>합격 (The Tightness):</b> 급등 후 주가가 옆으로 기어가며(횡보) 힘을 모으는 구간을 기다리세요. 캔들의 크기가 깨알처럼 작아지고, 거래량이 먼지처럼 말라붙는 Dry-up 현상이 나타날 때가 A+ 셋업입니다.</li>
+        <li><b>정석 타점:</b> 이 응축 구간이 끝나고, 전고점(Pivot)을 아주 작은 거래량으로도 뚫어버리기 직전이나, 뚫어내는 첫 번째 거래량 폭발 시점이 무중력 상태로 날아오르는 순간입니다.</li>
+    </ul>
+
+    <h4 style='color: #EEE; margin-top: 30px;'>3. 리스크 방패 및 손절 지지선 (The Exit Shield)</h4>
+    <p style='color: #CCC;'>안티그래비티 시스템의 가장 강력한 지지선은 기계적인 손절입니다. 본데는 나쁜 직원은 즉시 해고하라고 했습니다.</p>
+    <ul style='color: #BBB;'>
+        <li><b>시간 손절:</b> 매수 후 3일 동안 주가가 옆으로 기거나 반응이 없다면, 전문가님의 판단이 틀렸거나 시장의 관심이 떠난 것입니다. 미련 없이 매도하여 현금을 확보하십시오.</li>
+        <li><b>가격 손절:</b> 매수가 대비 -3% 이하로 떨어지면, 시스템은 즉시 자동 매도 주문을 실행합니다. 이는 더 큰 손실로부터 전문가님의 자산을 무중력 상태로 보호하는 최후의 방어선입니다.</li>
+    </ul>
+</div>
+""", unsafe_allow_html=True)
                 
                 st.success(f"✅ {now_kst.strftime('%H:%M')} 한국 시간 기준 동기화 완료!")
         except Exception as e:
