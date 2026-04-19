@@ -219,7 +219,7 @@ def gsheet_sync(sheet_name, headers, values):
     try: requests.post(MASTER_GAS_URL, json=payload, timeout=5)
     except: pass
 
-st.set_page_config(page_title="StockDragonfly Pro", page_icon="🐉", layout="wide")
+st.set_page_config(page_title="StockDragonfly Pro", page_icon="🔴", layout="wide")
 
 # --- 🌑 프리미엄 스타일 디자인 ---
 bg_b64 = ""
@@ -299,7 +299,7 @@ if "password_correct" not in st.session_state: st.session_state["password_correc
 if not st.session_state["password_correct"]:
     c1, m, c2 = st.columns([1, 2, 1])
     with m:
-        st.markdown("<div class='main-title'>🐉 StockDragonfly</div>", unsafe_allow_html=True)
+        st.markdown("<div class='main-title'>StockDragonfly</div>", unsafe_allow_html=True)
         if os.path.exists("StockDragonfly.png"): 
             st.image("StockDragonfly.png", use_container_width=True)
         if "show_notice" not in st.session_state: st.session_state["show_notice"] = True
@@ -427,7 +427,7 @@ if not st.session_state["password_correct"]:
 
 with st.sidebar:
     if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png")
-    st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🐉 StockDragonfly v9.9</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🔴 StockDragonfly v9.9</p>", unsafe_allow_html=True)
     
     # 거시지표 표시
     macro_info = get_macro_indicators()
@@ -481,7 +481,7 @@ curr_user_data = users.get(st.session_state.current_user, {})
 curr_grade = curr_user_data.get("grade", "회원")
 is_admin = (curr_grade in ["관리자", "방장"])
 
-# --- 🐉 2단계 구성 (ZONE_CONFIG 참조) ---
+# --- 🔴 2단계 구성 (ZONE_CONFIG 참조) ---
 if 'page' not in st.session_state:
     st.session_state.page = "6-a. 📌 출석체크(오늘한줄)"
 
@@ -498,7 +498,7 @@ if curr_grade not in ["방장", "관리자", "정회원", "준회원"]:
         del zones["🤖 7. 자동매매 사령부"]
 
 with st.sidebar:
-    st.markdown("<p style='color: #FFD700; font-size: 0.9rem; font-weight: 700; margin-top: 10px; margin-bottom: 20px; letter-spacing: 1px;'>🐉 MISSION CONTROL</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #FFD700; font-size: 0.9rem; font-weight: 700; margin-top: 10px; margin-bottom: 20px; letter-spacing: 1px;'>🔴 MISSION CONTROL</p>", unsafe_allow_html=True)
     
     for zone_name, missions in zones.items():
         is_active_zone = st.session_state.page in missions
@@ -516,7 +516,7 @@ c_logo1, c_logo2, c_logo3 = st.columns([1, 2, 1])
 with c_logo2:
     if os.path.exists("StockDragonfly.png"): 
         st.image("StockDragonfly.png", use_container_width=True)
-    st.markdown("<div class='main-title' style='font-size: 3rem;'>🐉 StockDragonfly</div>", unsafe_allow_html=True)
+    st.markdown("<div class='main-title' style='font-size: 3rem;'>StockDragonfly</div>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #888; letter-spacing: 5px; margin-top: -10px;'>INSTITUTIONAL GRADE TRADING TERMINAL</p>", unsafe_allow_html=True)
 
 # --- 🐉 전광판 티커 테이프 ---
