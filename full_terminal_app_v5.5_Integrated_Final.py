@@ -1501,6 +1501,13 @@ elif page.startswith("5-e."):
     
     if not os.path.exists(PROFIT_FILE):
         pd.DataFrame(columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"]).to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
+    else:
+        # 헤더 정합성 체크 (ID 컬럼 누락 방지)
+        temp_df = pd.read_csv(PROFIT_FILE, nrows=0)
+        if "ID" not in temp_df.columns:
+            old_df = pd.read_csv(PROFIT_FILE)
+            old_df.insert(0, "ID", [f"P_{int(time.time())}_{i}" for i in range(len(old_df))])
+            old_df.to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
     if not os.path.exists(COMMENTS_FILE):
         pd.DataFrame(columns=["PostID", "시간", "작성자", "내용"]).to_csv(COMMENTS_FILE, index=False, encoding="utf-8-sig")
 
@@ -1533,29 +1540,61 @@ elif page.startswith("5-e."):
         cdf = pd.read_csv(COMMENTS_FILE, encoding="utf-8-sig")
         if not pdf.empty:
             for _, row in pdf.iloc[::-1].iterrows():
-                pid = row['ID']
-                st.markdown(f"""
-                <div style='background: rgba(0,255,0,0.03); border: 1px solid #00FF0033; border-radius: 12px; padding: 20px; margin-bottom: 10px;'>
-                    <div style='display: flex; justify-content: space-between;'>
-                        <b style='color: #FFD700; font-size: 1.1rem;'>🎖️ {row['아이디']} 대원의 승전보</b>
-                        <span style='color: #888; font-size: 0.8rem;'>{row['시간']}</span>
-                    </div>
-                    <div style='margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;'>
-                        <div style='text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;'>
-                            <small style='color: #888;'>대상 종목</small><br><b style='color: #EEE;'>{row['종목']}</b>
+                # 작성자 또는 관리자만 수정/삭제 가능
+                is_owner = (st.session_state.current_user == row['아이디']) or is_admin
+                
+                # 수정 모드 체크
+                edit_key = f"edit_p_{pid}"
+                if st.session_state.get(edit_key):
+                    with st.form(f"form_edit_{pid}"):
+                        e_roi = st.text_input("수익률 수정", value=row['수익률'])
+                        e_val = st.text_input("수익금 수정", value=row['수익금'])
+                        e_msg = st.text_area("소감 수정", value=row['포부'])
+                        c_edit1, c_edit2 = st.columns(2)
+                        if c_edit1.form_submit_button("💾 저장"):
+                            temp_df = pd.read_csv(PROFIT_FILE, encoding="utf-8-sig")
+                            temp_df.loc[temp_df['ID'] == pid, ['수익률', '수익금', '포부']] = [e_roi, e_val, e_msg]
+                            temp_df.to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
+                            del st.session_state[edit_key]
+                            st.rerun()
+                        if c_edit2.form_submit_button("❌ 취소"):
+                            del st.session_state[edit_key]
+                            st.rerun()
+                else:
+                    st.markdown(f"""
+                    <div style='background: rgba(0,255,0,0.03); border: 1px solid #00FF0033; border-radius: 12px; padding: 20px; margin-bottom: 10px;'>
+                        <div style='display: flex; justify-content: space-between;'>
+                            <b style='color: #FFD700; font-size: 1.1rem;'>🎖️ {row['아이디']} 대원의 승전보</b>
+                            <span style='color: #888; font-size: 0.8rem;'>{row['시간']} { ' (관리자)' if is_admin and not (st.session_state.current_user == row['아이디']) else '' }</span>
                         </div>
-                        <div style='text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;'>
-                            <small style='color: #888;'>확정 수익률</small><br><b style='color: #FF4B4B;'>{row['수익률']}</b>
+                        <div style='margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;'>
+                            <div style='text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;'>
+                                <small style='color: #888;'>대상 종목</small><br><b style='color: #EEE;'>{row['종목']}</b>
+                            </div>
+                            <div style='text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;'>
+                                <small style='color: #888;'>확정 수익률</small><br><b style='color: #FF4B4B;'>{row['수익률']}</b>
+                            </div>
+                            <div style='text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;'>
+                                <small style='color: #888;'>실현 수익금</small><br><b style='color: #00FF00;'>{row['수익금']}</b>
+                            </div>
                         </div>
-                        <div style='text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;'>
-                            <small style='color: #888;'>실현 수익금</small><br><b style='color: #00FF00;'>{row['수익금']}</b>
+                        <div style='margin-top: 15px; padding: 10px; border-top: 1px solid rgba(255,255,255,0.05); color: #CCC;'>
+                            💬 {row['포부']}
                         </div>
                     </div>
-                    <div style='margin-top: 15px; padding: 10px; border-top: 1px solid rgba(255,255,255,0.05); color: #CCC;'>
-                        💬 {row['포부']}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
+                    
+                    if is_owner:
+                        o_col1, o_col2, o_col3 = st.columns([1, 1, 6])
+                        if o_col1.button("📝 수정", key=f"edit_btn_{pid}", use_container_width=True):
+                            st.session_state[edit_key] = True
+                            st.rerun()
+                        if o_col2.button("🗑️ 삭제", key=f"del_btn_{pid}", use_container_width=True):
+                            temp_df = pd.read_csv(PROFIT_FILE, encoding="utf-8-sig")
+                            temp_df = temp_df[temp_df['ID'] != pid]
+                            temp_df.to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
+                            st.warning("항목이 삭제되었습니다.")
+                            st.rerun()
                 
                 # 댓글 섹션
                 with st.container():
@@ -1582,6 +1621,13 @@ elif page.startswith("5-f."):
     
     if not os.path.exists(LOSS_FILE):
         pd.DataFrame(columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"]).to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
+    else:
+        # 헤더 정합성 체크 (ID 컬럼 누락 방지)
+        temp_df = pd.read_csv(LOSS_FILE, nrows=0)
+        if "ID" not in temp_df.columns:
+            old_df = pd.read_csv(LOSS_FILE)
+            old_df.insert(0, "ID", [f"L_{int(time.time())}_{i}" for i in range(len(old_df))])
+            old_df.to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
     if not os.path.exists(COMMENTS_FILE):
         pd.DataFrame(columns=["PostID", "시간", "작성자", "내용"]).to_csv(COMMENTS_FILE, index=False, encoding="utf-8-sig")
 
@@ -1617,20 +1663,54 @@ elif page.startswith("5-f."):
         if not ldf.empty:
             for _, row in ldf.iloc[::-1].iterrows():
                 pid = row['ID']
-                st.markdown(f"""
-                <div style='background: rgba(255,255,255,0.02); border: 1px solid #6366f133; border-radius: 12px; padding: 20px; margin-bottom: 10px;'>
-                    <div style='display: flex; justify-content: space-between;'>
-                        <b style='color: #6366f1;'>🩹 {row['아이디']} 대원에게 따뜻한 위로를</b>
-                        <span style='color: #888; font-size: 0.8rem;'>{row['시간']}</span>
+                is_owner = (st.session_state.current_user == row['아이디']) or is_admin
+                
+                edit_key = f"edit_l_{pid}"
+                if st.session_state.get(edit_key):
+                    with st.form(f"form_ledit_{pid}"):
+                        e_lroi = st.text_input("손실률 수정", value=row['손실률'])
+                        e_lreason = st.selectbox("사유 수정", [
+                            "추격 매수 (FOMO)", "손절 지연 (희망고문)", "원칙 외 매매 (뇌동매매)", 
+                            "비중 과다 (몰빵)", "지수 급락 대응 실패", "기타 전술적 오류"
+                        ], index=0)
+                        e_lmsg = st.text_area("복기 수정", value=row['다짐'])
+                        cl_edit1, cl_edit2 = st.columns(2)
+                        if cl_edit1.form_submit_button("💾 저장"):
+                            temp_df = pd.read_csv(LOSS_FILE, encoding="utf-8-sig")
+                            temp_df.loc[temp_df['ID'] == pid, ['손실률', '원인', '다짐']] = [e_lroi, e_lreason, e_lmsg]
+                            temp_df.to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
+                            del st.session_state[edit_key]
+                            st.rerun()
+                        if cl_edit2.form_submit_button("❌ 취소"):
+                            del st.session_state[edit_key]
+                            st.rerun()
+                else:
+                    st.markdown(f"""
+                    <div style='background: rgba(255,255,255,0.02); border: 1px solid #6366f133; border-radius: 12px; padding: 20px; margin-bottom: 10px;'>
+                        <div style='display: flex; justify-content: space-between;'>
+                            <b style='color: #6366f1;'>🩹 {row['아이디']} 대원에게 따뜻한 위로를</b>
+                            <span style='color: #888; font-size: 0.8rem;'>{row['시간']}</span>
+                        </div>
+                        <div style='margin-top: 12px; font-size: 0.95rem; color: #BBB;'>
+                            🎬 <b>{row['종목']}</b> 종목에서 <b>{row['손실률']}</b> 손실 기록 (<span style='color: #FF4B4B;'>사유: {row['원인']}</span>)
+                        </div>
+                        <div style='margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.2); border-left: 3px solid #6366f1; color: #DDD; font-size: 0.95rem; font-style: italic;'>
+                            "{row['다짐']}"
+                        </div>
                     </div>
-                    <div style='margin-top: 12px; font-size: 0.95rem; color: #BBB;'>
-                        🎬 <b>{row['종목']}</b> 종목에서 <b>{row['손실률']}</b> 손실 기록 (<span style='color: #FF4B4B;'>사유: {row['원인']}</span>)
-                    </div>
-                    <div style='margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.2); border-left: 3px solid #6366f1; color: #DDD; font-size: 0.95rem; font-style: italic;'>
-                        "{row['다짐']}"
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
+                    
+                    if is_owner:
+                        ol_col1, ol_col2, ol_col3 = st.columns([1, 1, 6])
+                        if ol_col1.button("📝 수정", key=f"ledit_btn_{pid}", use_container_width=True):
+                            st.session_state[edit_key] = True
+                            st.rerun()
+                        if ol_col2.button("🗑️ 삭제", key=f"ldel_btn_{pid}", use_container_width=True):
+                            temp_df = pd.read_csv(LOSS_FILE, encoding="utf-8-sig")
+                            temp_df = temp_df[temp_df['ID'] != pid]
+                            temp_df.to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
+                            st.warning("복기 내역이 삭제되었습니다.")
+                            st.rerun()
 
                 # 댓글 섹션
                 with st.container():
