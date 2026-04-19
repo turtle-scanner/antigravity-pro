@@ -47,6 +47,9 @@ REVERSE_TICKER_MAP = {v: k for k, v in TICKER_NAME_MAP.items()}
 
 def resolve_ticker(query):
     query = query.strip()
+    # 6자리 숫자면 한국 주식 코드로 처리
+    if query.isdigit() and len(query) == 6: return query + ".KS"
+    
     if query in TICKER_NAME_MAP: return query
     if query.upper() in TICKER_NAME_MAP: return query.upper()
     if query in REVERSE_TICKER_MAP: return REVERSE_TICKER_MAP[query]
@@ -206,9 +209,12 @@ ZONE_CONFIG = {
 def load_trades():
     if os.path.exists(TRADES_DB):
         try:
-            with open(TRADES_DB, "r", encoding="utf-8") as f: return json.load(f)
-        except: return {"mock": [], "auto": []}
-    return {"mock": [], "auto": []}
+            with open(TRADES_DB, "r", encoding="utf-8") as f: 
+                data = json.load(f)
+                if "wallets" not in data: data["wallets"] = {}
+                return data
+        except: return {"mock": [], "auto": [], "history": [], "wallets": {}}
+    return {"mock": [], "auto": [], "history": [], "wallets": {}}
 
 def save_trades(trades):
     with open(TRADES_DB, "w", encoding="utf-8") as f:
@@ -221,10 +227,21 @@ def gsheet_sync(sheet_name, headers, values):
 
 st.set_page_config(page_title="StockDragonfly Pro", page_icon="🔴", layout="wide")
 
+# 모바일 감지 (간이)
+if "is_mobile" not in st.session_state:
+    st.session_state.is_mobile = False
+
 # --- 🌑 프리미엄 스타일 디자인 ---
 bg_b64 = ""
+logo_b64 = ""
 if os.path.exists("StockDragonfly2.png"):
     with open("StockDragonfly2.png", "rb") as imm: bg_b64 = base64.b64encode(imm.read()).decode()
+else: # Fallback to StockDragonfly if 2 is missing
+    if os.path.exists("StockDragonfly.png"):
+        with open("StockDragonfly.png", "rb") as imm: bg_b64 = base64.b64encode(imm.read()).decode()
+
+if os.path.exists("StockDragonfly.png"):
+    with open("StockDragonfly.png", "rb") as f: logo_b64 = base64.b64encode(f.read()).decode()
 
 st.markdown(f"""
     <style>
@@ -283,12 +300,26 @@ st.markdown(f"""
         text-align: left !important;
         padding: 0px 10px !important;
     }}
-    /* 배너(Expander) 헤더 강제 한 줄 고정 */
+    /* 📱 모바일 최적화 (S23 등 스마트폰 대응) */
+    @media (max-width: 768px) {{
+        .main-title {{ font-size: 2.5rem !important; }}
+        .glass-card {{ padding: 15px !important; margin-bottom: 15px !important; }}
+        h1, h2 {{ font-size: 1.5rem !important; }}
+        .ticker-item {{ margin: 0 20px !important; font-size: 0.8rem !important; }}
+        [data-testid="stSidebar"] {{ width: 85vw !important; }}
+        /* 버튼 터치 영역 확대 */
+        .stButton button {{ padding: 12px 15px !important; font-size: 0.9rem !important; }}
+    }}
+    
+    /* 배너(Expander) 헤더 강제 한 줄 고정 및 모바일 대응 */
     .st-expanderHeader {{ 
         font-size: 0.88rem !important; 
         white-space: nowrap !important; 
         overflow: hidden !important;
         text-overflow: ellipsis !important;
+    }}
+    @media (max-width: 768px) {{
+        .st-expanderHeader {{ font-size: 0.95rem !important; padding: 10px !important; }}
     }}
     .st-expanderHeader > div {{ white-space: nowrap !important; }}
     </style>
@@ -297,10 +328,13 @@ st.markdown(f"""
 # --- 인증 & 사이드바 ---
 if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 if not st.session_state["password_correct"]:
-    c1, m, c2 = st.columns([1, 2, 1])
+    # 모바일에서는 컬럼 비율 조정
+    c1, m, c2 = st.columns([0.1, 0.8, 0.1]) if st.session_state.get("is_mobile", False) else st.columns([1, 2, 1])
     with m:
         st.markdown("<div class='main-title'>StockDragonfly</div>", unsafe_allow_html=True)
-        if os.path.exists("StockDragonfly.png"): 
+        if logo_b64:
+            st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:15px; margin-bottom:20px;">', unsafe_allow_html=True)
+        elif os.path.exists("StockDragonfly.png"): 
             st.image("StockDragonfly.png", use_container_width=True)
         if "show_notice" not in st.session_state: st.session_state["show_notice"] = True
         
@@ -426,7 +460,10 @@ if not st.session_state["password_correct"]:
     st.stop()
 
 with st.sidebar:
-    if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png")
+    if logo_b64:
+        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:10px; margin-bottom:10px;">', unsafe_allow_html=True)
+    elif os.path.exists("StockDragonfly.png"): 
+        st.image("StockDragonfly.png")
     st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🔴 StockDragonfly v9.9</p>", unsafe_allow_html=True)
     
     # 거시지표 표시
@@ -511,10 +548,12 @@ with st.sidebar:
 # 최종 선택된 미션을 page 변수에 할당하여 본문 렌더링
 page = st.session_state.page
 
-# --- 🐉 상단 브랜드 헤더 ---
+# --- 🔴 상단 브랜드 헤더 ---
 c_logo1, c_logo2, c_logo3 = st.columns([1, 2, 1])
 with c_logo2:
-    if os.path.exists("StockDragonfly.png"): 
+    if logo_b64:
+        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:15px; margin-bottom:10px;">', unsafe_allow_html=True)
+    elif os.path.exists("StockDragonfly.png"): 
         st.image("StockDragonfly.png", use_container_width=True)
     st.markdown("<div class='main-title' style='font-size: 3rem;'>StockDragonfly</div>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #888; letter-spacing: 5px; margin-top: -10px;'>INSTITUTIONAL GRADE TRADING TERMINAL</p>", unsafe_allow_html=True)
@@ -1791,6 +1830,23 @@ elif page.startswith("7-a."):
     st.header("🚀 모의투자 매수 테스트 (Unit Deployment)")
     st.markdown("<div class='glass-card'>실시간 주가 데이터를 기반으로 가상의 매수 작전을 집행합니다.</div>", unsafe_allow_html=True)
     
+    trades = load_trades()
+    uid = st.session_state.current_user
+    if uid not in trades["wallets"]:
+        trades["wallets"][uid] = 10000000.0 # 1000만원 시드머니 지급
+        save_trades(trades)
+    
+    curr_balance = trades["wallets"][uid]
+    EX_RATE = 1400 # KRW/USD 고정 환율 적용 (모의투자용)
+    
+    st.markdown(f"""
+    <div class='glass-card' style='border-left: 5px solid #FFD700;'>
+        <h4 style='margin:0;'>💰 현재 가용 예수금: <span style='color:#FFD700;'>{curr_balance:,.0f} KRW</span></h4>
+        <p style='margin:0; font-size:0.8rem; color:#888;'>초기 시드머니 1,000만원이 대원님께 지급되었습니다.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.write("")
+    
     with st.form("mock_buy_form"):
         col1, col2, col3 = st.columns(3)
         with col1: ticker = st.text_input("종목 코드 (예: TSLA)", value="TSLA").upper()
@@ -1803,56 +1859,140 @@ elif page.startswith("7-a."):
                 if data.empty:
                     st.error("종목 정보를 찾을 수 없습니다. 티커를 확인해 주세요.")
                 else:
-                    curr_p = float(data['Close'].iloc[-1])
-                    trades = load_trades()
-                    new_trade = {
-                        "id": str(int(time.time())),
-                        "user": st.session_state.current_user,
-                        "ticker": ticker,
-                        "buy_price": curr_p,
-                        "amount": amount,
-                        "strategy": strategy,
-                        "date": datetime.now().strftime("%Y-%m-%d %H:%M")
-                    }
-                    trades["mock"].append(new_trade)
-                    save_trades(trades)
-                    st.success(f"✅ {ticker} 종목을 {curr_p:,.2f}$에 {amount}주 매수 완료했습니다! (TRADES_DB 저장)")
-                    st.balloons()
+                    curr_p_raw = float(data['Close'].iloc[-1])
+                    is_kr_stock = ticker.endswith(".KS") or ticker.endswith(".KQ")
+                    
+                    if is_kr_stock:
+                        total_cost_krw = curr_p_raw * amount
+                        unit_symbol = "원"
+                    else:
+                        total_cost_krw = curr_p_raw * amount * EX_RATE
+                        unit_symbol = "$"
+                    
+                    if curr_balance < total_cost_krw:
+                        st.error(f"❌ 잔액이 부족합니다. (필요: {total_cost_krw:,.0f} KRW / 잔액: {curr_balance:,.0f} KRW)")
+                    else:
+                        trades["wallets"][uid] -= total_cost_krw
+                        new_trade = {
+                            "id": str(int(time.time())),
+                            "user": uid,
+                            "ticker": ticker,
+                            "buy_price": curr_p_raw,
+                            "amount": amount,
+                            "strategy": strategy,
+                            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            "is_kr": is_kr_stock
+                        }
+                        trades["mock"].append(new_trade)
+                        save_trades(trades)
+                        price_display = f"{curr_p_raw:,.0f}원" if is_kr_stock else f"{curr_p_raw:,.2f}$"
+                        st.success(f"✅ {ticker} 종목 {amount}주를 {price_display}에 매수 완료했습니다! (총 {total_cost_krw:,.0f} KRW 차감)")
+                        st.balloons()
+                        time.sleep(1)
+                        st.rerun()
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
 elif page.startswith("7-b."):
     st.header("📊 모의투자 현황 및 결과 (Tactical Dashboard)")
     trades = load_trades()
-    user_trades = [t for t in trades["mock"] if t["user"] == st.session_state.current_user]
+    uid = st.session_state.current_user
+    user_trades = [t for t in trades["mock"] if t["user"] == uid]
+    EX_RATE = 1400 # 고정 환율
+
+    if uid not in trades["wallets"]:
+        trades["wallets"][uid] = 10000000.0
+        save_trades(trades)
     
+    st.markdown(f"""
+    <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid #FFD700; margin-bottom: 20px;'>
+        <span style='color: #AAA;'>🏦 가상 사령부 금고 잔고 (예수금):</span> 
+        <b style='color: #FFD700; font-size: 1.2rem; margin-left: 10px;'>{trades['wallets'][uid]:,.0f} KRW</b>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.subheader("📡 현재 보유 중인 가상 포트폴리오")
     if not user_trades:
-        st.info("현재 보유 중인 가상 포트폴리오가 없습니다. 7-a에서 매수를 진행해 주세요.")
+        st.info("현재 보유 중인 가상 종목이 없습니다. 7-a에서 매수를 진행해 주세요.")
     else:
         results = []
-        with st.spinner("현재가 불러오는 중..."):
+        ticker_total_value = 0
+        with st.spinner("가상 사령부 실시간 주가 동기화 중..."):
             tickers = list(set([t['ticker'] for t in user_trades]))
             if tickers:
                 data_batch = yf.download(tickers, period="1d", progress=False)['Close']
                 if isinstance(data_batch, pd.Series): data_batch = pd.DataFrame(data_batch).T
                 
-                for t in user_trades:
+                for i, t in enumerate(user_trades):
                     try:
                         tic = t['ticker']
-                        curr_p = float(data_batch[tic].iloc[-1]) if tic in data_batch.columns else t['buy_price']
-                        profit = (curr_p - t['buy_price']) * t['amount']
-                        roi = ((curr_p / t['buy_price']) - 1) * 100
-                        results.append({
-                            "날짜": t['date'], "종목": t['ticker'], "매수가": t['buy_price'], 
-                            "현재가": curr_p, "수량": t['amount'], "수익금": round(profit, 2), "수익률(%)": round(roi, 2)
-                        })
+                        curr_p_raw = float(data_batch[tic].iloc[-1]) if tic in data_batch.columns else t['buy_price']
+                        is_kr = t.get("is_kr", tic.endswith(".KS") or tic.endswith(".KQ"))
+                        
+                        if is_kr:
+                            cost_krw = t['buy_price'] * t['amount']
+                            curr_val_krw = curr_p_raw * t['amount']
+                            price_display = f"{curr_p_raw:,.0f}원"
+                        else:
+                            cost_krw = t['buy_price'] * t['amount'] * EX_RATE
+                            curr_val_krw = curr_p_raw * t['amount'] * EX_RATE
+                            price_display = f"${curr_p_raw:,.2f}"
+                        
+                        profit_krw = curr_val_krw - cost_krw
+                        roi = ((curr_p_raw / t['buy_price']) - 1) * 100
+                        ticker_total_value += curr_val_krw
+
+                        c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1])
+                        c1.write(f"**{tic}**")
+                        c2.write(f"{t['amount']}주")
+                        c3.write(price_display)
+                        
+                        res_color = "#FF4B4B" if profit_krw > 0 else "#6366f1"
+                        c4.markdown(f"<span style='color:{res_color}; font-weight:700;'>{profit_krw:+,.0f} 원 ({roi:+.2f}%)</span>", unsafe_allow_html=True)
+                        
+                        if c5.button("🔒 매도", key=f"sell_{t['id']}_{i}"):
+                            # 매도 처리: 예수금으로 환전 입급
+                            trades["wallets"][uid] += curr_val_krw
+                            sell_record = t.copy()
+                            sell_record["sell_price"] = curr_p_raw
+                            sell_record["final_profit_krw"] = profit_krw
+                            sell_record["date_sold"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            sell_record["is_kr"] = is_kr
+                            
+                            trades["history"].append(sell_record)
+                            trades["mock"] = [trade for trade in trades["mock"] if trade["id"] != t["id"]]
+                            save_trades(trades)
+                            st.success(f"✅ {tic} 매도 완료! {curr_val_krw:,.0f} KRW가 입금되었습니다.")
+                            time.sleep(1)
+                            st.rerun()
                     except: pass
         
-        df = pd.DataFrame(results)
-        st.dataframe(df.style.applymap(lambda x: 'color: #ff4b4b' if x > 0 else ('color: #6366f1' if x < 0 else ''), subset=['수익금', '수익률(%)']), use_container_width=True)
+        st.markdown(f"""
+        <div class='glass-card' style='border-top: 3px solid #00FF00; margin-top: 20px;'>
+            <h3 style='margin:0;'>🏛️ 총 자산 평가액: <span style='color:#00FF00;'>{(trades['wallets'][uid] + ticker_total_value):,.0f} KRW</span></h3>
+            <p style='margin:0; font-size:0.9rem; color:#888;'>예수금({trades['wallets'][uid]:,.0f}) + 주식평가({ticker_total_value:,.0f})</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader("📝 가상매매 종결 내역 (Sell History)")
+    user_history = [t for t in trades.get("history", []) if t["user"] == st.session_state.current_user]
+    if user_history:
+        h_df = pd.DataFrame(user_history)
+        h_df = h_df[["date", "date_sold", "ticker", "buy_price", "sell_price", "amount", "final_profit_krw"]]
+        h_df.columns = ["매수일시", "매도일시", "종목", "매수가($)", "매도가($)", "수량", "확정수익(원)"]
         
-        total_profit = df['수익금'].sum()
-        st.metric("총 합계 수익", f"${total_profit:,.2f}", f"{total_profit/100:.2f}%")
+        def color_profit(val):
+            color = '#ff4b4b' if val > 0 else '#6366f1' if val < 0 else 'white'
+            return f'color: {color}; font-weight: bold;'
+
+        st.dataframe(h_df.style.applymap(color_profit, subset=["확정수익(원)"]), use_container_width=True)
+        
+        total_p = h_df["확정수익(원)"].sum()
+        p_color = "🔴" if total_p > 0 else "🔵"
+        st.markdown(f"### {p_color} 총 누적 실현 수익: <span style='color:{('#ff4b4b' if total_p > 0 else '#6366f1')};'>{total_p:+,.0f} 원</span>", unsafe_allow_html=True)
+    else:
+        st.info("아직 매도 종결된 내역이 없습니다.")
 
 elif page.startswith("7-c."):
     st.header("⚙️ 자동매매 전략 엔진 (Autonomous Engine)")
@@ -1952,7 +2092,12 @@ elif page.startswith("7-e."):
                 uid = t['user']
                 curr_p = prices.get(t['ticker'], 0)
                 if curr_p == 0: curr_p = t['buy_price'] # 가격 정보 없으면 매수가로 대체
-                profit = (curr_p - t['buy_price']) * t['amount']
+                
+                is_kr = t.get("is_kr", t['ticker'].endswith(".KS") or t['ticker'].endswith(".KQ"))
+                if is_kr:
+                    profit = (curr_p - t['buy_price']) * t['amount']
+                else:
+                    profit = (curr_p - t['buy_price']) * t['amount'] * 1400 # KRW 환산
                 
                 if uid not in user_stats:
                     user_stats[uid] = {"total_profit": 0, "trade_count": 0}
