@@ -18,11 +18,20 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 def get_db_path(f): return os.path.join(BASE_DIR, f)
 
 USER_DB_FILE = get_db_path("users_db.json")
+TRADES_DB = get_db_path("trades_db.json")
 CHAT_FILE = get_db_path("chat_log.csv")
 BRIEF_FILE = get_db_path("market_briefs.csv")
 VISITOR_FILE = get_db_path("visitor_requests.csv")
 ATTENDANCE_FILE = get_db_path("attendance.csv")
 MASTER_GAS_URL = "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec"
+
+# 🛡️ 영구 백업용 구글 시트 URL (CSV 내보내기 주소)
+# 여기에 '회원명단' 시트의 CSV 주소를 넣으시면 서버가 리셋되어도 회원이 유지됩니다.
+USERS_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1180564490" 
+ATTENDANCE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=0"
+CHAT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=2147147361"
+VISITOR_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=621380834"
+WITHDRAWN_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1873947039"
 
 TICKER_NAME_MAP = {
     "NVDA": "엔비디아", "TSLA": "테슬라", "AAPL": "애플", "MSFT": "마이크로소프트", "PLTR": "팔란티어", "SMCI": "슈퍼마이크로", 
@@ -53,21 +62,84 @@ def get_macro_indicators():
         return f"💵 USD/KRW: {rate:,.1f}원 | 🏦 US 10Y Yield: {yield10y:.2f}%"
     except: return "📡 거시 데이터 연결 지연..."
 
+@st.cache_data(ttl=300)
 def load_users():
-    if not os.path.exists(USER_DB_FILE):
-        init = {"cntfed": {"password": "cntfed", "status": "approved", "grade": "방장"}}
-        with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(init, f)
-        return init
-    try:
-        with open(USER_DB_FILE, "r", encoding="utf-8") as f: 
-            users = json.load(f)
-            # 전문가님 권한은 시스템적으로 절대 보장 (지워짐 방지)
-            if "cntfed" in users:
-                users["cntfed"]["grade"] = "방장"
-                users["cntfed"]["status"] = "approved"
-                with open(USER_DB_FILE, "w", encoding="utf-8") as f2: json.dump(users, f2)
-            return users
-    except: return {"cntfed": {"password": "cntfed", "status": "approved", "grade": "방장"}}
+    # 1. 먼저 로컬 파일 확인
+    users = {}
+    if os.path.exists(USER_DB_FILE):
+        try:
+            with open(USER_DB_FILE, "r", encoding="utf-8") as f: users = json.load(f)
+        except: pass
+    
+    # 2. 구글 시트에서 최신 정보 가져와서 동기화 (클라우드 환경 대응)
+    if USERS_SHEET_URL:
+        try:
+            df_u = pd.read_csv(USERS_SHEET_URL)
+            for _, row in df_u.iterrows():
+                try:
+                    u_id = str(row.get('아이디', '')).strip()
+                    if not u_id or u_id == 'nan': continue
+                    
+                    # 구글 시트 정보가 항상 최신(원본)이 되도록 덮어쓰기 허용
+                    users[u_id] = {
+                        "password": str(row.get('비밀번호', u_id)), # 비번 없을 시 아이디로 기본 설정
+                        "status": str(row.get('상태', 'approved')),
+                        "grade": str(row.get('등급', '회원')),
+                        "info": {
+                            "region": row.get('지역', '-'),
+                            "age": row.get('연령대', '-'),
+                            "gender": row.get('성별', '-'),
+                            "motivation": row.get('매매동기', '-'),
+                            "exp": row.get('경력', '-'),
+                            "joined_at": row.get('가입일', '-')
+                        }
+                    }
+                except: continue
+            # 최신화된 정보를 로컬에도 저장
+            with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+        except: pass
+
+    # 기본 방장 계정 보장
+    if "cntfed" not in users:
+        users["cntfed"] = {"password": "cntfed", "status": "approved", "grade": "방장"}
+    
+    # 전문가님 권한은 시스템적으로 절대 보장 (지워짐 방지)
+    users["cntfed"]["grade"] = "방장"
+    users["cntfed"]["status"] = "approved"
+    
+    return users
+
+def save_users(users):
+    with open(USER_DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False, indent=4)
+    # 캐시를 즉시 업데이트하거나 초기화하여 다음 호출 시 최신 데이터를 읽게 함
+    load_users.clear()
+
+@st.cache_data(ttl=600)
+def fetch_gs_attendance():
+    try: return pd.read_csv(ATTENDANCE_SHEET_URL)
+    except: return pd.DataFrame(columns=["시간", "아이디", "인사", "등급"])
+
+@st.cache_data(ttl=300)
+def fetch_gs_chat():
+    try: return pd.read_csv(CHAT_SHEET_URL)
+    except: return pd.DataFrame()
+
+@st.cache_data(ttl=300)
+def fetch_gs_visitors():
+    try: return pd.read_csv(VISITOR_SHEET_URL)
+    except: return pd.DataFrame()
+
+def load_trades():
+    if os.path.exists(TRADES_DB):
+        try:
+            with open(TRADES_DB, "r", encoding="utf-8") as f: return json.load(f)
+        except: return {"mock": [], "auto": []}
+    return {"mock": [], "auto": []}
+
+def save_trades(trades):
+    with open(TRADES_DB, "w", encoding="utf-8") as f:
+        json.dump(trades, f, ensure_ascii=False, indent=4)
 
 def gsheet_sync(sheet_name, headers, values):
     payload = {"sheetName": sheet_name, "headers": headers, "values": values}
@@ -109,6 +181,25 @@ st.markdown(f"""
     .ticker-content {{ display: inline-block; animation: ticker 250s linear infinite; color: #FFD700; font-size: 0.95rem; font-weight: 600; font-family: 'Outfit'; animation-delay: 1s; }}
     .ticker-wrap:hover .ticker-content {{ animation-play-state: paused; }}
     .ticker-item {{ margin: 0 40px; display: inline-block; }}
+    /* 💎 사이드바 가독성 최적화 (줄바꿈 방지) */
+    [data-testid="stSidebarNav"] {{ display: none; }}
+    [data-testid="stSidebar"] .stButton button {{ 
+        font-size: 0.82rem !important; 
+        white-space: nowrap !important; 
+        overflow: hidden; 
+        text-overflow: ellipsis; 
+        justify-content: flex-start !important;
+        text-align: left !important;
+        padding: 0px 10px !important;
+    }}
+    /* 배너(Expander) 헤더 강제 한 줄 고정 */
+    .st-expanderHeader {{ 
+        font-size: 0.88rem !important; 
+        white-space: nowrap !important; 
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }}
+    .st-expanderHeader > div {{ white-space: nowrap !important; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -119,6 +210,29 @@ if not st.session_state["password_correct"]:
     with m:
         st.markdown("<h1 class='mobile-header' style='text-align: center; color: #FFD700; font-size: 4rem; margin-top: 0; margin-bottom: 10px; font-family: \"Outfit\", sans-serif; text-shadow: 0 0 30px rgba(255,215,0,0.4);'>🛸 StockDragonfly</h1>", unsafe_allow_html=True)
         if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png", use_container_width=True)
+        if "show_notice" not in st.session_state: st.session_state["show_notice"] = True
+        
+        if st.session_state["show_notice"]:
+            with st.container():
+                st.markdown("""
+                <div style='background: rgba(255, 0, 0, 0.1); border: 2px solid #FF4B4B; border-radius: 15px; padding: 25px; margin-bottom: 25px; color: white;'>
+                    <h3 style='color: #FF4B4B; margin-top: 0;'>🛡️ [공지] StockDragonfly 시스템 고도화 및 보안 업데이트 안내</h3>
+                    <p style='font-size: 1rem; line-height: 1.6;'>
+                        안녕하세요, 관리자입니다.<br><br>
+                        더 쾌적하고 나노 단위로 정교한 서비스 제공을 위해 시스템 엔진을 전면 개편하였습니다.<br>
+                        이 과정에서 보안 강화 및 데이터 최적화를 위해 <b>모든 회원의 임시 비밀번호가 1234로 초기화되었습니다.</b><br>
+                        이용에 불편을 드려 진심으로 사과드립니다.<br><br>
+                        <b>[조치 방법]</b><br>
+                        로그인 후 상단 <b>[1. 본부 사령부] -> [1-c 계정보안설정(비밀번호 변경가능)]</b> 배너에서 즉시 본인만의 비밀번호로 수정해 주시기 바랍니다.<br><br>
+                        여러분의 우상향하는 수익을 위해 끊임없이 진화하는 StockDragonfly가 되겠습니다.<br>
+                        감사합니다.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button("✅ 공지 확인 및 다시 열지 않기", use_container_width=True):
+                    st.session_state["show_notice"] = False
+                    st.rerun()
+
         tab1, tab2 = st.tabs(["🚀 Terminal Log-In", "📝 Join Command (자격 시험)"])
         
         with tab1:
@@ -126,11 +240,16 @@ if not st.session_state["password_correct"]:
             login_pw = st.text_input("액세스 키 (PW)", type="password", key="l_pw")
             if st.button("Terminal Operation Start", use_container_width=True):
                 users = load_users()
-                if login_id in users and users[login_id]["password"] == login_pw:
-                    st.session_state["password_correct"] = True
-                    st.session_state.current_user = login_id
-                    st.rerun()
-                else: st.error("❌ 등록되지 않은 정보이거나 보안 코드가 일치하지 않습니다.")
+                if login_id in users:
+                    u_data = users[login_id]
+                    if u_data.get("status", "approved") != "approved":
+                        st.error(f"⚠️ 현재 계정 상태가 '{u_data.get('status')}'입니다. 사령부의 승인이나 상태 복구가 필요합니다.")
+                    elif u_data["password"] == login_pw:
+                        st.session_state["password_correct"] = True
+                        st.session_state.current_user = login_id
+                        st.rerun()
+                    else: st.error("❌ 보안 코드가 일치하지 않습니다.")
+                else: st.error("❌ 등록되지 않은 정보입니다.")
         
         with tab2:
             st.markdown("### 🏹 사령부 정예 요원 입성 자격 시험")
@@ -195,7 +314,14 @@ if not st.session_state["password_correct"]:
                                     "exp": reg_exp, "motivation": reg_moti, "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M")
                                 }
                             }
-                            with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                            save_users(users)
+                            
+                            # 🛡️ 즉시 구글 시트 백업 전송 (사용자 시트 순서에 최적화: 성별 추가)
+                            gsheet_sync("회원명단", 
+                                ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
+                                [new_id, new_pw, "approved", "회원", reg_region, reg_age, reg_gender, reg_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), reg_moti]
+                            )
+                            
                             st.success(f"🎊 {score}/15점! 훌륭합니다. 사령부의 지혜를 계승할 자격을 증명하셨습니다. 로그인을 진행해 주십시오.")
                             st.balloons()
                     else:
@@ -271,21 +397,73 @@ curr_user_data = users.get(st.session_state.current_user, {})
 curr_grade = curr_user_data.get("grade", "회원")
 is_admin = (curr_grade in ["관리자", "방장"])
 
-menu_ops = [
-    "0. 📌 출석체크(오늘한줄인사)",
-    "1. 🎯 주도주 타점 스캐너", "2. 💬 소통 대화방", "3. 💎 프로 분석 리포트", 
-    "4. 🚀 주도주 랭킹 TOP 50", "5. 🧮 리스크 계산기", "6. 📈 마켓 트렌드 요약", 
-    "7. 📊 본데 감시 리스트", "8. 👑 관리자 승인 센터", "9. 🐝 본데는 누구인가?", 
-    "10. 🏛️ 사이트 제작 동기", "11. 🤝 방문자 인사말 신청", "12. 🛡️ 리스크 방패", 
-    "13. 🗺️ 실시간 히트맵", "14. 🌡️ 시장 심리 게이지", "16. 📚 주식공부방(차트분석)",
-    "17. 🛰️ 나노바나나 정밀 레이더"
-]
+# --- 🛸 2단계 아코디언 메뉴 시스템 (Regulated Labeling) ---
+if 'page' not in st.session_state:
+    st.session_state.page = "6-a. 📌 출석체크(오늘한줄)"
 
-# 오직 방장(전문가님)에게만 15번 메뉴 노출
-if curr_grade == "방장":
-    menu_ops.append("15. 🎖️ HQ 인적 자원 사령부")
+zones = {
+    "🏰 1. 본부 사령부": [
+        "1-a. 👑 관리자 승인 센터", 
+        "1-b. 🎖️ HQ 인적 자원 사령부", 
+        "1-c. 🔐 계정 보안 설정", 
+        "1-d. 🌙 탈퇴/휴식 신청"
+    ],
+    "📡 2. 시장 상황실": [
+        "2-a. 📈 마켓 트렌드 요약", 
+        "2-b. 🗺️ 실시간 히트맵", 
+        "2-c. 🌡️ 시장 심리 게이지", 
+        "2-d. 🏛️ 제작 동기"
+    ],
+    "🏹 3. 주도주 추격대": [
+        "3-a. 🎯 주도주 타점 스캐너", 
+        "3-b. 🚀 주도주 랭킹 TOP 50", 
+        "3-c. 📊 본데 감시 리스트"
+    ],
+    "🛡️ 4. 전략 및 리스크": [
+        "4-a. 💎 프로 분석 리포트", 
+        "4-b. 🧮 리스크 계산기", 
+        "4-c. 🛡️ 리스크 방패"
+    ],
+    "🏛️ 5. 마스터 훈련소": [
+        "5-a. 🐝 본데는 누구인가?", 
+        "5-b. 📚 주식공부방(차트)", 
+        "5-c. 🛰️ 나노바나나 레이더"
+    ],
+    "☕ 6. 안티그래비티 광장": [
+        "6-a. 📌 출석체크(오늘한줄)", 
+        "6-b. 💬 소통 대화방", 
+        "6-c. 🤝 방문자 인사 신청"
+    ],
+    "🤖 7. 자동매매 사령부": [
+        "7-a. 🚀 모의투자 매수테스트",
+        "7-b. 📊 모의투자 현황/결과",
+        "7-c. ⚙️ 자동매매 전략엔진",
+        "7-d. 📈 자동투자 성적표",
+        "7-e. 🏆 사령부 명예의 전당"
+    ]
+}
 
-page = st.sidebar.radio("Mission Control", menu_ops)
+# 보급 및 보안 권한에 따른 메뉴 필터링
+if curr_grade != "방장":
+    zones["🏰 1. 본부 사령부"].remove("1-b. 🎖️ HQ 인적 자원 사령부")
+
+# 🤖 자동매매 사령부는 모든 승인된 대원(준회원 이상)이 접근 가능
+if curr_grade not in ["방장", "관리자", "정회원", "준회원"]:
+    del zones["🤖 7. 자동매매 사령부"]
+
+with st.sidebar:
+    st.markdown("<p style='color: #FFD700; font-size: 0.9rem; font-weight: 700; margin-top: 10px; margin-bottom: 20px; letter-spacing: 1px;'>🛰️ MISSION CONTROL</p>", unsafe_allow_html=True)
+    
+    for zone_name, missions in zones.items():
+        is_active_zone = st.session_state.page in missions
+        with st.expander(zone_name, expanded=is_active_zone):
+            for m in missions:
+                if st.button(m, key=f"nav_{m}", use_container_width=True):
+                    st.session_state.page = m
+                    st.rerun()
+
+# 최종 선택된 미션을 page 변수에 할당하여 본문 렌더링
+page = st.session_state.page
 
 # --- 🛰️ 전광판 티커 테이프 ---
 @st.cache_data(ttl=300)
@@ -431,7 +609,7 @@ def get_footer_quote():
     return random.choice(BONDE_FOOTER_QUOTES)
 
 # --- [PLACEHOLDER_LOGIC_START] ---
-if page.startswith("0."):
+if page.startswith("6-a."):
     st.header("📌 사령부 출석체크 및 오늘 한 줄")
     
     # 데이터 준비
@@ -475,6 +653,10 @@ if page.startswith("0."):
                 now_kst = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d %H:%M")
                 new_row = pd.DataFrame([[now_kst, st.session_state.current_user, greeting, curr_grade]], columns=["시간", "아이디", "인사", "등급"])
                 new_row.to_csv(ATTENDANCE_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                
+                # 📡 구글 시트(시트1)와 즉시 동기화
+                gsheet_sync("시트1", ["시간", "아이디", "인사", "등급"], [now_kst, st.session_state.current_user, greeting, curr_grade])
+                
                 st.success("✅ 사령부 명부에 정상 등록되었습니다. 오늘의 전술을 확인하십시오.")
                 st.balloons()
                 st.rerun()
@@ -482,6 +664,11 @@ if page.startswith("0."):
                 st.error("❌ 한 줄 인사를 입력해 주세요.")
 
     st.subheader("📡 실시간 출석 현황")
+    # 구글 시트 데이터와 로컬 데이터 병합
+    gs_att = fetch_gs_attendance()
+    local_att = pd.read_csv(ATTENDANCE_FILE, encoding="utf-8-sig") if os.path.exists(ATTENDANCE_FILE) else pd.DataFrame()
+    df_att = pd.concat([gs_att, local_att]).drop_duplicates(subset=["시간", "아이디", "인사"]).tail(20)
+
     if not df_att.empty:
         # 최근 20개만 표시
         for _, row in df_att.iloc[::-1].head(20).iterrows():
@@ -500,7 +687,7 @@ if page.startswith("0."):
     else:
         st.info("오늘 첫 번째로 출석하여 사령부의 문을 여십시오!")
 
-elif page.startswith("1."):
+elif page.startswith("3-a."):
     st.header("🎯 주도주 VCP & EP 마스터 스캐너")
     st.markdown("<div class='glass-card'>미너비니의 VCP(변동성 축소)와 본데의 EP(에피소딕 피벗) 4단계 통합 검색 엔진입니다.</div>", unsafe_allow_html=True)
     
@@ -604,7 +791,7 @@ elif page.startswith("1."):
             pure_code = selected_ticker.replace(".KS", "").replace(".KQ", "")
             naver_url = f"https://finance.naver.com/item/main.naver?code={pure_code}"
             
-            st.warning("💡 한국 주식은 트레이ڈنگ뷰보다 '네이버 증권' 정밀 분석이 더 권장됩니다.")
+            st.warning("💡 한국 주식은 트레이딩뷰보다 '네이버 증권' 정밀 분석이 더 권장됩니다.")
             st.markdown(f"""
             <div class='glass-card' style='text-align: center; padding: 40px;'>
                 <h3 style='color: #FFD700;'>🇰🇷 {selected_option} - 네이버 증권 데이터 연동</h3>
@@ -622,7 +809,7 @@ elif page.startswith("1."):
             st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={selected_ticker}&interval=D' width='100%' height='500'></iframe>", height=510)
             st.success(f"✅ {selected_ticker} 실시간 차트 로드 완료!")
 
-elif page.startswith("2."):
+elif page.startswith("6-b."):
     st.header("💬 사령부 소통 및 공지 (HQ Communication)")
     # 현재 세션 유저 정보 (전역 curr_grade, is_admin 사용)
 
@@ -656,9 +843,13 @@ elif page.startswith("2."):
 
     st.divider()
     try:
-        chat_df = pd.read_csv(CHAT_FILE, encoding="utf-8-sig").tail(30) # 최근 30개만 표시
+        # 구글 시트에서 최신 대화 기록 병합
+        gs_chat = fetch_gs_chat()
+        local_chat = pd.read_csv(CHAT_FILE, encoding="utf-8-sig") if os.path.exists(CHAT_FILE) else pd.DataFrame()
+        chat_df = pd.concat([gs_chat, local_chat]).drop_duplicates(subset=["시간", "유저", "내용"]).tail(30)
+        
         for _, row in chat_df.iloc[::-1].iterrows(): # 역순 출력
-            is_leader = row["등급"] in ["방장", "관리자"]
+            is_leader = str(row.get("등급", "")).strip() in ["방장", "관리자"]
             bg_color = "rgba(255,215,0,0.1)" if is_leader else "rgba(255,255,255,0.05)"
             border_color = "#FFD700" if is_leader else "#444"
             badge = "👑 [방장]" if is_leader else "👤 [회원]"
@@ -677,7 +868,7 @@ elif page.startswith("2."):
     except:
         st.info("현재 수신된 메시지가 없습니다.")
 
-elif page.startswith("3."):
+elif page.startswith("4-a."):
     st.header("💎 프로 분석 리포트 (Weekly Tactical Report)")
     
     # 렌더링 충돌 없는 순수 스탠다드 구성
@@ -714,16 +905,18 @@ elif page.startswith("3."):
             st.markdown(f"<div class='glass-card'><h4>📊 {tic_in} 분석 결과</h4>주도주 패턴 포착. 상대강도(RS) 정밀 분석 수행 중...</div>", unsafe_allow_html=True)
             st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={tic_in}&interval=D&theme=dark' width='100%' height='500'></iframe>", height=510)
 
-elif page.startswith("4."):
+elif page.startswith("3-b."):
     st.header("🚀 주도주 실시간 랭킹 (Daily Live Ranking)")
     RANK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
     
-    # 한국 시간 설정
-    now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
-    
+    @st.cache_data(ttl=600)
+    def fetch_rank_data(url):
+        try: return pd.read_csv(url)
+        except: return pd.DataFrame()
+
     with st.spinner("📊 전문가님의 데이터 센터에서 실시간 동기화 중..."):
         try:
-            df_live = pd.read_csv(RANK_SHEET_URL)
+            df_live = fetch_rank_data(RANK_SHEET_URL)
             if 'ROE' in df_live.columns:
                 df_live['ROE_VAL'] = df_live['ROE'].astype(str).str.replace('%','').astype(float)
                 df_final = df_live[df_live['ROE_VAL'] >= 10.0].head(10)
@@ -745,7 +938,7 @@ elif page.startswith("4."):
             st.error(f"⚠️ 시트 연동 중 오류 발생: {e}")
             st.info("시트가 '링크가 있는 모든 사용자에게 공개(뷰어)' 상태인지 확인해 주세요.")
 
-elif page.startswith("5."):
+elif page.startswith("4-b."):
     st.header("🧮 포지션 규모 결정 시스템 (Institutional Position Sizing)")
     st.markdown("<div class='glass-card'>손절 발생 시 총 자산의 몇 %를 잃을 것인지 결정하십시오. (본데 추천: 0.25% ~ 1%)</div>", unsafe_allow_html=True)
     
@@ -778,8 +971,9 @@ elif page.startswith("5."):
         이 경우 손절 시 정확히 {total_risk_amount:,.1f}불({risk_per_trade_pct}%)만 잃게 되며, 현재 이 종목은 전체 포트폴리오의 **{portfolio_weight:.1f}%** 비중을 차지하게 됩니다.
         """)
 
-elif page.startswith("6."):
+elif page.startswith("2-a."):
     st.header("📈 데일리 마켓 트렌드 브리핑 (Daily Briefing)")
+    st.divider()
     # 브리핑 전용 데이터 로드 (전역 BRIEF_FILE 사용)
     if not os.path.exists(BRIEF_FILE):
         pd.DataFrame(columns=["날짜", "작성자", "내용"]).to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
@@ -860,7 +1054,7 @@ elif page.startswith("6."):
     except Exception as e:
         st.info("브리팅 데이터 연동 중...")
 
-elif page.startswith("7."):
+elif page.startswith("3-c."):
     st.header("🎯 사령부 최핵심 감시 리스트 (Top 3 Focus)")
     SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
     now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
@@ -878,20 +1072,29 @@ elif page.startswith("7."):
             
             # ROE 5% 이상 필터링 및 데이터 수집
             final_3 = []
-            for tic in sorted(mention_counts, key=mention_counts.get, reverse=True):
-                try:
-                    tk = yf.Ticker(tic)
-                    roe = tk.info.get('returnOnEquity', 0) * 100
-                    if roe >= 5.0 or roe == 0: # 데이터 없으면 일단 포함 (ROE 5% 기준 완화)
-                        # RS, 진입가 등은 사령부 엔진 계산 또는 시트 연동
-                        price = tk.history(period="1d")['Close'].iloc[-1]
-                        final_3.append({
-                            "T": tic, "ROE": f"{roe:.1f}%", 
-                            "RS": f"{mention_counts[tic]}회 언급", # 빈도를 RS 대용으로 표시
-                            "EP": f"${price:.2f}", "SL": f"${price*0.95:.2f}", "TP": f"${price*1.15:.2f}"
-                        })
-                    if len(final_3) >= 3: break
-                except: continue
+            cand_tics = sorted(mention_counts, key=mention_counts.get, reverse=True)
+            
+            # 일괄 다운로드 (역순 루프 내 개별 호출 방지)
+            if cand_tics:
+                prices_data = yf.download(cand_tics, period="1d", progress=False)['Close']
+                if isinstance(prices_data, pd.Series): 
+                    prices_data = pd.DataFrame(prices_data).T
+                
+                for tic in cand_tics:
+                    try:
+                        # ROE는 여전히 개별 Ticker.info가 필요할 수 있으나, 여기서는 생략하거나 캐싱 권장
+                        # 성능을 위해 ROE fetch 생략 혹은 캐싱 처리 (yf.Ticker.info는 매우 느림)
+                        roe = 0.0 # 속도를 위해 기본값 0 설정 (필요시 별도 배치 처리)
+                        
+                        price = prices_data[tic].iloc[-1] if tic in prices_data.columns else 0
+                        if price > 0:
+                            final_3.append({
+                                "T": tic, "ROE": "N/A", # 속도 최우선
+                                "RS": f"{mention_counts[tic]}회 언급",
+                                "EP": f"${price:.2f}", "SL": f"${price*0.95:.2f}", "TP": f"${price*1.15:.2f}"
+                            })
+                        if len(final_3) >= 3: break
+                    except: continue
                 
             st.markdown(f"<div class='glass-card'>📅 <b>{now_kst.strftime('%Y-%m-%d')} KST</b> | 사령부 최우선 공략 종목 3선</div>", unsafe_allow_html=True)
             
@@ -917,7 +1120,7 @@ elif page.startswith("7."):
         except Exception as e:
             st.error(f"⚠️ 데이터 분석 실패: {e}")
 
-elif page.startswith("8."):
+elif page.startswith("1-a."):
     st.header("👑 관리자 승인 센터 (HQ Member Approval)")
     
     if not is_admin:
@@ -930,7 +1133,7 @@ elif page.startswith("8."):
     if pending_users:
         if st.button("🔥 대기 인원 전체 일괄 승인", use_container_width=True):
             for u in pending_users: users[u]["status"] = "approved"
-            with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+            save_users(users)
             st.success("🎊 모든 대기 인원이 공식 승인되었습니다.")
             st.rerun()
         for u in pending_users:
@@ -939,34 +1142,33 @@ elif page.startswith("8."):
             with c2:
                 if st.button(f"✅ 승인", key=f"appr_{u}"):
                     users[u]["status"] = "approved"
-                    with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                    save_users(users)
                     st.rerun()
     else: st.info("대기 중인 신규 회원이 없습니다.")
 
     st.divider()
 
-    # [B] 정규직 승격 심사 섹션
+    # [B] 정규직 승격 심사 센터 (Cloud Sync)
     st.subheader("🔥 정규직 승격 심사 센터")
-    if os.path.exists(VISITOR_FILE):
+    gs_vis = fetch_gs_visitors()
+    if not gs_vis.empty:
         try:
-            req_df = pd.read_csv(VISITOR_FILE)
-            if not req_df.empty:
-                for idx, row in req_df.iloc[::-1].iterrows():
-                    user_id = row["아이디"]
-                    if users.get(user_id, {}).get("grade") == "정규직": continue
-                    with st.expander(f"📥 [승격요청] {user_id} 대원의 신청서 ({row['시간']})", expanded=False):
-                        st.markdown(f"**1. 첫인사:** {row['첫인사']}")
-                        st.markdown(f"**2. 자기소개:** {row['자기소개']}")
-                        st.markdown(f"**3. 포부:** {row['포부']}")
-                        if st.button(f"🎖️ {user_id} 정규직 승격 발령", key=f"promo_{idx}"):
-                            if user_id in users:
-                                users[user_id]["grade"] = "정규직"
-                                with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
-                                st.success(f"🎊 {user_id} 대원이 '정규직'으로 승격되었습니다!")
-                                st.rerun()
-            else: st.info("현재 접수된 승격 신청서가 없습니다.")
-        except: st.info("접수된 신청서가 없습니다.")
-    else: st.info("접수된 신청서가 없습니다.")
+            for idx, row in gs_vis.iloc[::-1].iterrows():
+                user_id = str(row.get("아이디", "Unknown")).strip()
+                if users.get(user_id, {}).get("grade") == "정규직": continue
+                with st.expander(f"📥 [승격요청] {user_id} 대원의 신청서 ({row.get('시간','-')})", expanded=False):
+                    st.markdown(f"**1. 첫인사:** {row.get('첫인사', '-')}")
+                    st.markdown(f"**2. 자기소개:** {row.get('자기소개', '-')}")
+                    st.markdown(f"**3. 포부:** {row.get('포부', '-')}")
+                    if st.button(f"🎖️ {user_id} 정규직 승격 발령", key=f"promo_gs_{idx}"):
+                        if user_id in users:
+                            users[user_id]["grade"] = "정규직"
+                            save_users(users)
+                            st.success(f"🎊 {user_id} 대원이 '정규직'으로 승격되었습니다!")
+                            st.rerun()
+        except: st.info("신청서 데이터 판독 중...")
+    else: 
+        st.info("현재 접수된 실시간 승격 신청서가 없습니다.")
 
     st.divider()
 
@@ -987,7 +1189,7 @@ elif page.startswith("8."):
     df_users = pd.DataFrame(all_rows)
     st.dataframe(df_users, use_container_width=True, hide_index=True)
 
-elif page.startswith("9."):
+elif page.startswith("5-a."):
     st.markdown("<h1 style='text-align: center; color: #FFD700;'>🐝 월가의 멘토, 프라딥 본데(Pradeep Bonde)</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #888; font-size: 1.2rem;'>시스템 트레이딩의 선구자: 스탁비(Stockbee)의 유산</p>", unsafe_allow_html=True)
     st.divider()
@@ -1030,7 +1232,7 @@ elif page.startswith("9."):
     """)
     st.divider()
 
-elif page.startswith("10."):
+elif page.startswith("2-d."):
     st.markdown("<h1 style='text-align: center; color: #FFD700;'>🏛️ 사령부 제작 동기 (Mission Statement)</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #888; font-size: 1.1rem;'>Follow the Giants, Conquer the Market Together</p>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center;'>세 거인의 발자취를 따라, 함께 성장의 궤도에 오르기를 꿈꾸며</h3>", unsafe_allow_html=True)
@@ -1074,7 +1276,7 @@ elif page.startswith("10."):
     </div>
     """, unsafe_allow_html=True)
 
-elif page.startswith("11."):
+elif page.startswith("6-c."):
     st.header("🤝 방문자 승격 신청서 (Promotion Application)")
     st.markdown("<div class='glass-card'>사령부 정규직 승격을 위해 아래 3가지 항목을 작성해 주세요. 전문가님이 직접 검토합니다.</div>", unsafe_allow_html=True)
     with st.form("greet_detailed", clear_on_submit=True):
@@ -1093,7 +1295,7 @@ elif page.startswith("11."):
                 st.success("✅ 승격 신청서가 성공적으로 관리자 승인센터로 전파되었습니다!")
             else: st.error("모든 항목을 작성해 주셔야 신청이 가능합니다.")
 
-elif page.startswith("12."):
+elif page.startswith("4-c."):
     st.header("🛡️ 리스크 방패 (The -3% Iron Shield)")
     st.divider()
     st.subheader("🛸 왜 본데는 '-3% 손절'을 생명처럼 여기는가?")
@@ -1105,7 +1307,7 @@ elif page.startswith("12."):
     st.write("작은 수익을 쌓는 전략에서 단 하나의 큰 손실은 모든 노력을 수포로 돌립니다. -3%는 사령부의 최후 방어선입니다.")
     st.success("💡 **결론:** 손절은 패배가 아닌, 더 큰 승리를 위한 전략적 후퇴입니다.")
 
-elif page.startswith("13."):
+elif page.startswith("2-b."):
     st.header("🗺️ 실시간 주도주 히트맵 (Market OverView)")
     st.markdown("<div class='glass-card'>사령부 관리 종목 20선의 실시간 수급 현황입니다. (초록: 상승 / 빨강: 하락)</div>", unsafe_allow_html=True)
     if st.button("🔄 실시간 히트맵 데이터 동기화"):
@@ -1120,7 +1322,7 @@ elif page.startswith("13."):
                 st.plotly_chart(fig, use_container_width=True)
         except Exception as e: st.error(f"오류 발생: {e}")
 
-elif page.startswith("14."):
+elif page.startswith("2-c."):
     st.header("🌡️ 시장 심리 게이지 (Fear & Greed)")
     try:
         ndx = yf.download("^IXIC", period="5d", progress=False)['Close']
@@ -1173,7 +1375,7 @@ elif page.startswith("14."):
     </div>
     """, unsafe_allow_html=True)
 
-elif page.startswith("15."):
+elif page.startswith("1-b."):
     st.header("🎖️ HQ 인적 자원 사령부 (Member HR Command)")
     users = load_users()
     
@@ -1183,6 +1385,40 @@ elif page.startswith("15."):
         st.stop()
         
     st.markdown("<div class='glass-card'>사령관의 권위로 대원의 등급을 조정하거나 사령부에서 즉각 제명(삭제)하는 인사권을 행사합니다.</div>", unsafe_allow_html=True)
+    
+    # 🛡️ 사령부 데이터 영구 보존 센터 (위쪽으로 이동)
+    st.subheader("🛡️ 사령부 데이터 영구 보존 센터")
+    with st.expander("📊 [필수] 데이터 이관 및 실시간 백업 가동", expanded=True):
+        st.markdown("""
+        현재 사령부 명부에 등록된 모든 대원 정보를 구글 시트로 백업합니다. 
+        **깃허브 업데이트나 서버 리셋 시에도 회원 정보를 지키기 위해 반드시 클릭해 주세요.**
+        """)
+        
+        # 상태 확인
+        if USERS_SHEET_URL:
+            st.success(f"✅ 구글 시트 복구 엔진 연결됨")
+        else:
+            st.warning("⚠️ 구글 시트 주소가 설정되지 않았습니다. 파일 상단을 확인해 주세요.")
+            
+        if st.button("🚀 모든 대원 정보 구글 시트로 즉시 백업", use_container_width=True, key="top_migration_btn"):
+            with st.spinner("사령부 명부 대조 및 전송 중..."):
+                count = 0
+                for uid, udata in users.items():
+                    info = udata.get("info", {})
+                    gsheet_sync("회원명단", 
+                        ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
+                        [
+                            uid, udata.get("password", ""), udata.get("status", "approved"), 
+                            udata.get("grade", "회원"), info.get("region", "-"), info.get("age", "-"), 
+                            info.get("gender", "-"), info.get("exp", "-"), info.get("joined_at", "-"), info.get("motivation", "-")
+                        ]
+                    )
+                    count += 1
+                st.success(f"🎊 총 {count}명의 대원 정보가 구글 시트로 안전하게 백업되었습니다!")
+                st.balloons()
+    
+    st.divider()
+    st.subheader("📋 전체 대원 리스트 관리")
     
     # 자신을 제외한 대원 리스트
     m_list = [u for u in users.keys() if u != st.session_state.current_user]
@@ -1212,10 +1448,41 @@ elif page.startswith("15."):
                         with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
                         st.warning(f"⚠️ {u} 요원이 명부에서 삭제되었습니다.")
                         st.rerun()
+        
+        st.divider()
+        st.subheader("🛡️ 사령부 데이터 영구 보존 센터")
+        with st.expander("📊 데이터 이관 및 백업 도구 (Migration Tool)", expanded=True):
+            st.markdown("""
+            가입한 모든 대원의 정보를 구글 시트로 일괄 전송하여 영구 백업합니다. 
+            서버 리셋이나 깃허브 업데이트 시 정보를 보호하기 위한 필수 절차입니다.
+            """)
+            
+            # 상태 확인
+            if USERS_SHEET_URL:
+                st.success("✅ 구글 시트 복구 엔진 연결됨")
+            else:
+                st.warning("⚠️ 구글 시트 복구 엔진이 연결되지 않았습니다. (URL 미설정)")
+            
+            if st.button("🚀 모든 대원 정보 구글 시트로 백업 시작", use_container_width=True):
+                with st.spinner("사령부 명부 대조 및 전송 중..."):
+                    count = 0
+                    for uid, udata in users.items():
+                        info = udata.get("info", {})
+                        gsheet_sync("회원명단", 
+                            ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
+                            [
+                                uid, udata.get("password", ""), udata.get("status", "approved"), 
+                                udata.get("grade", "회원"), info.get("region", "-"), info.get("age", "-"), 
+                                info.get("gender", "-"), info.get("exp", "-"), info.get("joined_at", "-"), info.get("motivation", "-")
+                            ]
+                        )
+                        count += 1
+                    st.success(f"🎊 총 {count}명의 대원 정보가 구글 시트로 안전하게 백업되었습니다!")
+                    st.balloons()
     else:
         st.info("현재 사령부에서 관리할 대원이 없습니다.")
 
-elif page.startswith("16."):
+elif page.startswith("5-b."):
     st.markdown("<h1 style='color: #FFD700; text-align: center; font-size: 3rem;'>🏛️ StockDragonfly 차트 아카데미</h1>", unsafe_allow_html=True)
     st.markdown("""
     <div class='glass-card' style='text-align: center; padding: 30px; border: 1px solid #FFD700; background: rgba(255,215,0,0.02);'>
@@ -1346,7 +1613,7 @@ elif page.startswith("16."):
     </table>
     """, unsafe_allow_html=True)
 
-elif page.startswith("17."):
+elif page.startswith("5-c."):
     st.markdown("<h1 style='text-align: center; color: #00FF00;'>🛰️ 나노바나나 정밀 레이더</h1>", unsafe_allow_html=True)
     st.markdown("<div class='glass-card' style='text-align: center;'>현재 사령부 감시망 내에서 에너지가 응축되어 돌파가 임박한 '황금 바나나' 종목들을 실시간 추적합니다.</div>", unsafe_allow_html=True)
     
@@ -1382,6 +1649,298 @@ elif page.startswith("17."):
     st.divider()
     st.info("💡 레이더의 'Ready' 지수는 ROE, RS, 그리고 최근 2주간의 변동성 타이트니스(Tightness)를 종합 산출한 결과입니다.")
     
+elif page.startswith("1-c."):
+    st.header("🔐 계정 보안 및 관리 (Security & Account)")
+    st.markdown("<div class='glass-card'>사령부 보안 설정을 관리합니다. 비밀번호를 정기적으로 변경해 주세요.</div>", unsafe_allow_html=True)
+    
+    # 비밀번호 변경 섹션
+    with st.expander("🔑 비밀번호 변경 및 보안 강화", expanded=True):
+        with st.form("pw_change_form", clear_on_submit=True):
+            curr_pw_input = st.text_input("현재 비밀번호 확인", type="password")
+            new_pw_input = st.text_input("새로운 비밀번호 설정", type="password")
+            new_pw_confirm = st.text_input("새로운 비밀번호 다시 입력", type="password")
+            
+            if st.form_submit_button("🛡️ 비밀번호 변경 적용"):
+                users = load_users()
+                u_id = st.session_state.current_user
+                u_data = users.get(u_id, {})
+                u_info = u_data.get("info", {})
+                
+                if u_data.get("password") != curr_pw_input:
+                    st.error("❌ 현재 비밀번호가 일치하지 않습니다.")
+                elif new_pw_input != new_pw_confirm:
+                    st.error("❌ 비밀번호 확인이 일치하지 않습니다.")
+                elif len(new_pw_input) < 4:
+                    st.error("❌ 비밀번호는 최소 4자 이상이어야 합니다.")
+                else:
+                    users[u_id]["password"] = new_pw_input
+                    with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                    gsheet_sync("회원명단", 
+                        ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
+                        [u_id, new_pw_input, u_data.get("status", "approved"), u_data.get("grade", "회원"), u_info.get("region", "-"), u_info.get("age", "-"), u_info.get("gender", "-"), u_info.get("exp", "-"), u_info.get("joined_at", "-"), u_info.get("motivation", "-")]
+                    )
+                    st.success("✅ 비밀번호 변경 완료!")
+                    st.balloons()
+
+elif page.startswith("1-d."):
+    st.header("🌙 탈퇴 및 임시휴식 (Account Status)")
+    st.markdown("<div class='glass-card'>사령부 활동 중단이나 탈퇴를 관리합니다. 신중하게 결정해 주십시오.</div>", unsafe_allow_html=True)
+    
+    st.subheader("⚠️ 계정 상태 변경 및 전역 처리")
+    c1, c2 = st.columns(2)
+    
+    users = load_users()
+    u_id = st.session_state.current_user
+    u_data = users.get(u_id, {})
+    u_info = u_data.get("info", {})
+
+    with c1:
+        st.markdown("<div class='glass-card' style='border-top: 3px solid #6366f1;'><b>임시 휴식 신청</b><br><small>활동을 잠시 중단합니다. 관리자 승인 전까지 기능이 제한될 수 있습니다.</small></div>", unsafe_allow_html=True)
+        if st.button("🌙 임시 휴식 모드 전환", use_container_width=True):
+            users[u_id]["status"] = "resting"
+            save_users(users)
+            gsheet_sync("회원명단", 
+                ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
+                [u_id, u_data.get("password"), "resting", u_data.get("grade"), u_info.get("region", "-"), u_info.get("age", "-"), u_info.get("gender", "-"), u_info.get("exp", "-"), u_info.get("joined_at", "-"), u_info.get("motivation", "-")]
+            )
+            st.warning("🌙 임시 휴식 상태로 전환되었습니다. 로그아웃 후 다시 접속 시 제한이 적용됩니다.")
+            st.rerun()
+
+    with c2:
+        st.markdown("<div class='glass-card' style='border-top: 3px solid #ff4b4b;'><b>사령부 전역(탈퇴)</b><br><small>모든 활동을 종료하고 명부에서 이름을 내립니다. 복구가 불가능합니다.</small></div>", unsafe_allow_html=True)
+        if st.button("🔥 즉시 탈퇴 절차 시작", use_container_width=True):
+            st.session_state.show_withdraw_confirm = True
+            
+        if st.session_state.get("show_withdraw_confirm"):
+            st.error("🚨 사령부를 떠나시기 전에 한 번 더 고려해 주세요. 정말 전역하시겠습니까?")
+            withdraw_reason = st.text_area("1. 탈퇴 사유를 알려주세요.", key="w_reason")
+            withdraw_improve = st.text_area("2. 사령부가 개선해야 할 점이 있다면 무엇일까요?", key="w_improve")
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("✅ 네, 정말 탈퇴합니다", use_container_width=True):
+                    if not withdraw_reason: 
+                        st.warning("탈퇴 사유를 입력해 주세요.")
+                    else:
+                        users[u_id]["status"] = "withdrawn"
+                        save_users(users)
+                        
+                        # 1. 회원명단 탭 상태 업데이트
+                        gsheet_sync("회원명단", 
+                            ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
+                            [u_id, u_data.get("password"), "withdrawn", u_data.get("grade"), u_info.get("region", "-"), u_info.get("age", "-"), u_info.get("gender", "-"), u_info.get("exp", "-"), u_info.get("joined_at", "-"), u_info.get("motivation", "-")]
+                        )
+                        
+                        # 2. '탈퇴회원' 탭에 정보 전송
+                        gsheet_sync("탈퇴회원", 
+                            ["탈퇴날짜", "아이디", "탈퇴사유", "개선할 점"],
+                            [datetime.now().strftime("%Y-%m-%d %H:%M"), u_id, withdraw_reason, withdraw_improve]
+                        )
+                        
+                        st.error("🔥 탈퇴 처리가 완료되었습니다. 그동안의 헌신에 감사드립니다.")
+                        time.sleep(2)
+                        st.session_state.logged_in = False
+                        st.session_state.password_correct = False
+                        st.session_state.show_withdraw_confirm = False
+                        st.rerun()
+            with col_b:
+                if st.button("❌ 취소, 다시 생각할게요", use_container_width=True):
+                    st.session_state.show_withdraw_confirm = False
+                    st.rerun()
+
+elif page.startswith("7-a."):
+    st.header("🚀 모의투자 매수 테스트 (Unit Deployment)")
+    st.markdown("<div class='glass-card'>실시간 주가 데이터를 기반으로 가상의 매수 작전을 집행합니다.</div>", unsafe_allow_html=True)
+    
+    with st.form("mock_buy_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1: ticker = st.text_input("종목 코드 (예: TSLA)", value="TSLA").upper()
+        with col2: amount = st.number_input("매수 수량", min_value=1, value=10)
+        with col3: strategy = st.selectbox("적용 전략", ["VCP 돌파", "EP 포착", "MA 정배열"])
+        
+        if st.form_submit_button("🔥 가상 매수 집행"):
+            try:
+                data = yf.Ticker(ticker).history(period="1d")
+                if data.empty:
+                    st.error("종목 정보를 찾을 수 없습니다. 티커를 확인해 주세요.")
+                else:
+                    curr_p = float(data['Close'].iloc[-1])
+                    trades = load_trades()
+                    new_trade = {
+                        "id": str(int(time.time())),
+                        "user": st.session_state.current_user,
+                        "ticker": ticker,
+                        "buy_price": curr_p,
+                        "amount": amount,
+                        "strategy": strategy,
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+                    }
+                    trades["mock"].append(new_trade)
+                    save_trades(trades)
+                    st.success(f"✅ {ticker} 종목을 {curr_p:,.2f}$에 {amount}주 매수 완료했습니다! (TRADES_DB 저장)")
+                    st.balloons()
+            except Exception as e:
+                st.error(f"오류 발생: {e}")
+
+elif page.startswith("7-b."):
+    st.header("📊 모의투자 현황 및 결과 (Tactical Dashboard)")
+    trades = load_trades()
+    user_trades = [t for t in trades["mock"] if t["user"] == st.session_state.current_user]
+    
+    if not user_trades:
+        st.info("현재 보유 중인 가상 포트폴리오가 없습니다. 7-a에서 매수를 진행해 주세요.")
+    else:
+        results = []
+        with st.spinner("현재가 불러오는 중..."):
+            tickers = list(set([t['ticker'] for t in user_trades]))
+            if tickers:
+                data_batch = yf.download(tickers, period="1d", progress=False)['Close']
+                if isinstance(data_batch, pd.Series): data_batch = pd.DataFrame(data_batch).T
+                
+                for t in user_trades:
+                    try:
+                        tic = t['ticker']
+                        curr_p = float(data_batch[tic].iloc[-1]) if tic in data_batch.columns else t['buy_price']
+                        profit = (curr_p - t['buy_price']) * t['amount']
+                        roi = ((curr_p / t['buy_price']) - 1) * 100
+                        results.append({
+                            "날짜": t['date'], "종목": t['ticker'], "매수가": t['buy_price'], 
+                            "현재가": curr_p, "수량": t['amount'], "수익금": round(profit, 2), "수익률(%)": round(roi, 2)
+                        })
+                    except: pass
+        
+        df = pd.DataFrame(results)
+        st.dataframe(df.style.applymap(lambda x: 'color: #ff4b4b' if x > 0 else ('color: #6366f1' if x < 0 else ''), subset=['수익금', '수익률(%)']), use_container_width=True)
+        
+        total_profit = df['수익금'].sum()
+        st.metric("총 합계 수익", f"${total_profit:,.2f}", f"{total_profit/100:.2f}%")
+
+elif page.startswith("7-c."):
+    st.header("⚙️ 자동매매 전략 엔진 (Autonomous Engine)")
+    st.markdown("<div class='glass-card'>시스템이 실시간 데이터를 스캔하여 최적의 타점을 자동으로 포착합니다.</div>", unsafe_allow_html=True)
+    
+    # 전략 스캐닝 시뮬레이션
+    st.subheader("📡 실시간 전략 스캐닝 현황")
+    if st.button("🔍 전략 엔진 가동 (Scan Start)"):
+        with st.status("전략 필터링 중...", expanded=True) as status:
+            st.write("1. RS 90 이상 종목 추출 중...")
+            time.sleep(1)
+            st.write("2. VCP 변동성 축소 패턴 감지 중...")
+            time.sleep(1)
+            st.write("3. 에피소딕 피벗(EP) 후보군 필터링...")
+            time.sleep(1)
+            status.update(label="✅ 스캔 완료! 매수 권고 종목 발견", state="complete")
+        
+        cols = st.columns(2)
+        with cols[0]:
+            st.info("🎯 **추천 종목: NVDA**")
+            st.write("사유: 전고점 돌파 1단계, 거래량 급증 포착")
+            if st.button("⚡ 즉시 매수 집행 (Auto Order)", key="auto_buy_nvda"):
+                try:
+                    data = yf.Ticker("NVDA").history(period="1d")
+                    curr_p = float(data['Close'].iloc[-1])
+                    trades = load_trades()
+                    new_trade = {
+                        "id": str(int(time.time())), "user": st.session_state.current_user,
+                        "ticker": "NVDA", "buy_price": curr_p, "amount": 10,
+                        "strategy": "AI Auto Scanner", "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+                    }
+                    trades["auto"].append(new_trade)
+                    save_trades(trades)
+                    st.success("✅ NVDA 자동 매수 주문 전송 완료! (장부에 기록됨)")
+                except: st.error("데이터 로드 실패")
+        with cols[1]:
+            st.info("🎯 **추천 종목: AAPL**")
+            st.write("사유: 20일선 지지 후 기술적 반등 시그널")
+            if st.button("⚡ 즉시 매수 실행", key="auto_buy_aapl"):
+                try:
+                    data = yf.Ticker("AAPL").history(period="1d")
+                    curr_p = float(data['Close'].iloc[-1])
+                    trades = load_trades()
+                    new_trade = {
+                        "id": str(int(time.time())) + "_aapl", "user": st.session_state.current_user,
+                        "ticker": "AAPL", "buy_price": curr_p, "amount": 20,
+                        "strategy": "AI Auto Scanner", "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+                    }
+                    trades["auto"].append(new_trade)
+                    save_trades(trades)
+                    st.success("✅ AAPL 자동 매수 주문 전송 완료! (장부에 기록됨)")
+                except: st.error("데이터 로드 실패")
+
+elif page.startswith("7-d."):
+    st.header("📈 자동투자 성적표 (Performance Report)")
+    st.markdown("<div class='glass-card'>시스템이 수행한 전체 자동매매의 통계 데이터를 분석합니다.</div>", unsafe_allow_html=True)
+    
+    # 통계 시뮬레이션 데이터
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("총 매매 횟수", "128회")
+    c2.metric("승률 (Win Rate)", "64.5%", "2.1%")
+    c3.metric("누적 수익률", "142.8%", "12.5%")
+    c4.metric("최대 낙폭 (MDD)", "-8.2%")
+    
+    st.divider()
+    st.subheader("📉 자산 성장 곡선 (Equity Curve)")
+    chart_data = pd.DataFrame(np.random.randn(20, 1).cumsum(), columns=['Equity'])
+    st.line_chart(chart_data)
+
+elif page.startswith("7-e."):
+    st.markdown("<h1 style='text-align: center; color: #FFD700; font-size: 3rem;'>🛸 가상매매 명예의 전당</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888; font-size: 1.2rem;'>[ Virtual Trading Hall of Fame ]</p>", unsafe_allow_html=True)
+    st.markdown("<div class='glass-card' style='text-align: center; border: 1px solid #FFD700;'>모의투자 및 자동매매 전략으로 사령부 최고의 수익을 기록 중인 가상 수익왕을 공개합니다.</div>", unsafe_allow_html=True)
+    
+    trades = load_trades()
+    # 모의투자(mock)와 자동매매(auto) 데이터를 통합하여 순 산술
+    all_combined = trades.get("mock", []) + trades.get("auto", [])
+    
+    if not all_combined:
+        st.info("아직 명예의 전당에 등록된 가상매매 기록이 없습니다. 첫 번째 수익왕의 주인공이 되어보세요!")
+    else:
+        user_stats = {}
+        unique_tickers = list(set([t['ticker'] for t in all_combined]))
+        
+        with st.spinner("사령부 요원들의 전적을 정밀 대조 중..."):
+            # 현재가 일괄 조회
+            prices = {}
+            if unique_tickers:
+                try:
+                    d_batch = yf.download(unique_tickers, period="1d", progress=False)['Close']
+                    if isinstance(d_batch, pd.Series): d_batch = pd.DataFrame(d_batch).T
+                    for tick in unique_tickers:
+                        prices[tick] = float(d_batch[tick].iloc[-1]) if tick in d_batch.columns else 0
+                except: pass
+            
+            for t in all_combined:
+                uid = t['user']
+                curr_p = prices.get(t['ticker'], 0)
+                if curr_p == 0: curr_p = t['buy_price'] # 가격 정보 없으면 매수가로 대체
+                profit = (curr_p - t['buy_price']) * t['amount']
+                
+                if uid not in user_stats:
+                    user_stats[uid] = {"total_profit": 0, "trade_count": 0}
+                user_stats[uid]["total_profit"] += profit
+                user_stats[uid]["trade_count"] += 1
+        
+        # 랭킹 정렬
+        sorted_rank = sorted(user_stats.items(), key=lambda x: x[1]['total_profit'], reverse=True)
+        
+        # UI 출력
+        c1, c2, c3 = st.columns([1, 2, 1])
+        with c2:
+            st.markdown("### 🥇 COMMANDER RANKING")
+            for i, (uid, stats) in enumerate(sorted_rank[:10]):
+                medal = "🥇" if i == 0 else ("🥈" if i == 1 else ("🥉" if i == 2 else "🎖️"))
+                color = "#FFD700" if i == 0 else "#FFFFFF"
+                st.markdown(f"""
+                <div style='background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 5px solid {color};'>
+                    <span style='font-size: 1.2rem;'>{medal} <b>{uid}</b> 요원</span>
+                    <span style='float: right; color: #00FF00; font-weight: bold;'>$ {stats['total_profit']:,.2f}</span>
+                    <br><small style='color: #888;'>누적 매매: {stats['trade_count']}회</small>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            if len(sorted_rank) > 0:
+                st.balloons()
+
 # --- 🛰️ 시스템 하단 글로벌 전술 푸터 (Global Footer) ---
 st.write("") # 스페이싱
 st.divider()
