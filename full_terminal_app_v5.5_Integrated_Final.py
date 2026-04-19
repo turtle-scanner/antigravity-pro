@@ -11,7 +11,7 @@ import plotly.express as px
 import requests
 import time
 
-# --- 🛰️ 시스템 기초 설정 ---
+# --- 🪲 시스템 기초 설정 ---
 MASTER_GAS_URL = "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec"
 USERS_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1180564490"
 CHAT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=2147147361"
@@ -81,8 +81,16 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&display=swap');
     :root { --primary-neon: #00FF00; --accent-glow: #6366f1; --bg-dark: #0a0a0c; }
-    body { background-color: var(--bg-dark); color: #e2e8f0; font-family: 'Outfit', sans-serif; }
-    .stApp { background: linear-gradient(135deg, #0a0a0c 0%, #111118 100%); }
+    body { 
+        background-color: var(--bg-dark); 
+        color: #e2e8f0; 
+        font-family: 'Outfit', sans-serif; 
+    }
+    .stApp { 
+        background-image: linear-gradient(rgba(10, 10, 12, 0.9), rgba(10, 10, 12, 0.9)), url("StockDragonfly2.png");
+        background-size: cover;
+        background-attachment: fixed;
+    }
     .glass-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 20px; padding: 25px; margin-bottom: 25px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8); }
     .stButton>button { background: rgba(99, 102, 241, 0.1); color: white; border: 1px solid var(--accent-glow); border-radius: 12px; padding: 10px 20px; transition: all 0.3s ease; font-weight: 700; }
     .stButton>button:hover { background: var(--accent-glow); box-shadow: 0 0 20px var(--accent-glow); transform: translateY(-2px); }
@@ -100,7 +108,7 @@ def show_global_notice():
     st.markdown("""<div style='background: rgba(0, 255, 0, 0.05); border-left: 5px solid #00FF00; padding: 15px; border-radius: 10px; margin-bottom: 25px;'><span style='color: #00FF00; font-weight: 800;'>[사령부 긴급 공지]</span> <span style='color: #e2e8f0; margin-left: 10px;'>🚨 보안 지침: 공용 보안 코드가 '1234'로 갱신되었습니다. (1-c)에서 변경하십시오.</span></div>""", unsafe_allow_html=True)
 
 def check_login():
-    st.markdown("<h1 style='text-align: center; color: #00FF00; text-shadow: 2px 2px 10px #00FF00; font-family: Outfit; font-weight: 900; margin-bottom: 0px;'>🛸 StockDragonfly Apex 🛸</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #00FF00; text-shadow: 2px 2px 10px #00FF00; font-family: Outfit; font-weight: 900; margin-bottom: 0px;'>🪲 StockDragonfly Apex 🪲</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #888; font-size: 1rem; margin-top: 0px;'>High-Performance Trading Command Center</p>", unsafe_allow_html=True)
     
     users = load_users()
@@ -112,11 +120,11 @@ def check_login():
             st.write("")
         show_major_announcement()
         if not st.session_state.show_signup:
-            st.markdown("<div class='glass-card' style='border: 1px solid #00FF00; margin-top: 20px;'><h2 style='text-align: center; color: #00FF00;'>🛡️ 안티그래비티 사령부 입장</h2></div>", unsafe_allow_html=True)
+            st.markdown("<div class='glass-card' style='border: 1px solid #00FF00; margin-top: 20px;'><h2 style='text-align: center; color: #00FF00;'>🛡️ StockDragonfly 사령부 입장</h2></div>", unsafe_allow_html=True)
             with st.form("lg_f"):
                 u_id = st.text_input("🎖️ 요원 아이디")
                 u_pw = st.text_input("🔐 보안 코드", type="password")
-                if st.form_submit_button("🚀 사령부 입장"):
+                if st.form_submit_button("🪲 사령부 입장"):
                     if u_id in users and users[u_id]["password"] == u_pw:
                         if users[u_id]["status"] == "approved": st.session_state["password_correct"] = True; st.session_state["current_user"] = u_id; st.session_state["user_grade"] = users[u_id].get("grade", "회원"); st.rerun()
                         else: st.warning("🚷 미승인 계정")
@@ -163,118 +171,154 @@ def check_login():
                         u_gender = st.selectbox("🚻 성별", ["남성", "여성"])
                         u_exp = st.selectbox("🏹 주식 연차 (경력)", ["입문 (1년 미만)", "병사 (1~3년)", "부사관 (3~5년)", "영관급 (5~10년)", "장성급 (10년 이상)"])
                     
-                    u_motive = st.text_area("🔥 사령부 임관 및 매매 동기", placeholder="안티그래비티 사령부에 합류하려는 이유와 투자 목표를 자유롭게 기재하세요.")
+                    u_motive = st.text_area("🔥 사령부 임관 및 매매 동기", placeholder="StockDragonfly 사령부에 합류하려는 이유와 투자 목표를 자유롭게 기재하세요.")
                 
-                st.divider()
-                st.markdown("### [2단계: 전술 지식 평가 (20 Munhang)]")
-                st.info("⚠️ 위 인적 사항을 모두 기재한 후, 아래 20문제 중 17문제 이상을 맞춰야 임관 신청이 가능합니다.")
-                
-                def get_q(txt, ops): return st.radio(txt, ops, index=None)
+                    st.divider()
+                    st.markdown("### [2단계: 전술 지식 평가 (20 Munhang)]")
+                    st.info("⚠️ 위 인적 사항을 모두 기재한 후, 아래 20문제 중 17문제 이상을 맞춰야 임관 신청이 가능합니다.")
+                    
+                    def get_q(txt, ops): return st.radio(txt, ops, index=None)
 
-                st.markdown("### [PART 1. 중수용: 돌파 매매 실전 전략]")
-                q1 = get_q("1. 약세장(Defensive Regime)에서 나타나는 현상으로 매매를 중단해야 하는 신호는?", ["주요 지수가 200일 이동평균선 위에서 지지받음", "당일 4% 상승 종목 수가 하락 종목 수보다 많음", "주요 지수가 20일 또는 50일 이동평균선 아래에 위치함", "신고가 경신 종목 수가 전주 대비 20% 증가함"])
-                q2 = get_q("2. VCP 패턴이나 깃발형 패턴 완성 직전의 가장 이상적인 모습은?", ["변동폭이 확대되며 거래량이 평소보다 3배 급증", "변동폭이 좁아지고 거래량이 눈에 띄게 마름(Dry-up)", "주가가 5% 이상 급등락하며 매물을 소화함", "거래량은 많으나 주가는 움직이지 않는 정체 상태"])
-                q3 = get_q("3. 돌파 진입 후 계좌를 지키기 위해 설정하는 '기계적 손절선'의 정석 위치는?", ["매수 진입한 당일의 최저점(LOD)", "매수가 대비 무조건 -10% 지점", "120일 이동평균선이 지나는 자리", "전일 종가보다 1% 낮은 가격"])
-                q4 = get_q("4. 매수 후 3~5일 내에 주가가 8~20% 급등했을 때 취해야 할 행동은?", ["전량 매도하여 수익을 모두 현금화한다.", "추가 매수(불타기)를 통해 비중을 최대화한다.", "물량의 1/3~1/2을 익절하고 손절선을 본절가로 상향한다.", "아무것도 하지 않고 목표가까지 무작정 기다린다."])
-                q5 = get_q("5. 남은 물량으로 큰 수익(홈런)을 노릴 때 사용하는 최종 매도 기준은?", ["당일 고가 대비 5% 하락 시 즉시 매도", "10일 또는 20일 이동평균선을 종가 기준으로 이탈 시", "RSI 지수가 50 이하로 떨어지는 순간", "투자 경고 종목으로 지정되는 날"])
-                q6 = get_q("6. 프라딥 본데가 강조한 '추격 매수 금지'의 기준이 되는 연속 상승 일수는?", ["이미 1일 연속 상승한 종목", "이미 2일 연속 상승한 종목", "이미 3일 연속 상승한 종목", "이미 5일 연속 상승한 종목"])
-                q7 = get_q("7. 돌파 당일 캔들이 어떤 모양으로 마감되어야 신뢰도가 가장 높을까요?", ["윗꼬리가 몸통보다 긴 역망치 모양", "당일 변동폭의 최상단(고가 부근)에서 종가 형성", "시가와 종가가 같은 십자가(도지) 모양", "아래꼬리가 길고 파란색(음봉)으로 마감"])
-                q8 = get_q("8. 강력한 뉴스(촉매제)와 함께 엄청난 거래량으로 갭상승하는 셋업의 명칭은?", ["데드 캣 바운스(Dead Cat Bounce)", "에피소딕 피벗(Episodic Pivot, EP)", "헤드 앤 숄더(Head and Shoulders)", "불 트랩(Bull Trap)"])
-                q9 = get_q("9. 진짜 돌파(True Breakout)로 인정받기 위한 거래량의 조건은?", ["전일 거래량보다 현저히 줄어들어야 함", "평균 거래량의 1.5배~3배 이상 크게 폭발함", "거래량 변화 없이 주가만 빠르게 상승함", "장 시작 직후에만 거래량이 몰리고 사라짐"])
-                q10 = get_q("10. 갭상승 종목의 안전한 진입 타점인 '오프닝 레인지 돌파(ORB)'의 기준은?", ["전일의 종가를 하향 돌파할 때", "장 시작 후 형성된 초기 고점(ORH)을 재돌파할 때", "시가 대비 3% 이상 눌림을 줄 때", "장 마감 10분 전 종가 부근"])
+                    st.markdown("### [PART 1. 중수용: 돌파 매매 실전 전략]")
+                    q1 = get_q("1. 약세장(Defensive Regime)에서 나타나는 현상으로 매매를 중단해야 하는 신호는?", ["주요 지수가 200일 이동평균선 위에서 지지받음", "당일 4% 상승 종목 수가 하락 종목 수보다 많음", "주요 지수가 20일 또는 50일 이동평균선 아래에 위치함", "신고가 경신 종목 수가 전주 대비 20% 증가함"])
+                    q2 = get_q("2. VCP 패턴이나 깃발형 패턴 완성 직전의 가장 이상적인 모습은?", ["변동폭이 확대되며 거래량이 평소보다 3배 급증", "변동폭이 좁아지고 거래량이 눈에 띄게 마름(Dry-up)", "주가가 5% 이상 급등락하며 매물을 소화함", "거래량은 많으나 주가는 움직이지 않는 정체 상태"])
+                    q3 = get_q("3. 돌파 진입 후 계좌를 지키기 위해 설정하는 '기계적 손절선'의 정석 위치는?", ["매수 진입한 당일의 최저점(LOD)", "매수가 대비 무조건 -10% 지점", "120일 이동평균선이 지나는 자리", "전일 종가보다 1% 낮은 가격"])
+                    q4 = get_q("4. 매수 후 3~5일 내에 주가가 8~20% 급등했을 때 취해야 할 행동은?", ["전량 매도하여 수익을 모두 현금화한다.", "추가 매수(불타기)를 통해 비중을 최대화한다.", "물량의 1/3~1/2을 익절하고 손절선을 본절가로 상향한다.", "아무것도 하지 않고 목표가까지 무작정 기다린다."])
+                    q5 = get_q("5. 남은 물량으로 큰 수익(홈런)을 노릴 때 사용하는 최종 매도 기준은?", ["당일 고가 대비 5% 하락 시 즉시 매도", "10일 또는 20일 이동평균선을 종가 기준으로 이탈 시", "RSI 지수가 50 이하로 떨어지는 순간", "투자 경고 종목으로 지정되는 날"])
+                    q6 = get_q("6. 프라딥 본데가 강조한 '추격 매수 금지'의 기준이 되는 연속 상승 일수는?", ["이미 1일 연속 상승한 종목", "이미 2일 연속 상승한 종목", "이미 3일 연속 상승한 종목", "이미 5일 연속 상승한 종목"])
+                    q7 = get_q("7. 돌파 당일 캔들이 어떤 모양으로 마감되어야 신뢰도가 가장 높을까요?", ["윗꼬리가 몸통보다 긴 역망치 모양", "당일 변동폭의 최상단(고가 부근)에서 종가 형성", "시가와 종가가 같은 십자가(도지) 모양", "아래꼬리가 길고 파란색(음봉)으로 마감"])
+                    q8 = get_q("8. 강력한 뉴스(촉매제)와 함께 엄청난 거래량으로 갭상승하는 셋업의 명칭은?", ["데드 캣 바운스(Dead Cat Bounce)", "에피소딕 피벗(Episodic Pivot, EP)", "헤드 앤 숄더(Head and Shoulders)", "불 트랩(Bull Trap)"])
+                    q9 = get_q("9. 진짜 돌파(True Breakout)로 인정받기 위한 거래량의 조건은?", ["전일 거래량보다 현저히 줄어들어야 함", "평균 거래량의 1.5배~3배 이상 크게 폭발함", "거래량 변화 없이 주가만 빠르게 상승함", "장 시작 직후에만 거래량이 몰리고 사라짐"])
+                    q10 = get_q("10. 갭상승 종목의 안전한 진입 타점인 '오프닝 레인지 돌파(ORB)'의 기준은?", ["전일의 종가를 하향 돌파할 때", "장 시작 후 형성된 초기 고점(ORH)을 재돌파할 때", "시가 대비 3% 이상 눌림을 줄 때", "장 마감 10분 전 종가 부근"])
 
-                st.markdown("### [PART 2. 입문용: 주식 차트 기초]")
-                q11 = get_q("11. 한국 주식 차트에서 '빨간색 양봉' 캔들의 의미는?", ["가격이 시작가보다 낮게 끝났다.", "가격이 시작가보다 높게 끝났다. (상승)", "거래량이 어제보다 줄어들었다.", "주식을 파는 사람이 사는 사람보다 많다."])
-                q12 = get_q("12. 한국 주식 차트에서 '파란색 음봉' 캔들의 의미는?", ["주식 가격이 예전보다 상승했다.", "주식 가격이 예전보다 하락했다.", "주식 시장이 곧 마감된다는 뜻이다.", "외국인이 주식을 많이 샀다는 뜻이다."])
-                q13 = get_q("13. 하루 동안 사람들이 주식을 사고팔았던 '양'을 나타내는 용어는?", ["자본금", "시가총액", "거래량", "유동성"])
-                q14 = get_q("14. 진짜 양초를 닮았다고 해서 붙여진 주식 그래프의 이름은?", ["스틱 차트", "캔들 차트", "바 차트", "라인 차트"])
-                q15 = get_q("15. 주식을 너무 비쌀 때 사지 말라는 의미의 격언은?", ["발바닥에서 사서 정수리에서 팔아라.", "무릎에서 사서 어깨에서 팔아라.", "어깨에서 사서 발바닥에서 팔아라.", "허리에서 사서 머리에서 팔아라."])
-                q16 = get_q("16. 일정 기간 주가 평균을 선으로 이은 것으로, 방향성을 알려주는 지표는?", ["매물대선", "이동평균선(이평선)", "지지저항선", "볼린저밴드"])
-                q17 = get_q("17. 짧은 기간의 평균선이 긴 기간의 평균선을 뚫고 올라가는 '좋은 신호'는?", ["실버크로스", "데드크로스", "골든크로스", "다이아몬드크로스"])
-                q18 = get_q("18. 반대로 짧은 평균선이 긴 평균선 아래로 떨어지는 '나쁜 신호'는?", ["데드크로스", "블랙크로스", "폴링크로스", "다크크로스"])
-                q19 = get_q("19. 주식 시장에서 가격이 가장 낮을 때를 일컫는 말은?", ["고점", "낙점", "하점", "저점"])
-                q20 = get_q("20. 장기적으로 주식 시장의 가격이 점점 우상향하는 주요 원인은?", ["주식 숫자가 줄어들기 때문", "인플레이션으로 인해 화폐 가치가 떨어지기 때문", "모든 사람이 주식을 사기 때문", "정부가 주가를 강제로 올리기 때문"])
+                    st.markdown("### [PART 2. 입문용: 주식 차트 기초]")
+                    q11 = get_q("11. 한국 주식 차트에서 '빨간색 양봉' 캔들의 의미는?", ["가격이 시작가보다 낮게 끝났다.", "가격이 시작가보다 높게 끝났다. (상승)", "거래량이 어제보다 줄어들었다.", "주식을 파는 사람이 사는 사람보다 많다."])
+                    q12 = get_q("12. 한국 주식 차트에서 '파란색 음봉' 캔들의 의미는?", ["주식 가격이 예전보다 상승했다.", "주식 가격이 예전보다 하락했다.", "주식 시장이 곧 마감된다는 뜻이다.", "외국인이 주식을 많이 샀다는 뜻이다."])
+                    q13 = get_q("13. 하루 동안 사람들이 주식을 사고팔았던 '양'을 나타내는 용어는?", ["자본금", "시가총액", "거래량", "유동성"])
+                    q14 = get_q("14. 진짜 양초를 닮았다고 해서 붙여진 주식 그래프의 이름은?", ["스틱 차트", "캔들 차트", "바 차트", "라인 차트"])
+                    q15 = get_q("15. 주식을 너무 비쌀 때 사지 말라는 의미의 격언은?", ["발바닥에서 사서 정수리에서 팔아라.", "무릎에서 사서 어깨에서 팔아라.", "어깨에서 사서 발바닥에서 팔아라.", "허리에서 사서 머리에서 팔아라."])
+                    q16 = get_q("16. 일정 기간 주가 평균을 선으로 이은 것으로, 방향성을 알려주는 지표는?", ["매물대선", "이동평균선(이평선)", "지지저항선", "볼린저밴드"])
+                    q17 = get_q("17. 짧은 기간의 평균선이 긴 기간의 평균선을 뚫고 올라가는 '좋은 신호'는?", ["실버크로스", "데드크로스", "골든크로스", "다이아몬드크로스"])
+                    q18 = get_q("18. 반대로 짧은 평균선이 긴 평균선 아래로 떨어지는 '나쁜 신호'는?", ["데드크로스", "블랙크로스", "폴링크로스", "다크크로스"])
+                    q19 = get_q("19. 주식 시장에서 가격이 가장 낮을 때를 일컫는 말은?", ["고점", "낙점", "하점", "저점"])
+                    q20 = get_q("20. 장기적으로 주식 시장의 가격이 점점 우상향하는 주요 원인은?", ["주식 숫자가 줄어들기 때문", "인플레이션으로 인해 화플레이션으로 인해 화폐 가치가 떨어지기 때문", "모든 사람이 주식을 사기 때문", "정부가 주가를 강제로 올리기 때문"])
 
-                if st.form_submit_button("🛰️ 임관 신청서 최종 제출"):
-                    ans = [q1,q2,q3,q4,q5,q6,q7,q8,q9,q10,q11,q12,q13,q14,q15,q16,q17,q18,q19,q20]
-                    final_id = st.session_state.pending_id
-                    if not final_id or not new_pw: st.error("정보 입력 필수")
-                    elif any(a is None for a in ans): st.warning("모든 문제를 풀어주세요.")
-                    else:
-                        score = 0
-                        corrects = ["주요 지수가 20일 또는 50일 이동평균선 아래에 위치함", "변동폭이 좁아지고 거래량이 눈에 띄게 마름(Dry-up)", "매수 진입한 당일의 최저점(LOD)", "물량의 1/3~1/2을 익절하고 손절선을 본절가로 상향한다.", "10일 또는 20일 이동평균선을 종가 기준으로 이탈 시", "이미 3일 연속 상승한 종목", "당일 변동폭의 최상단(고가 부근)에서 종가 형성", "에피소딕 피벗(Episodic Pivot, EP)", "평균 거래량의 1.5배~3배 이상 크게 폭발함", "장 시작 후 형성된 초기 고점(ORH)을 재돌파할 때", "가격이 시작가보다 높게 끝났다. (상승)", "주식 가격이 예전보다 하락했다.", "거래량", "캔들 차트", "무릎에서 사서 어깨에서 팔아라.", "이동평균선(이평선)", "골든크로스", "데드크로스", "저점", "인플레이션으로 인해 화폐 가치가 떨어지기 때문"]
-                        for i in range(20):
-                            if ans[i] == corrects[i]: score += 1
-                        
-                        if score >= 17:
-                            users = load_users()
-                            if final_id in users: st.error("이미 존재하는 ID")
-                            else:
-                                users[final_id] = {
-                                    "password": new_pw, "status": "pending", "grade": "회원", "score": score,
-                                    "info": {"age": u_age, "gender": u_gender, "area": u_area, "exp": u_exp, "motive": u_motive, "reg_date": datetime.now().strftime("%Y-%m-%d %H:%M")}
-                                }
-                                save_users(users)
-                                gsheet_sync("회원명단", 
-                                            ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"], 
-                                            [final_id, new_pw, "pending", "회원", u_area, u_age, u_gender, u_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), u_motive])
-                                st.success(f"축하합니다! {score}점으로 자격 통과. 심사를 기다리세요."); time.sleep(2)
-                                st.session_state.show_signup = False
-                                if "id_verified" in st.session_state: del st.session_state.id_verified
-                                st.rerun()
-                        else: st.error(f"💀 점수 미달: {score}/20 (합격 컷: 17). 전술 공부 후 다시 도전하세요.")
+                    if st.form_submit_button("🪲 임관 신청서 최종 제출"):
+                        ans = [q1,q2,q3,q4,q5,q6,q7,q8,q9,q10,q11,q12,q13,q14,q15,q16,q17,q18,q19,q20]
+                        final_id = st.session_state.pending_id
+                        if not final_id or not new_pw: st.error("정보 입력 필수")
+                        elif any(a is None for a in ans): st.warning("모든 문제를 풀어주세요.")
+                        else:
+                            score = 0
+                            corrects = ["주요 지수가 20일 또는 50일 이동평균선 아래에 위치함", "변동폭이 좁아지고 거래량이 눈에 띄게 마름(Dry-up)", "매수 진입한 당일의 최저점(LOD)", "물량의 1/3~1/2을 익절하고 손절선을 본절가로 상향한다.", "10일 또는 20일 이동평균선을 종가 기준으로 이탈 시", "이미 3일 연속 상승한 종목", "당일 변동폭의 최상단(고가 부근)에서 종가 형성", "에피소딕 피벗(Episodic Pivot, EP)", "평균 거래량의 1.5배~3배 이상 크게 폭발함", "장 시작 후 형성된 초기 고점(ORH)을 재돌파할 때", "가격이 시작가보다 높게 끝났다. (상승)", "주식 가격이 예전보다 하락했다.", "거래량", "캔들 차트", "무릎에서 사서 어깨에서 팔아라.", "이동평균선(이평선)", "골든크로스", "데드크로스", "저점", "인플레이션으로 인해 화폐 가치가 떨어지기 때문"]
+                            for i in range(20):
+                                if ans[i] == corrects[i]: score += 1
+                            
+                            if score >= 17:
+                                users = load_users()
+                                if final_id in users: st.error("이미 존재하는 ID")
+                                else:
+                                    users[final_id] = {
+                                        "password": new_pw, "status": "pending", "grade": "회원", "score": score,
+                                        "info": {"age": u_age, "gender": u_gender, "area": u_area, "exp": u_exp, "motive": u_motive, "reg_date": datetime.now().strftime("%Y-%m-%d %H:%M")}
+                                    }
+                                    save_users(users)
+                                    gsheet_sync("회원명단", 
+                                                ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"], 
+                                                [final_id, new_pw, "pending", "회원", u_area, u_age, u_gender, u_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), u_motive])
+                                    st.success(f"축하합니다! {score}점으로 자격 통과. 심사를 기다리세요."); time.sleep(2)
+                                    st.session_state.show_signup = False
+                                    if "id_verified" in st.session_state: del st.session_state.id_verified
+                                    st.rerun()
+                            else: st.error(f"💀 점수 미달: {score}/20 (합격 컷: 17). 전술 공부 후 다시 도전하세요.")
             
             with st.expander("💡 🏛️ StockDragonfly 전술 아카데미 (필독 학습 가이드)"):
-                st.markdown("""
-                <div style='color: #FFFFFF; line-height: 1.9; font-size: 0.98rem; background: rgba(0, 255, 0, 0.03); padding: 25px; border-radius: 20px; border: 1px solid rgba(0, 255, 0, 0.2);'>
-                    <p style='color: #00FF00; font-size: 1.2rem; font-weight: 800; border-bottom: 2px solid #00FF00; padding-bottom: 10px; margin-bottom: 20px;'>📖 신입 요원 필독: 실전 전술 핵심 요약</p>
-                    
-                    <p>🛡️ <b>[PART 1. 마스터 전술 레슨]</b></p>
-                    <ul style='list-style-type: "🚀 ";'>
-                        <li><b>시장의 온도(Regime):</b> 지수가 20일/50일선 <b>아래</b>에 있으면 총을 내려놓으세요. 그것이 전사를 살리는 길입니다.</li>
-                        <li><b>VCP 패턴:</b> 마크 미너비니의 핵심! 주가가 폭발하기 전에는 반드시 변동폭이 좁아지며 거래량이 <b>마르는(Dry-up)</b> 구간이 나옵니다.</li>
-                        <li><b>손절(Stop-loss):</b> 본절을 지키는 최후의 보루는 당일의 <b>최저가(LOD)</b>입니다. 이곳이 뚫리면 미련 없이 퇴각하십시오.</li>
-                        <li><b>익절과 생존:</b> 8~20% 급등 시 <b>절반을 익절</b>하여 수익을 챙기고, 나머지 반의 손절선은 <b>본절가</b>로 올려 '무위험 매매'를 만드세요.</li>
-                        <li><b>추세 즐기기:</b> 홈런을 치고 싶다면 주가가 <b>10일 또는 20일 이동평균선</b>을 종가로 이탈할 때까지 끈질기게 버티십시오.</li>
-                        <li><b>추격 매수 금지:</b> 본데의 철칙! 이미 <b>3일 연속</b> 양봉이 떴다면 그것은 요원의 것이 아닙니다. 다음 기회를 기다리세요.</li>
-                        <li><b>에피소딕 피벗(EP):</b> 강력한 촉매제(실적 등)와 함께 역대급 거래량으로 <b>갭상승</b>하는 지점이 부의 추월차점입니다.</li>
-                        <li><b>진짜 돌파:</b> 거래량이 평소보다 <b>1.5배~3배 이상</b> 터지지 않는다면 기관의 수급이 없는 가짜 돌파(Fake)일 확률이 높습니다.</li>
-                        <li><b>ORB 타점:</b> 장 초반의 변동성을 이겨내고 <b>초기 고점(ORH)</b>을 뚫는 순간이 가장 날카로운 진입 시점입니다.</li>
+                hint_html = """
+                <div style='color: #FFFFFF; line-height: 1.8; font-size: 1rem; background: rgba(0, 255, 0, 0.05); padding: 25px; border-radius: 15px; border: 1px solid #00FF00;'>
+                    <h3 style='color: #00FF00; margin-top: 0;'>🛡️ [PART 1. 마스터 전술 레슨]</h3>
+                    <ul style='list-style-type: none; padding-left: 0;'>
+                        <li>🚀 <b>시장의 온도(Regime):</b> 지수가 20일/50일선 <b>아래</b>에 있으면 매매 중단!</li>
+                        <li>🚀 <b>VCP 패턴:</b> 폭발 전 변동폭 수축과 거래량 <b>마름(Dry-up)</b>은 필수!</li>
+                        <li>🚀 <b>손절(Stop-loss):</b> 계좌 사수의 보루는 당일의 <b>최저가(LOD)</b>입니다.</li>
+                        <li>🚀 <b>익절과 생존:</b> 8~20% 급등 시 <b>절반 익절</b> 후 손절선을 본절로!</li>
+                        <li>🚀 <b>추세 홈런:</b> <b>10일 또는 20일 이동평균선</b> 이탈 전까지 홀딩하십시오.</li>
+                        <li>🚀 <b>추격 매수 금지:</b> 이미 <b>3일 연속</b> 상승했다면 절대 사지 마세요.</li>
+                        <li>🚀 <b>에피소딕 피벗(EP):</b> 강력한 촉매제와 거래량이 만나는 <b>갭상승</b> 지점!</li>
+                        <li>🚀 <b>진짜 돌파:</b> 거래량이 평소보다 <b>1.5배~3배 이상</b> 터져야 가짜가 아닙니다.</li>
+                        <li>🚀 <b>ORB 타점:</b> 장 초반의 <b>초기 고점(ORH)</b>을 뚫는 순간이 진입 타점!</li>
                     </ul>
-
-                    <p style='margin-top: 25px;'>📚 <b>[PART 2. 기초 전술 노하우]</b></p>
-                    <ul style='list-style-type: "💡 ";'>
-                        <li><b>캔들의 언어:</b> <b>빨강(양봉)</b>은 시가보다 높게 끝난 승전보, <b>파랑(음봉)</b>은 낮게 끝난 패전보입니다.</li>
-                        <li><b>거래량의 의미:</b> 가격보다 정직한 것은 <b>거래량</b>입니다. 장중에 터진 에너지의 총합을 항상 주시하십시오.</li>
-                        <li><b>격언의 지혜:</b> 발바닥에서 사려 하지 마세요. <b>무릎</b>에서 확인하고 <b>어깨</b>에서 내려오는 것이 가장 안전한 홈런 공식입니다.</li>
-                        <li><b>이동평균선:</b> 주가의 평균을 이은 이 선은 시장의 <b>방향성</b>을 알려주는 나침반과 같습니다.</li>
-                        <li><b>크로스의 마법:</b> 단기선이 위로 뚫으면 <b>골든크로스</b>(매수), 아래로 꺾이면 <b>데드크로스</b>(매도)입니다.</li>
-                        <li><b>가격의 화폐가치:</b> 주가가 우상향하는 근본 원인은 <b>인플레이션</b>에 의해 화폐의 가치가 점점 하락하기 때문입니다.</li>
+                    <h3 style='color: #00FF00; margin-top: 25px;'>📚 [PART 2. 기초 전술 노하우]</h3>
+                    <ul style='list-style-type: none; padding-left: 0;'>
+                        <li>💡 <b>캔들의 언어:</b> <b>빨강(양봉)</b>은 상승, <b>파랑(음봉)</b>은 하락입니다.</li>
+                        <li>💡 <b>거래량:</b> 장중에 터진 에너지의 총합인 <b>거래량</b>을 항상 보십시오.</li>
+                        <li>💡 <b>격언의 지혜:</b> <b>무릎</b>에서 확인하고 <b>어깨</b>에서 내려오세요.</li>
+                        <li>💡 <b>이동평균선:</b> 주가의 평균을 이은 선으로 시장의 <b>방향성</b>을 봅니다.</li>
+                        <li>💡 <b>크로스:</b> 위로 뚫으면 <b>골든</b>, 아래로 꺾이면 <b>데드</b> 크로스입니다.</li>
+                        <li>💡 <b>화폐 가치:</b> 자산 우상향의 근본 원인은 <b>인플레이션</b>입니다.</li>
                     </ul>
-                    
-                    <p style='color: #FFD700; font-weight: 700; text-align: center; margin-top: 20px;'>⚠️ 위 가이드를 정독하면 20문항 모두 만점이 가능합니다. 건승을 빕니다!</p>
+                    <p style='color: #FFD700; text-align: center; font-weight: bold; margin-top: 20px;'>⚠️ 가이드를 정독하면 20문항 모두 만점이 가능합니다!</p>
                 </div>
-                """, unsafe_allow_html=True)
+                """
+                st.markdown(hint_html, unsafe_allow_html=True)
             if st.button("⬅️ 로그인 화면으로 복귀"): st.session_state.show_signup = False; st.rerun()
 
 if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 if not st.session_state["password_correct"]: check_login(); st.stop()
 
-# --- 🚀 StockDragonfly 메인 시스템 가동 ---
-st.markdown("<h2 style='text-align: center; color: #00FF00; text-shadow: 2px 2px 8px #00FF00; font-family: Outfit; font-weight: 800; margin-top: -20px;'>🚀 StockDragonfly Tactical Command Center</h2>", unsafe_allow_html=True)
+# --- 🪲 StockDragonfly 메인 시스템 가동 ---
+def render_top_banners():
+    # 🌍 Live Ops & 지수 대시보드
+    cols = st.columns([1.5, 3, 1.5])
+    with cols[0]:
+        st.markdown(f"""
+        <div style='background: rgba(0,255,0,0.05); padding: 10px; border-radius: 10px; border-left: 3px solid #00FF00;'>
+            <p style='margin: 0; font-size: 0.7rem; color: #00FF00;'>🟢 LIVE OPS CENTER</p>
+            <p style='margin: 0; font-size: 0.85rem; font-weight: 700;'>🇰🇷 {datetime.now().strftime('%H:%M:%S')} | 🇺🇸 { (datetime.now() - timedelta(hours=13)).strftime('%H:%M:%S') }</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with cols[1]:
+        # 🟢 MARKET REGIME ACTIVE BANNER
+        st.markdown("""
+        <div style='background: rgba(0, 255, 0, 0.05); padding: 15px; border-radius: 15px; border: 2px solid #FFD700; text-align: center; box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);'>
+            <h2 style='color: #00FF00; margin: 0; letter-spacing: 2px;'>🟢 GREEN MARKET ACTIVE</h2>
+            <p style='color: #6366f1; font-weight: bold; margin: 5px 0 0 0;'>🔵 사령부 상태: 매수 윈도우 개방 (팔로우스루데이 발생: 실시간 감시 중)</p>
+            <p style='color: #888; font-size: 0.75rem; font-style: italic; margin-top: 5px;'>"시장의 동력이 가장 약해지는 순간, 강력한 EP를 동반한 주도주만이 하늘로 솟구칩니다. 우리는 그 불꽃에 동참합니다." - Pradeep Bonde</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with cols[2]:
+        try:
+            indices = yf.download(["^IXIC", "^KS11", "^KQ11"], period="1d", progress=False)['Close']
+            nq = indices["^IXIC"].iloc[-1]; kp = indices["^KS11"].iloc[-1]; kd = indices["^KQ11"].iloc[-1]
+            st.markdown(f"""
+            <div style='text-align: right; background: rgba(255,255,255,0.03); padding: 5px 10px; border-radius: 10px;'>
+                <p style='margin: 0; font-size: 0.75rem;'>NASDAQ: <span style='color: #00FF00;'>{nq:,.1f}</span></p>
+                <p style='margin: 0; font-size: 0.75rem;'>KOSPI: <span style='color: #FF4B4B;'>{kp:,.1f}</span></p>
+                <p style='margin: 0; font-size: 0.75rem;'>KOSDAQ: <span style='color: #00FF00;'>{kd:,.1f}</span></p>
+            </div>
+            """, unsafe_allow_html=True)
+        except: st.write("📡 데이터 싱크 중...")
+
+render_top_banners()
+st.write("") # 간격 조절
 show_global_notice()
 with st.sidebar:
     st.markdown(f"**{st.session_state.get('user_grade','회원')} {st.session_state['current_user']} 요원**")
     zones = {
-        "🏰 1. 본부 사령부": ["1-a. 👑 관리자 승인 센터", "1-b. 🎖️ HQ 인적 자원 사령부", "1-c. 🔐 계정 보안 설정", "1-d. 🌙 탈퇴/휴식 신청", "1-e. 🏅 대원 활동 뱃지 보관함"],
-        "📡 2. 시장 상황실": ["2-a. 📈 마켓 트렌드 요약", "2-b. 🗺️ 실시간 히트맵", "2-c. 🌡️ 시장 심리 게이지", "2-d. 🏛️ 제작 동기", "2-e. 🚦 업종별 섹터 로테이션", "2-f. 📢 AI 실시간 시황 브리핑"],
-        "🏹 3. 주도주 추격대": ["3-a. 🎯 주도주 타점 스캐너", "3-b. 🚀 주도주 랭킹 TOP 50", "3-c. 📝 주도주 분석 게시판", "3-d. 📊 기관 수급 추격 레이더"]
+        "🏰 1. 본부 사령부": ["1-a. 👑 신입 요원 임관 승인", "1-b. 🎖️ HQ 인적 자원 사령부", "1-c. 🔐 계정 보안 설정", "1-d. 🌙 탈퇴/휴식 신청"],
+        "📡 2. 시장 상황실": ["2-a. 📈 마켓 트렌드 요약", "2-b. 🗺️ 실시간 히트맵", "2-c. 🌡️ 시장 심리 게이지", "2-d. 🏛️ 제작 동기", "2-e. 🚦 섹터 로테이션"],
+        "🏹 3. 주도주 추격대": ["3-a. 🎯 주도주 타점 스캐너", "3-b. 🚀 주도주 랭킹 TOP 50", "3-c. 📝 주도주 분석 게시물"],
+        "📊 4. 전략 및 리스크": ["4-a. 🛡️ 리스크 관리 엔진", "4-b. 📐 포지션 사이즈 계산기"],
+        "🏛️ 5. 마스터 훈련소": ["5-a. 📜 미너비니 전술 교본", "5-b. 🎯 타점 정밀 훈련"],
+        "🛠️ 6. StockDragonfly 공장": ["6-a. 🏗️ 전술 알고리즘 설계"],
+        "🤖 7. 자동매매 사령부": ["7-a. 🧪 모의투자 백테스트", "7-b. 📊 자동매매 현황", "7-c. 🏆 사령부 명예의 전당"]
     }
     selected_zone = st.selectbox("전술 구역", list(zones.keys()))
     page = st.radio("세부 작전지", zones[selected_zone])
     if st.button("🚪 로그아웃"): st.session_state["password_correct"] = False; st.rerun()
 
-    # --- 🛸 BGM 전술 사운드 시스템 ---
+    # --- 🪲 BGM 전술 사운드 시스템 ---
     st.divider()
     st.markdown("### 🎙️ BGM 커맨드 센터")
     bgm_files = [f for f in os.listdir(BASE_DIR) if f.endswith(".mp3")]
@@ -391,7 +435,7 @@ elif page.startswith("2-a."):
 
 elif page.startswith("3-a."):
     st.header("🎯 주도주 타점 및 RS 스캐너")
-    if st.button("🚀 나노급 스캔"):
+    if st.button("🪲 나노급 스캔"):
         df = run_fast_scanner()
         st.dataframe(df, use_container_width=True)
 
@@ -503,6 +547,18 @@ elif page.startswith("1-d."):
     st.header("🌙 탈퇴 및 휴식 신청")
     if st.button("🔥 전역하기"): st.error("전역 처리 중..."); time.sleep(2); st.session_state["password_correct"] = False; st.rerun()
 
-# --- 🛰️ 시스템 푸터 ---
-st.divider()
-st.markdown("<div style='text-align: center; color: #666;'>© 2026 StockDragonfly Terminal Apex v10.6</div>", unsafe_allow_html=True)
+# --- 🪲 시스템 푸터 및 전술 통찰 ---
+def render_footer():
+    st.divider()
+    # 🕵️ 본데의 일간 전술 통찰 (Daily Tactical Insight)
+    st.markdown("""
+    <div style='text-align: center; padding: 20px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 30px;'>
+        <p style='color: #6366f1; font-weight: bold; margin: 0;'>🔵 본데의 일간 전술 통찰 (Daily Tactical Insight)</p>
+        <p style='color: #FFD700; font-style: italic; font-size: 0.9rem; margin-top: 8px;'>
+            "희망(Hope)은 트레이딩 전략이 아니다. 본전 오면 팔겠다는 생각은 시장에 당신의 전 재산을 기부하겠다는 선언과 같다."
+        </p>
+        <p style='color: #555; font-size: 0.75rem; margin-top: 15px;'>© 2026 StockDragonfly Terminal v10.6 | Institutional System Operated by Global Expert Tactician</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+render_footer()
