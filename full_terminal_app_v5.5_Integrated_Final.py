@@ -306,13 +306,12 @@ show_global_notice()
 with st.sidebar:
     st.markdown(f"**{st.session_state.get('user_grade','회원')} {st.session_state['current_user']} 요원**")
     zones = {
-        "🏰 1. 본부 사령부": ["1-a. 👑 신입 요원 임관 승인", "1-b. 🎖️ HQ 인적 자원 사령부", "1-c. 🔐 계정 보안 설정", "1-d. 🌙 탈퇴/휴식 신청"],
-        "📡 2. 시장 상황실": ["2-a. 📈 마켓 트렌드 요약", "2-b. 🗺️ 실시간 히트맵", "2-c. 🌡️ 시장 심리 게이지", "2-d. 🏛️ 제작 동기", "2-e. 🚦 섹터 로테이션"],
-        "🏹 3. 주도주 추격대": ["3-a. 🎯 주도주 타점 스캐너", "3-b. 🚀 주도주 랭킹 TOP 50", "3-c. 📝 주도주 분석 게시물"],
-        "📊 4. 전략 및 리스크": ["4-a. 🛡️ 리스크 관리 엔진", "4-b. 📐 포지션 사이즈 계산기"],
-        "🏛️ 5. 마스터 훈련소": ["5-a. 📜 미너비니 전술 교본", "5-b. 🎯 타점 정밀 훈련"],
-        "🛠️ 6. StockDragonfly 공장": ["6-a. 🏗️ 전술 알고리즘 설계"],
-        "🤖 7. 자동매매 사령부": ["7-a. 🧪 모의투자 백테스트", "7-b. 📊 자동매매 현황", "7-c. 🏆 사령부 명예의 전당"]
+        "🏰 1. 본부 사령부 (HQ & Admin)": ["8. 관리자 승인 센터", "15. HQ 인적 자원 사령부", "18. 계정 보안 및 관리", "19. 탈퇴 및 임시휴식"],
+        "📡 2. 시장 상황실 (Market Intelligence)": ["6. 마켓 트렌드 요약", "13. 실시간 히트맵", "14. 시장 심리 게이지", "10. 사이트 제작 동기"],
+        "🏹 3. 주도주 추격대 (Alpha Hunter)": ["1. 주도주 타점 스캐너", "4. 주도주 랭킹 TOP 50", "7. 본데 감시 리스트"],
+        "🛡️ 4. 전략 및 리스크 통제소 (Tactics & Shield)": ["3. 프로 분석 리포트", "5. 리스크 계산기", "12. 리스크 방패"],
+        "🎓 5. 마스터 훈련소 (The Academy)": ["9. 본데는 누구인가?", "16. 주식공부방(차트분석)", "17. 나노바나나 정밀 레이더"],
+        "🏢 6. 안티그래비티 광장 (The Lounge)": ["0. 출석체크", "2. 소통 대화방", "11. 방문자 인사말 신청"]
     }
     selected_zone = st.selectbox("전술 구역", list(zones.keys()))
     page = st.radio("세부 작전지", zones[selected_zone])
@@ -343,7 +342,7 @@ with st.sidebar:
 
 show_global_notice()
 
-if page.startswith("1-a."):
+if page.startswith("8."):
     st.header("👑 신입 요원 임관 승인 센터")
     users = load_users()
     pending = [u for u in users if users[u].get("status") == "pending"]
@@ -368,7 +367,7 @@ if page.startswith("1-a."):
                 if st.button(f"🛡️ {u} 요원 임관 승인", key=f"app_btn_{u}"):
                     users[u]["status"] = "approved"; save_users(users); sync_user_to_cloud(u, users[u]); st.success(f"{u} 요원 임관 완료!"); time.sleep(1); st.rerun()
 
-elif page.startswith("1-b."):
+elif page.startswith("15."):
     st.header("🎖️ HQ 인적 자원 사령부")
     users = load_users()
     approved = [u for u in users if users[u].get("status") == "approved"]
@@ -391,7 +390,7 @@ elif page.startswith("1-b."):
                 if st.button(f"💀 {u} 요원 제명", key=f"kick_{u}"):
                     del users[u]; save_users(users); st.error(f"{u} 요원 제명 완료"); time.sleep(1); st.rerun()
 
-elif page.startswith("2-a."):
+elif page.startswith("6."):
     st.markdown("<h2 style='color: #00FF00;'>📈 마켓 트렌드 및 데일리 전술 점검</h2>", unsafe_allow_html=True)
     
     # 📊 주요 지수 실시간 대시보드
@@ -433,7 +432,7 @@ elif page.startswith("2-a."):
     
     st.info("💡 **전술 지침:** 체크리스트 중 12개 이상이 통과되지 않는다면, 현금을 보유하고 관망하는 것이 가장 훌륭한 전략입니다.")
 
-elif page.startswith("3-a."):
+elif page.startswith("1."):
     st.header("🎯 주도주 타점 및 RS 스캐너")
     if st.button("🪲 나노급 스캔"):
         df = run_fast_scanner()
@@ -508,7 +507,7 @@ elif page.startswith("5-f."):
     else:
         st.info("현재 시험 기간이 아닙니다. 공부방(5-b)에서 실력을 먼저 쌓으십시오.")
 
-elif page.startswith("3-c."):
+elif page.startswith("2."):
     st.header("📝 주도주 분석 및 전술 게시판")
     try:
         df_p = pd.read_csv(POSTS_SHEET_URL)
@@ -534,7 +533,7 @@ elif page.startswith("3-c."):
         else: st.info("아직 등록된 게시물이 없습니다.")
     except: st.error("시트 데이터를 불러오는 데 실패했습니다 (URL/권한 확인 요망)")
 
-elif page.startswith("1-c."):
+elif page.startswith("18."):
     st.header("🔐 계정 보안 설정")
     with st.form("pw_f"):
         c_pw = st.text_input("현재 PW", type="password")
@@ -543,7 +542,7 @@ elif page.startswith("1-c."):
             users = load_users(); u_id = st.session_state.current_user
             if users[u_id]["password"] == c_pw: users[u_id]["password"] = n_pw; save_users(users); st.success("변경 완료")
 
-elif page.startswith("1-d."):
+elif page.startswith("19."):
     st.header("🌙 탈퇴 및 휴식 신청")
     if st.button("🔥 전역하기"): st.error("전역 처리 중..."); time.sleep(2); st.session_state["password_correct"] = False; st.rerun()
 
