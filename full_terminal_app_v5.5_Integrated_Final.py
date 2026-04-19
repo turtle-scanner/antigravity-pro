@@ -391,7 +391,17 @@ elif page.startswith("15."):
                     del users[u]; save_users(users); st.error(f"{u} 요원 제명 완료"); time.sleep(1); st.rerun()
 
 elif page.startswith("6."):
-    st.markdown("<h2 style='color: #00FF00;'>📈 마켓 트렌드 및 데일리 전술 점검</h2>", unsafe_allow_html=True)
+    st.header("📈 마켓 트렌드 및 데일리 전술 점검")
+    score, gainers_4, losers_4, rockets, breadth_ratio = get_market_sentiment()
+    status = "Risk-ON 🟢" if score >= 70 else "Neutral 🟡" if score >= 40 else "Risk-OFF 🔴"
+    color = "#00FF00" if score >= 70 else "#fbbf24" if score >= 40 else "#ff4b4b"
+    st.markdown(f"""
+        <div style='background: rgba(0,255,0,0.05); padding: 25px; border-radius: 15px; border-left: 10px solid {color};'>
+            <h1 style='color: {color};'>{status} (Score: {score})</h1>
+            <p style='color: #EEE;'>Breadth: {breadth_ratio:.0f}% | 4% Gainers: {gainers_4} | Rockets: {rockets}</p>
+        </div>
+    """, unsafe_allow_html=True)
+    st.info("💡 **본데의 전술 지침:** 지수가 50일 이동평균선 아래에 있다면 매매 비중을 급격히 줄이십시오.")
     
     # 📊 주요 지수 실시간 대시보드
     indices = {"NASDAQ": "^IXIC", "S&P 500": "^GSPC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
@@ -542,9 +552,141 @@ elif page.startswith("18."):
             users = load_users(); u_id = st.session_state.current_user
             if users[u_id]["password"] == c_pw: users[u_id]["password"] = n_pw; save_users(users); st.success("변경 완료")
 
+elif page.startswith("3."):
+    st.header("🏛️ BMS Analyzer Pro (Tactical Insight)")
+    search_input = st.text_input("분석할 종목명 또는 코드를 입력하세요", "NVDA")
+    pro_ticker = resolve_ticker(search_input).upper()
+    if pro_ticker:
+        try:
+            with st.spinner(f"🚀 {pro_ticker} BMS 엔진 분석 중..."):
+                stock_obj = yf.Ticker(pro_ticker); hist_data = stock_obj.history(period="1y")
+                if len(hist_data) >= 70:
+                    if isinstance(hist_data.columns, pd.MultiIndex): hist_data.columns = hist_data.columns.get_level_values(0)
+                    curr_v = hist_data['Volume'].iloc[-1]; ma7 = hist_data['Close'].rolling(7).mean(); ma65 = hist_data['Close'].rolling(65).mean(); ti65 = ma7.iloc[-1] / ma65.iloc[-1]
+                    p_score = 0; v_score = 0; s_score = 0; penalty = 0
+                    change = ((hist_data['Close'].iloc[-1] - hist_data['Close'].iloc[-2]) / hist_data['Close'].iloc[-2]) * 100
+                    if change >= 4.0: p_score += 20
+                    day_high = hist_data['High'].iloc[-1]; day_low = hist_data['Low'].iloc[-1]; day_close = hist_data['Close'].iloc[-1]
+                    close_loc = (day_close - day_low) / (day_high - day_low) if day_high != day_low else 0
+                    if close_loc >= 0.7: p_score += 10
+                    avg_v50 = hist_data['Volume'].rolling(50).mean()
+                    if curr_v > hist_data['Volume'].iloc[-2]: v_score += 15
+                    if curr_v > avg_v50.iloc[-1] * 1.4: v_score += 15
+                    if curr_v > avg_v50.iloc[-1] * 2.0 or curr_v > 9000000: v_score += 10
+                    prev_range = (hist_data['High'].iloc[-2] - hist_data['Low'].iloc[-2]) / hist_data['Close'].iloc[-3] * 100
+                    if prev_range < 2.0 or hist_data['Close'].iloc[-2] < hist_data['Open'].iloc[-2]: s_score += 20
+                    ma50 = hist_data['Close'].rolling(50).mean()
+                    if any(hist_data['Close'].iloc[-10:] > ma50.iloc[-10:]) and hist_data['Close'].iloc[-11] < ma50.iloc[-11]: s_score += 10
+                    if (hist_data['Close'].iloc[-1] > hist_data['Close'].iloc[-2] > hist_data['Close'].iloc[-3] > hist_data['Close'].iloc[-4]): penalty -= 30
+                    total_score = max(0, min(100, p_score + v_score + s_score + penalty))
+                    status_color = "#00FF00" if total_score >= 80 else "#fbbf24" if total_score >= 50 else "#ff4b4b"
+                    st.markdown(f"<div style='background-color: #111; padding: 25px; border: 2px solid {status_color}; border-radius: 20px; text-align: center;'><h1 style='color: {status_color}; font-size: 4rem;'>{total_score}</h1><p>BMS 전술 등급</p></div>", unsafe_allow_html=True)
+        except: st.error("엔진 가동 오류")
+
+elif page.startswith("5."):
+    st.header("🧮 리스크 관리 및 포지션 사이징")
+    c1, c2 = st.columns(2)
+    capital = c1.number_input("총 투자 자산 (KRW)", value=10000000)
+    risk_percent = c1.slider("1회 매매당 최대 허용 리스크 (%)", 0.5, 5.0, 1.0)
+    entry_price = c1.number_input("예상 진입가", value=100000)
+    stop_loss = c2.number_input("기계적 손절가", value=95000)
+    target_price = c2.number_input("1차 목표가", value=120000)
+    risk_per_share = entry_price - stop_loss
+    if risk_per_share > 0:
+        pos_size = int((capital * (risk_percent / 100)) / risk_per_share)
+        st.metric("🎯 권장 매수 수량", f"{pos_size} 주", delta=f"총 {(pos_size*entry_price):,} 원")
+        st.metric("🔄 예상 손익비 (R/R Ratio)", f"{(target_price - entry_price) / risk_per_share:.2f}")
+
+elif page.startswith("12."):
+    st.header("🛡️ 리스크 방패 (Trailing Stop)")
+    st.info("자산 보호 전략 및 트레일링 스톱 가이드 구역입니다.")
+
+elif page.startswith("9."):
+    st.header("🏛️ 본데는 누구인가? (Master Class)")
+    st.markdown("### 🏆 Pradeep Bonde의 트레이딩 철학")
+    st.write("대가의 마인드셋과 실전 전술을 학습하는 사령부 최고 교육 과정입니다.")
+
+elif page.startswith("0."):
+    st.header("✅ 오늘의 출석 체크")
+    if st.button("🎖️ 출석 도장 찍기"): st.success("오늘도 전우애로 승리하십시오!"); st.balloons()
+
 elif page.startswith("19."):
     st.header("🌙 탈퇴 및 휴식 신청")
     if st.button("🔥 전역하기"): st.error("전역 처리 중..."); time.sleep(2); st.session_state["password_correct"] = False; st.rerun()
+
+elif page.startswith("13."):
+    st.header("🔥 Thematic Momentum Heatmap")
+    try:
+        heatmap_tickers = ["NVDA", "AMD", "AVGO", "SMCI", "TSLA", "AAPL", "MSFT", "GOOGL", "META", "CRWD", "PLTR", "005930.KS", "000660.KS", "196170.KQ", "042700.KS", "003230.KS", "007660.KS", "322000.KS"]
+        map_data = []
+        for t in heatmap_tickers:
+            sk = yf.Ticker(t); h = sk.history(period="60d")
+            if h.empty: continue
+            disp_name = ticker_map.get(t, t); perf_2m = (h['Close'].iloc[-1] / h['Close'].iloc[0] - 1) * 100
+            map_data.append({"Name": disp_name, "Performance": perf_2m, "Volume": h['Volume'].iloc[-1]})
+        df_map = pd.DataFrame(map_data)
+        fig_map = px.treemap(df_map, path=['Name'], values='Volume', color='Performance', color_continuous_scale='RdYlGn', color_continuous_midpoint=0)
+        fig_map.update_layout(template='plotly_dark', height=400)
+        st.plotly_chart(fig_map, use_container_width=True)
+    except: st.error("히트맵 생성 중 오류")
+
+elif page.startswith("14."):
+    st.header("🧠 시장 심리 게이지 (Fear & Greed)")
+    score, _, _, _, _ = get_market_sentiment()
+    gauge_txt = "탐욕(Greedy)" if score >= 70 else "중립(Neutral)" if score >= 40 else "공포(Fear)"
+    st.metric("현재 시장 심리 지수", f"{score} / 100", delta=gauge_txt)
+    st.progress(score/100)
+elif page.startswith("10."):
+    st.header("🏛️ 제작 동기: StockDragonfly의 철학과 비전")
+    st.markdown("""
+        <div style='background: rgba(255, 215, 0, 0.05); padding: 30px; border-radius: 20px; border: 1px solid #FFD700;'>
+            <h3 style='color: #00FF00;'>🛡️ 왜 StockDragonfly인가?</h3>
+            <p style='color: #EEE; line-height: 1.8;'>안티그래비티는 시장의 무거운 '중력'을 이겨내고 하늘로 솟구치는 주도주를 상징합니다. 
+            단순한 매매 도구를 넘어, 사령관님을 중심으로 한 정예 요원들이 시장에서 살아남고, 번영하며, 
+            결국 경제적 자유라는 최고 사령부에 안착하는 것이 우리의 목표입니다.</p>
+        </div>
+    """, unsafe_allow_html=True)
+elif page.startswith("4."):
+    st.header("📊 본데의 주식 50선 (Momentum Playbook)")
+    try:
+        sheet_url = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
+        df = pd.read_csv(sheet_url)
+        st.dataframe(df, use_container_width=True)
+        st.markdown(f"""
+            <div style='background-color: #111111; padding: 30px; border-radius: 15px; border: 2px solid #FFD700; margin-top: 20px;'>
+                <h2 style='color: #00FF00; text-align: center; margin-bottom: 25px;'>🚀 Bonde's Strategic Insight: The Momentum 50 Playbook</h2>
+                <p style='color: #EEE; line-height: 1.8;'>주식 시장은 복잡해 보이지만, 본질은 <b>'가속도'</b>와 <b>'관성'</b>의 법칙을 따르는 물리적 전장입니다. 
+                거래량이 먼지처럼 말라붙을 때(Dry-up)까지 거북이처럼 인내하십시오. 에너지가 응축될 때까지 기다리는 자만이 폭발적인 성장을 얻을 수 있습니다.</p>
+                <div style='background-color: #222; padding: 15px; border-radius: 10px; border-left: 5px solid #00FF00;'>
+                    <h4 style='color: #00FF00; margin-top: 0;'>📝 본데의 핵심 가이드 요점 정리</h4>
+                    <ul style='color: #FFF; font-size: 0.9rem; line-height: 1.8;'>
+                        <li><b>급등은 구경:</b> 장대양봉은 감시 목록에 넣어야 할 '신호'일 뿐입니다.</li>
+                        <li><b>응축을 매수:</b> 거래량이 먼지처럼 마르고 캔들이 작아지는 '고요한 지점'을 찾으세요.</li>
+                        <li><b>생존 규율:</b> 진입 즉시 -3% 손절을 설정하고, 3일 내 반응이 없으면 팔고 나오십시오.</li>
+                    </ul>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    except: st.error("데이터 싱크 오류")
+elif page.startswith("7."): st.header("📋 본데 감시 리스트"); st.info("피벗 포인트 돌파 전 관심주 구역입니다.")
+elif page.startswith("16."):
+    st.header("📚 주식공부방: 1,000개 폭등주 패턴 딥 다이브")
+    st.info("📊 과거 100년간의 폭등주들이 보였던 VCP(변동성 수축)와 컵앤핸들 패턴의 정수를 학습합니다.")
+    st.markdown("### 🏹 전술 교본 도서관\n- **교본 1:** 마크 미너비니의 '승자처럼 생각하고 행동하라' 핵심 요약\n- **교본 2:** 윌리엄 오닐의 CANSLIM 원칙 실전 적용")
+
+elif page.startswith("17."):
+    st.header("📡 나노바나나 정밀 레이더: 숙성도 판독 훈련")
+    st.markdown("""
+        <div style='background: #111; padding: 25px; border-radius: 15px; border-left: 5px solid #FFFF00;'>
+            <h4 style='color: #FFFF00;'>🍌 나노바나나 전술이란?</h4>
+            <p style='color: #DDD; line-height: 1.7;'>차트가 마치 잘 익은 바나나처럼 노랗고 부드럽게(Tightness) 숙성되는 과정을 포착하는 안목 훈련입니다. 
+            이평선이 수렴하고 거래량이 먼지처럼 마를 때(Dry-up), 바로 그때가 타점입니다.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+elif page.startswith("11."):
+    st.header("🤝 방문자 인사말 신청")
+    st.info("새롭게 합류한 전우들에게 따뜻한 환영과 격려의 인사를 남기는 공간입니다. (로딩 중...)")
 
 # --- 🪲 시스템 푸터 및 전술 통찰 ---
 def render_footer():
