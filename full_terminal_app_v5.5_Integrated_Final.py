@@ -23,6 +23,8 @@ CHAT_FILE = get_db_path("chat_log.csv")
 BRIEF_FILE = get_db_path("market_briefs.csv")
 VISITOR_FILE = get_db_path("visitor_requests.csv")
 ATTENDANCE_FILE = get_db_path("attendance.csv")
+PROFIT_FILE = get_db_path("profit_brags.csv")
+LOSS_FILE = get_db_path("loss_reviews.csv")
 MASTER_GAS_URL = "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec"
 
 # 🛡️ 영구 백업용 구글 시트 URL (CSV 내보내기 주소)
@@ -201,7 +203,7 @@ ZONE_CONFIG = {
     "📡 2. 시장 상황실": ["2-a. 📈 마켓 트렌드 요약", "2-b. 🗺️ 실시간 히트맵", "2-c. 🌡️ 시장 심리 게이지", "2-d. 🏛️ 제작 동기"],
     "🏹 3. 주도주 추격대": ["3-a. 🎯 주도주 타점 스캐너", "3-b. 🚀 주도주 랭킹 TOP 50", "3-c. 📊 본데 감시 리스트"],
     "🛡️ 4. 전략 및 리스크": ["4-a. 💎 프로 분석 리포트", "4-b. 🧮 리스크 계산기", "4-c. 🛡️ 리스크 방패"],
-    "🏛️ 5. 마스터 훈련소": ["5-a. 🐝 본데는 누구인가?", "5-b. 📚 주식공부방(차트)", "5-c. 🛰️ 나노바나나 레이더"],
+    "🏛️ 5. 마스터 훈련소": ["5-a. 🐝 본데는 누구인가?", "5-b. 📚 주식공부방(차트)", "5-c. 🛰️ 나노바나나 레이더", "5-d. 📝 정기 승급 시험 안내", "5-e. 🤑 실전 익절 자랑방", "5-f. 🩹 손실 위로 및 복기방"],
     "☕ 6. 안티그래비티 광장": ["6-a. 📌 출석체크(오늘한줄)", "6-b. 💬 소통 대화방", "6-c. 🤝 방문자 인사 신청"],
     "🤖 7. 자동매매 사령부": ["7-a. 🚀 모의투자 매수테스트", "7-b. 📊 모의투자 현황/결과", "7-c. ⚙️ 자동매매 전략엔진", "7-d. 📈 자동투자 성적표", "7-e. 🏆 사령부 명예의 전당"]
 }
@@ -1055,8 +1057,6 @@ elif page.startswith("3-b."):
                 st.markdown(f"""
 ### 🚁 StockDragonfly 지휘 지침: 본데 50선 실전 매뉴얼
 
-거북이투자전문가님, 새로운 한 주가 시작되는 장 개시 전, StockDragonfly의 지휘관으로서 꼭 숙지해야 할 본데 50선의 핵심 운용 원칙을 요점 정리해 드립니다.
-
 **1. 상위 주식 vs 하위 주식의 의미**
 전문가님의 스프레드시트 순위는 모멘텀의 강도와 A+ 셋업 완성도를 나노 단위로 점수화한 결과입니다.
 
@@ -1450,6 +1450,162 @@ elif page.startswith("4-c."):
     st.info("**3. '안타 전략(Hitters)'의 생존 조건**")
     st.write("작은 수익을 쌓는 전략에서 단 하나의 큰 손실은 모든 노력을 수포로 돌립니다. -3%는 사령부의 최후 방어선입니다.")
     st.success("💡 **결론:** 손절은 패배가 아닌, 더 큰 승리를 위한 전략적 후퇴입니다.")
+
+elif page.startswith("5-d."):
+    st.header("📝 사령부 정기 승급 시험 안내 (Promotion Exam)")
+    st.markdown("<div class='glass-card'>사령부 대원으로서의 역량을 증명하고 한 단계 더 높은 주도주 추격권한을 획득하는 공식 관문입니다.</div>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"""
+        <div style='background: rgba(255,215,0,0.05); padding: 25px; border-radius: 15px; border: 1px solid #FFD700; height: 350px;'>
+            <h3 style='color: #FFD700;'>📅 시험 일정 (Biannual)</h3>
+            <p style='font-size: 1.1rem; color: #EEE;'>6개월에 1회, 그동안 배운 전술을 토대로 엄격하게 시행됩니다.</p>
+            <ul style='color: #CCC;'>
+                <li><b>상반기:</b> 1월 말 토요일 오전 11:00</li>
+                <li><b>하반기:</b> 7월 말 토요일 오전 11:00</li>
+            </ul>
+            <p style='color: #888; font-size: 0.9rem;'>※ 시험 1주 전 사령부 공지사항을 통해 상세 범위가 하달됩니다.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with col2:
+        st.markdown(f"""
+        <div style='background: rgba(255,255,255,0.03); padding: 25px; border-radius: 15px; border: 1px solid #444; height: 350px;'>
+            <h3 style='color: #EEE;'>🛡️ 합격 및 진격 가이드</h3>
+            <ul style='color: #CCC; line-height: 1.8;'>
+                <li><b>문항수:</b> 총 20문항 (차트 패턴 및 전술 이론)</li>
+                <li><b>만점:</b> 100점</li>
+                <li><b>커트라인:</b> <b style='color: #FFD700;'>80점 이상</b> 획득 시 승급</li>
+                <li><b>주의사항:</b> 투명한 사령부 운영을 위해 <b>개인별 성적은 전 대원에게 공개</b>됩니다.</li>
+            </ul>
+            <p style='color: #FF4B4B; font-weight: bold; margin-top: 15px;'>⚠️ 불합격 시 다음 6개월 뒤 재시험 응시 가능</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader("📊 최근 승급 시험 명예의 전당 (Simulation)")
+    mock_results = pd.DataFrame([
+        {"아이디": "cntfed", "점수": 95, "결과": "🎖️ 합격 (수석)"},
+        {"아이디": "ExpertTurtle", "점수": 100, "결과": "👑 합격 (전설)"},
+        {"아이디": "NewMember1", "점수": 75, "결과": "❌ 불합격"},
+    ])
+    st.table(mock_results)
+    
+    st.info("💡 팁: '5-b. 주식공부방'과 '4-c. 리스크 방패' 섹션의 내용을 철저히 복습하는 것이 합격의 지름길입니다.")
+
+elif page.startswith("5-e."):
+    st.header("🤑 실전 익절 자랑방 (Hall of Gain)")
+    st.markdown("<div class='glass-card'>지옥 같은 시장을 이겨내고 획득한 귀중한 전리품(익절)을 사령부 전역에 자랑하세요!</div>", unsafe_allow_html=True)
+    
+    if not os.path.exists(PROFIT_FILE):
+        pd.DataFrame(columns=["시간", "아이디", "종목", "수익률", "수익금", "포부"]).to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
+
+    with st.expander("🔥 나의 익절 기록 하달하기", expanded=True):
+        with st.form("profit_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1: tic = st.text_input("종목명/티커", placeholder="예: 삼성전자 / TSLA")
+            with col2: roi = st.text_input("수익률 (%)", placeholder="예: +15.5%")
+            
+            p_val = st.text_input("확정 수익금 (KRW/USD)", placeholder="예: 2,500,000원")
+            msg = st.text_area("승리 소감 및 노하우 공유", placeholder="어떤 타점에서 진입하여 익절하셨나요?")
+            
+            if st.form_submit_button("🚀 전리품 등록 (자랑하기)"):
+                if tic and roi and p_val:
+                    t = now_kst.strftime("%Y-%m-%d %H:%M")
+                    u = st.session_state.current_user
+                    new_p = pd.DataFrame([[t, u, tic, roi, p_val, msg]], columns=["시간", "아이디", "종목", "수익률", "수익금", "포부"])
+                    new_p.to_csv(PROFIT_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                    # 구글 시트 백업 연동 (별도 시트 gid 필요하나 여기서는 로컬 보존 위주)
+                    gsheet_sync("익절자랑_통합", ["시간", "아이디", "종목", "수익률", "수익금", "소감"], [t, u, tic, roi, p_val, msg])
+                    st.success("🎊 대원님의 위대한 승리 기록이 본부에 등록되었습니다!")
+                    st.balloons()
+                    st.rerun()
+                else: st.error("종목, 수익률, 수익금은 필수 항목입니다.")
+
+    st.divider()
+    st.subheader("📡 사령부 실시간 익절 첩보")
+    try:
+        pdf = pd.read_csv(PROFIT_FILE, encoding="utf-8-sig")
+        if not pdf.empty:
+            for _, row in pdf.iloc[::-1].iterrows():
+                st.markdown(f"""
+                <div style='background: rgba(0,255,0,0.03); border: 1px solid #00FF0033; border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
+                    <div style='display: flex; justify-content: space-between;'>
+                        <b style='color: #FFD700; font-size: 1.1rem;'>🎖️ {row['아이디']} 대원의 승전보</b>
+                        <span style='color: #888; font-size: 0.8rem;'>{row['시간']}</span>
+                    </div>
+                    <div style='margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;'>
+                        <div style='text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;'>
+                            <small style='color: #888;'>대상 종목</small><br><b style='color: #EEE;'>{row['종목']}</b>
+                        </div>
+                        <div style='text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;'>
+                            <small style='color: #888;'>확정 수익률</small><br><b style='color: #FF4B4B;'>{row['수익률']}</b>
+                        </div>
+                        <div style='text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;'>
+                            <small style='color: #888;'>실현 수익금</small><br><b style='color: #00FF00;'>{row['수익금']}</b>
+                        </div>
+                    </div>
+                    <div style='margin-top: 15px; padding: 10px; border-top: 1px solid rgba(255,255,255,0.05); color: #CCC;'>
+                        💬 {row['포부']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else: st.info("아직 도착한 익절 첩보가 없습니다. 첫 주인공이 되어보세요!")
+    except: st.info("데이터를 불러오는 중...")
+
+elif page.startswith("5-f."):
+    st.header("🩹 손실 위로 및 복기방 (Reflection & Support)")
+    st.markdown("<div class='glass-card'>실패는 성공의 어머니가 아니라, <b>실패에 대한 복기</b>가 성공의 어머니입니다. 아픔을 나누고 더 단단해지는 공간입니다.</div>", unsafe_allow_html=True)
+    
+    if not os.path.exists(LOSS_FILE):
+        pd.DataFrame(columns=["시간", "아이디", "종목", "손실률", "원인", "다짐"]).to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
+
+    with st.expander("🩹 오늘의 아픔 기록하고 털어내기", expanded=True):
+        with st.form("loss_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1: l_tic = st.text_input("종목명/티커", placeholder="복기할 종목")
+            with c2: l_roi = st.text_input("손실률 (%)", placeholder="예: -7.2%")
+            
+            l_reason = st.selectbox("실전 과오 원인 판독", [
+                "추격 매수 (FOMO)", "손절 지연 (희망고문)", "원칙 외 매매 (뇌동매매)", 
+                "비중 과다 (몰빵)", "지수 급락 대응 실패", "기타 전술적 오류"
+            ])
+            l_msg = st.text_area("구체적인 상황 복기 및 향후 다짐", placeholder="왜 이런 결과가 나왔는지, 다음에는 어떻게 대응하실 건가요?")
+            
+            if st.form_submit_button("🛡️ 복기 완료 및 마음 다잡기"):
+                if l_tic and l_roi and l_msg:
+                    t = now_kst.strftime("%Y-%m-%d %H:%M")
+                    u = st.session_state.current_user
+                    new_l = pd.DataFrame([[t, u, l_tic, l_roi, l_reason, l_msg]], columns=["시간", "아이디", "종목", "손실률", "원인", "다짐"])
+                    new_l.to_csv(LOSS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                    gsheet_sync("손실복기_통합", ["시간", "아이디", "종목", "손실률", "원인", "다짐"], [t, u, l_tic, l_roi, l_reason, l_msg])
+                    st.toast("사령부가 대원님의 용기 있는 성찰을 응원합니다. 훌훌 털어내십시오.")
+                    st.rerun()
+                else: st.error("필수 항목을 모두 입력해 주세요.")
+
+    st.divider()
+    st.subheader("🤝 함께 나누는 성찰의 시간")
+    try:
+        ldf = pd.read_csv(LOSS_FILE, encoding="utf-8-sig")
+        if not ldf.empty:
+            for _, row in ldf.iloc[::-1].iterrows():
+                st.markdown(f"""
+                <div style='background: rgba(255,255,255,0.02); border: 1px solid #6366f133; border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
+                    <div style='display: flex; justify-content: space-between;'>
+                        <b style='color: #6366f1;'>🩹 {row['아이디']} 대원의 정직한 성찰</b>
+                        <span style='color: #888; font-size: 0.8rem;'>{row['시간']}</span>
+                    </div>
+                    <div style='margin-top: 12px; font-size: 0.95rem; color: #BBB;'>
+                        🎬 <b>{row['종목']}</b> 종목에서 <b>{row['손실률']}</b> 손실 기록 (<span style='color: #FF4B4B;'>사유: {row['원인']}</span>)
+                    </div>
+                    <div style='margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.2); border-left: 3px solid #6366f1; color: #DDD; font-size: 0.95rem; font-style: italic;'>
+                        "{row['다짐']}"
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else: st.info("아직 등록된 성찰 기록이 없습니다. 아픔을 나누면 반이 됩니다.")
+    except: st.info("데이터 로딩 중...")
 
 elif page.startswith("2-b."):
     st.header("🗺️ 실시간 주도주 히트맵 (Market OverView)")
