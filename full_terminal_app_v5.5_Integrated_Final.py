@@ -71,33 +71,44 @@ def load_users():
             with open(USER_DB_FILE, "r", encoding="utf-8") as f: users = json.load(f)
         except: pass
     
-    # 2. 구글 시트에서 최신 정보 가져와서 동기화 (클라우드 환경 대응)
+    # 2. 구글 시트에서 최신 정보 가져와서 동기화
     if USERS_SHEET_URL:
         try:
-            df_u = pd.read_csv(USERS_SHEET_URL)
-            for _, row in df_u.iterrows():
-                try:
-                    u_id = str(row.get('아이디', '')).strip()
-                    if not u_id or u_id == 'nan': continue
-                    
-                    # 구글 시트 정보가 항상 최신(원본)이 되도록 덮어쓰기 허용
-                    users[u_id] = {
-                        "password": str(row.get('비밀번호', u_id)), # 비번 없을 시 아이디로 기본 설정
-                        "status": str(row.get('상태', 'approved')),
-                        "grade": str(row.get('등급', '회원')),
-                        "info": {
-                            "region": row.get('지역', '-'),
-                            "age": row.get('연령대', '-'),
-                            "gender": row.get('성별', '-'),
-                            "motivation": row.get('매매동기', '-'),
-                            "exp": row.get('경력', '-'),
-                            "joined_at": row.get('가입일', '-')
+            response = requests.get(USERS_SHEET_URL, timeout=5)
+            if response.status_code == 200:
+                import io
+                df_u = pd.read_csv(io.StringIO(response.text))
+                new_users_found = False
+                for _, row in df_u.iterrows():
+                    try:
+                        # 🔍 유연한 헤더 매핑 (아이디/ID, 연령/연령대 등)
+                        u_id = str(row.get('아이디', row.get('ID', ''))).strip()
+                        if not u_id or u_id == 'nan' or u_id == '': continue
+                        
+                        new_users_found = True
+                        users[u_id] = {
+                            "password": str(row.get('비밀번호', u_id)),
+                            "status": str(row.get('상태', 'approved')),
+                            "grade": str(row.get('등급', '회원')),
+                            "info": {
+                                "region": row.get('지역', '-'),
+                                "age": row.get('연령대', row.get('연령', '-')),
+                                "gender": row.get('성별', '-'),
+                                "motivation": row.get('매매동기', row.get('매매 동기', '-')),
+                                "exp": row.get('경력', '-'),
+                                "joined_at": row.get('가입일', row.get('합류일', '-'))
+                            }
                         }
-                    }
-                except: continue
-            # 최신화된 정보를 로컬에도 저장
-            with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
-        except: pass
+                    except: continue
+                # 최신화된 정보를 로컬에도 저장
+                if new_users_found:
+                    with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f, ensure_ascii=False, indent=4)
+            elif response.status_code == 401:
+                st.session_state["gs_error"] = "🔒 구글 시트 접근 권한이 없습니다. '링크가 있는 모든 사용자에게 공개'로 설정해 주세요."
+            else:
+                st.session_state["gs_error"] = f"⚠️ 시트 연결 실패 (Status: {response.status_code})"
+        except Exception as e:
+            st.session_state["gs_error"] = f"❌ 데이터 통신 오류: {str(e)}"
 
     # 기본 방장 계정 보장
     if "cntfed" not in users:
@@ -1398,14 +1409,21 @@ elif page.startswith("1-b."):
         c_sync1, c_sync2 = st.columns(2)
         with c_sync1:
             if st.button("🚀 클라우드 명단 불러오기 (Import)", use_container_width=True, key="import_btn"):
-                with st.spinner("구글 시트 데이터 수신 중..."):
+                with st.spinner("구글 시트 데이터 수신 및 무결성 검사 중..."):
+                    if "gs_error" in st.session_state: del st.session_state["gs_error"]
                     load_users.clear()
                     users = load_users()
-                    if users:
-                        st.success(f"🎊 클라우드에서 {len(users)}명의 대원 정보를 성공적으로 수신하여 동기화했습니다.")
+                    
+                    if "gs_error" in st.session_state:
+                        st.error(st.session_state["gs_error"])
+                    elif users:
+                        # 🛡️ 빈 문자열 아이디 필터링
+                        users = {k: v for k, v in users.items() if k.strip()}
+                        save_users(users)
+                        st.success(f"🎊 클라우드에서 {len(users)}명의 요원 정보를 성공적으로 수신하여 동기화했습니다.")
                         st.rerun()
                     else:
-                        st.error("❌ 데이터를 가져오는 데 실패했거나 시트가 비어 있습니다.")
+                        st.warning("⚠️ 시트에서 데이터를 가져왔으나 등록된 대원 정보가 없습니다.")
         
         with c_sync2:
             if st.button("📌 현재 명단 클라우드 백업 (Export)", use_container_width=True, key="export_btn"):
