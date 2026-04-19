@@ -229,8 +229,26 @@ if os.path.exists("StockDragonfly2.png"):
 st.markdown(f"""
     <style>
     /* 💎 네온 플럭스 디자인 고도화 */
-    .stApp {{ background-color: #000; {f'background-image: linear-gradient(rgba(0,0,0,0.92), rgba(0,0,0,0.92)), url("data:image/png;base64,{bg_b64}");' if bg_b64 else ""} background-size: cover; background-attachment: fixed; }}
+    .stApp {{ 
+        background-color: #000; 
+        {f'background-image: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url("data:image/png;base64,{bg_b64}");' if bg_b64 else ""} 
+        background-size: cover; 
+        background-position: center;
+        background-attachment: fixed; 
+    }}
     [data-testid="stSidebar"] {{ background-color: rgba(2,2,2,0.98) !important; border-right: 1px solid #FFD70022; backdrop-filter: blur(40px); }}
+    
+    .main-title {{ 
+        font-family: 'Outfit', sans-serif;
+        background: linear-gradient(to right, #FFD700, #FFF, #FFD700);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 900;
+        font-size: 4.5rem;
+        text-align: center;
+        margin-bottom: 0px;
+        filter: drop-shadow(0 0 20px rgba(255,215,0,0.5));
+    }}
     
     h1, h2 {{ color: #FFD700 !important; font-weight: 900; text-shadow: 0 0 15px rgba(255,215,0,0.3); }}
     
@@ -281,8 +299,9 @@ if "password_correct" not in st.session_state: st.session_state["password_correc
 if not st.session_state["password_correct"]:
     c1, m, c2 = st.columns([1, 2, 1])
     with m:
-        st.markdown("<h1 class='mobile-header' style='text-align: center; color: #FFD700; font-size: 4rem; margin-top: 0; margin-bottom: 10px; font-family: \"Outfit\", sans-serif; text-shadow: 0 0 30px rgba(255,215,0,0.4);'>🛸 StockDragonfly</h1>", unsafe_allow_html=True)
-        if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png", use_container_width=True)
+        st.markdown("<div class='main-title'>🐉 StockDragonfly</div>", unsafe_allow_html=True)
+        if os.path.exists("StockDragonfly.png"): 
+            st.image("StockDragonfly.png", use_container_width=True)
         if "show_notice" not in st.session_state: st.session_state["show_notice"] = True
         
         if st.session_state["show_notice"]:
@@ -492,7 +511,15 @@ with st.sidebar:
 # 최종 선택된 미션을 page 변수에 할당하여 본문 렌더링
 page = st.session_state.page
 
-# --- 🛰️ 전광판 티커 테이프 ---
+# --- 🐉 상단 브랜드 헤더 ---
+c_logo1, c_logo2, c_logo3 = st.columns([1, 2, 1])
+with c_logo2:
+    if os.path.exists("StockDragonfly.png"): 
+        st.image("StockDragonfly.png", use_container_width=True)
+    st.markdown("<div class='main-title' style='font-size: 3rem;'>🐉 StockDragonfly</div>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888; letter-spacing: 5px; margin-top: -10px;'>INSTITUTIONAL GRADE TRADING TERMINAL</p>", unsafe_allow_html=True)
+
+# --- 🐉 전광판 티커 테이프 ---
 @st.cache_data(ttl=300)
 def get_ticker_tape():
     watch = {
