@@ -174,6 +174,75 @@ elif page.startswith("3-a."):
         df = run_fast_scanner()
         st.dataframe(df, use_container_width=True)
 
+elif page.startswith("5-f."):
+    st.markdown("<h2 style='text-align: center; color: #FFD700;'>📝 정기 요원 승급 시험 (Promotion Exam)</h2>", unsafe_allow_html=True)
+    
+    def get_exam_status_apex():
+        now = datetime.now()
+        # 이번 달의 마지막 날 찾기
+        next_month = now.replace(day=28) + timedelta(days=4)
+        last_day = next_month - timedelta(days=next_month.day)
+        # 이번 달의 마지막 토요일 찾기
+        last_sat = last_day
+        while last_sat.weekday() != 5: # 5 is Saturday
+            last_sat -= timedelta(days=1)
+        
+        exam_start = last_sat.replace(hour=11, minute=0, second=0, microsecond=0)
+        exam_end = exam_start + timedelta(hours=2)
+        
+        is_open = (exam_start <= now <= exam_end)
+        return is_open, exam_start.strftime("%Y-%m-%d %H:00")
+
+    is_open, next_exam = get_exam_status_apex()
+    
+    st.markdown(f"""
+    <div class='glass-card' style='border: 1px solid #FFD700;'>
+        <h4>📢 시험실 운영 지침</h4>
+        <p>본 시험은 사령부 정예 요원(Junior 이상)으로 승급하기 위한 필수 관문입니다.</p>
+        <p><b>운영 시간:</b> 매달 마지막 토요일 11:00 ~ 13:00 (2시간)</p>
+        <p><b>현재 상태:</b> {"<span style='color: #00FF00;'>✅ 개방됨</span>" if is_open else "<span style='color: #FF4B4B;'>❌ 폐쇄됨</span>"}</p>
+        <p><b>다음 예정일:</b> {next_exam}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if is_open or st.session_state.user_grade == "방장":
+        st.write("---")
+        if st.session_state.user_grade == "방장":
+            st.warning("🛡️ 사령관 권한으로 시험실 강제 입장 중 (테스트 모드)")
+            
+        with st.form("apex_exam_v10"):
+            st.markdown("### [전술 평가 1단계: 이론]")
+            q1 = st.radio("1. 프라딥 본데가 강조한 '에피소딕 피벗(EP)'의 핵심 발생 조건은?", 
+                         ["어닝 서프라이즈 등 강력한 펀더멘털 변화 + 역대급 거래량", "단순히 전고점을 돌파하는 차트 모양"], index=None)
+            
+            q2 = st.radio("2. 주식 전사로서 단일 매매에서 반드시 사수해야 할 손절 원칙은?", 
+                         ["-3% 이내 칼손절", "본전이 올 때까지 장기 보유"], index=None)
+            
+            st.markdown("### [전술 평가 2단계: 자금 운용]")
+            q3 = st.radio("3. 내 계좌 전체의 '오픈 리스크(Total Heat)'는 최대 몇 %를 넘지 말아야 하는가?", 
+                         ["6% 이내", "50% 이내"], index=None)
+            
+            submitted = st.form_submit_button("🛡️ 답안지 최종 제출")
+            
+            if submitted:
+                if q1 and q2 and q3:
+                    score = 0
+                    if q1 == "어닝 서프라이즈 등 강력한 펀더멘털 변화 + 역대급 거래량": score += 33
+                    if q2 == "-3% 이내 칼손절": score += 33
+                    if q3 == "6% 이내": score += 34
+                    
+                    if score >= 100:
+                        st.balloons()
+                        st.success(f"🎊 장하십니다! {st.session_state.current_user} 요원, 만점 합격입니다!")
+                        gsheet_sync("시험결과", ["시간", "아이디", "점수", "결과"], 
+                                    [datetime.now().strftime("%Y-%m-%d %H:%M"), st.session_state.current_user, score, "합격"])
+                    else:
+                        st.error(f"💀 불합격 (점수: {score}). 전술 공부가 더 필요합니다. 다시 도전하십시오.")
+                else:
+                    st.warning("모든 문항에 답을 하셔야 사령관님께 제출됩니다.")
+    else:
+        st.info("현재 시험 기간이 아닙니다. 공부방(5-b)에서 실력을 먼저 쌓으십시오.")
+
 elif page.startswith("1-c."):
     st.header("🔐 계정 보안 설정")
     with st.form("pw_f"):
