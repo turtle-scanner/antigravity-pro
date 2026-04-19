@@ -1,1 +1,75 @@
-{"cntfed": {"password": "cntfed", "exp": "Master", "profit": "N/A", "status": "approved"}}
+{
+    "cntfed": {
+        "password": "cntfed",
+        "status": "approved",
+        "grade": "방장",
+        "info": {
+            "joined_at": "2026-04-19 2:46"
+        }
+    },
+    "fire33": {
+        "password": "1234",
+        "status": "approved",
+        "grade": "회원",
+        "info": {
+            "region": "서울",
+            "age": "30대",
+            "gender": "-",
+            "motivation": "경제적자유 열심히공부할게요",
+            "exp": "1-3년",
+            "joined_at": "2026-04-19 2:46"
+        }
+    },
+    "sebinhi": {
+        "password": "rnltjq!353",
+        "status": "approved",
+        "grade": "회원",
+        "info": {
+            "region": "인천",
+            "age": "40대",
+            "gender": "-",
+            "motivation": "경제적 자유",
+            "exp": "5-10년",
+            "joined_at": "2026-04-19 2:57"
+        }
+    },
+    "popsong98": {
+        "password": "1234",
+        "status": "approved",
+        "grade": "회원",
+        "info": {
+            "region": "서울",
+            "age": "20대 이하",
+            "gender": "-",
+            "motivation": "파이어족 되고 싶습니다!!",
+            "exp": "1-3년",
+            "joined_at": "2026-04-19 3:16"
+        }
+    },
+    "MoneySnipper": {
+        "password": "1234",
+        "status": "approved",
+        "grade": "회원",
+        "info": {
+            "region": "서울",
+            "age": "30대",
+            "gender": "-",
+            "motivation": "빠른 은퇴",
+            "exp": "3-5년",
+            "joined_at": "2026-04-19 3:26"
+        }
+    },
+    "wlgh8654": {
+        "password": "1234",
+        "status": "approved",
+        "grade": "회원",
+        "info": {
+            "region": "서울",
+            "age": "40대",
+            "gender": "-",
+            "motivation": "미국주식 을 통하여 경제적 자유를 얻고자 가입희망합니다 적극 활동하겠습니다.",
+            "exp": "5-10년",
+            "joined_at": "2026-04-19 3:49"
+        }
+    }
+}
