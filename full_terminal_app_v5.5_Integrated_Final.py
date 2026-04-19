@@ -21,6 +21,7 @@ USER_DB_FILE = get_db_path("users_db.json")
 CHAT_FILE = get_db_path("chat_log.csv")
 BRIEF_FILE = get_db_path("market_briefs.csv")
 VISITOR_FILE = get_db_path("visitor_requests.csv")
+ATTENDANCE_FILE = get_db_path("attendance.csv")
 MASTER_GAS_URL = "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec"
 
 TICKER_NAME_MAP = {
@@ -76,9 +77,10 @@ st.markdown(f"""
     .status-pulse {{ animation: pulse-glow 3s infinite; }}
     
     @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
-    .ticker-wrap {{ overflow: hidden; background: rgba(255,215,0,0.05); white-space: nowrap; padding: 5px 0; border-bottom: 1px solid rgba(255,215,0,0.1); margin-bottom: 15px; }}
-    .ticker-content {{ display: inline-block; animation: ticker 40s linear infinite; color: #FFD700; font-size: 0.85rem; font-weight: 500; }}
-    .ticker-item {{ margin: 0 30px; display: inline-block; }}
+    .ticker-wrap {{ overflow: hidden; background: rgba(255,215,0,0.05); white-space: nowrap; padding: 10px 0; border-bottom: 1px solid rgba(255,215,0,0.1); margin-bottom: 15px; }}
+    .ticker-content {{ display: inline-block; animation: ticker 180s linear infinite; color: #FFD700; font-size: 0.9rem; font-weight: 500; animation-delay: 2s; }}
+    .ticker-wrap:hover .ticker-content {{ animation-play-state: paused; cursor: pointer; }}
+    .ticker-item {{ margin: 0 40px; display: inline-block; }}
     
     /* 모바일 최적화 */
     @media (max-width: 768px) {{
@@ -89,7 +91,7 @@ st.markdown(f"""
         .mobile-header {{ font-size: 2.2rem !important; }}
         .responsive-bar {{ flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; padding: 15px !important; }}
         .responsive-indices {{ width: 100% !important; justify-content: space-between !important; gap: 10px !important; }}
-        .ticker-content {{ animation: ticker 25s linear infinite; }}
+        .ticker-content {{ animation: ticker 120s linear infinite; }}
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -201,12 +203,46 @@ with st.sidebar:
     if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png")
     st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🛸 StockDragonfly v9.9</p>", unsafe_allow_html=True)
     st.divider()
-    bgms = {"🔇 OFF": None, "✨ You Raise": "YouRaise.mp3", "😊 Happy": "happy.mp3", "🌅 Hope": "hope.mp3", "🐱 Cute": "cute.mp3", "🎻 Petty": "petty.mp3", "🎙️ Ajussi": "나의아저씨.mp3"}
+    bgms = {
+        "🔇 OFF": None, 
+        "🎵 Full BGM": "full.mp3",
+        "✨ You Raise": "YouRaise.mp3", 
+        "😊 Happy": "happy.mp3", 
+        "🌅 Hope": "hope.mp3", 
+        "🐱 Cute": "cute.mp3", 
+        "🎻 Petty": "petty.mp3", 
+        "🎙️ Ajussi": "나의아저씨.mp3",
+        "🔀 Random Mix": "shuffle"
+    }
     sel_bgm = st.selectbox("Radio", list(bgms.keys()), label_visibility="collapsed")
     vol = st.slider("🔊 Volume", 0.0, 1.0, 0.45)
-    if bgms[sel_bgm] and os.path.exists(bgms[sel_bgm]):
-        with open(bgms[sel_bgm], "rb") as f: b64 = base64.b64encode(f.read()).decode()
-        st.components.v1.html(f"<audio id='aud' autoplay loop><source src='data:audio/mp3;base64,{b64}' type='audio/mp3'></audio><script>document.getElementById('aud').volume = {vol};</script>", height=0)
+    
+    target_bgm = bgms[sel_bgm]
+    
+    # 랜덤 믹스 처리
+    if target_bgm == "shuffle":
+        if "shuffled_bgm" not in st.session_state:
+            import random
+            valid_files = [f for f in list(bgms.values()) if f and f != "shuffle" and os.path.exists(f)]
+            st.session_state.shuffled_bgm = random.choice(valid_files) if valid_files else None
+        target_bgm = st.session_state.shuffled_bgm
+    else:
+        # 일반 선택 시 셔플 상태 초기화 (다음에 다시 셔플 선택 시 새로운 곡 선택되도록)
+        if "shuffled_bgm" in st.session_state:
+            del st.session_state.shuffled_bgm
+
+    if target_bgm and os.path.exists(target_bgm):
+        with open(target_bgm, "rb") as f: b64 = base64.b64encode(f.read()).decode()
+        # onended 이벤트를 활용하여 랜덤 믹스 시 다음 곡으로 넘어가게 설정 (Streamlit 한계상 재실행 필요)
+        st.components.v1.html(f"""
+            <audio id='aud' autoplay loop>
+                <source src='data:audio/mp3;base64,{b64}' type='audio/mp3'>
+            </audio>
+            <script>
+                var audio = document.getElementById('aud');
+                audio.volume = {vol};
+            </script>
+        """, height=0)
 
 # --- 유저 등급 판독 ---
 users = load_users()
@@ -215,11 +251,12 @@ curr_grade = curr_user_data.get("grade", "회원")
 is_admin = (curr_grade in ["관리자", "방장"])
 
 menu_ops = [
+    "0. 📌 출석체크(오늘한줄인사)",
     "1. 🎯 주도주 타점 스캐너", "2. 💬 소통 대화방", "3. 💎 프로 분석 리포트", 
     "4. 🚀 주도주 랭킹 TOP 50", "5. 🧮 리스크 계산기", "6. 📈 마켓 트렌드 요약", 
     "7. 📊 본데 감시 리스트", "8. 👑 관리자 승인 센터", "9. 🐝 본데는 누구인가?", 
     "10. 🏛️ 사이트 제작 동기", "11. 🤝 방문자 인사말 신청", "12. 🛡️ 리스크 방패", 
-    "13. 🗺️ 실시간 히트맵", "14. 🌡️ 시장 심리 게이지"
+    "13. 🗺️ 실시간 히트맵", "14. 🌡️ 시장 심리 게이지", "16. 📚 주식공부방(차트분석)"
 ]
 
 # 오직 방장(전문가님)에게만 15번 메뉴 노출
@@ -234,17 +271,25 @@ def get_ticker_tape():
     watch = ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "BTC-USD", "ETH-USD"]
     items = []
     try:
-        data = yf.download(watch, period="2d", progress=False)['Close']
+        data = yf.download(watch, period="5d", progress=False)['Close']
         for t in watch:
             try:
-                c = ((data[t].iloc[-1] / data[t].iloc[-2]) - 1) * 100
-                items.append(f"<span class='ticker-item'>{t} {data[t].iloc[-1]:,.1f} ({c:+.2f}%)</span>")
+                # 데이터가 충분하지 않을 경우를 대비해 유효한 마지막 두 데이터 포인트 사용
+                vals = data[t].dropna()
+                if len(vals) >= 2:
+                    curr = vals.iloc[-1]
+                    prev = vals.iloc[-2]
+                    c = ((curr / prev) - 1) * 100
+                    items.append(f"<span class='ticker-item'>{t} {curr:,.1f} ({c:+.2f}%)</span>")
+                elif len(vals) == 1:
+                    curr = vals.iloc[-1]
+                    items.append(f"<span class='ticker-item'>{t} {curr:,.1f} (--)</span>")
             except: pass
     except: pass
     return "".join(items)
 
 ticker_html = get_ticker_tape()
-st.markdown(f"<div class='ticker-wrap'><div class='ticker-content'>{ticker_html * 3}</div></div>", unsafe_allow_html=True)
+st.markdown(f"<div class='ticker-wrap'><div class='ticker-content'>{ticker_html * 10 if ticker_html else ''}</div></div>", unsafe_allow_html=True)
 
 # --- 🛰️ 상단 실시간 정보 바 ---
 now_kr = datetime.now(pytz.timezone('Asia/Seoul'))
@@ -360,7 +405,76 @@ def get_footer_quote():
     return random.choice(BONDE_FOOTER_QUOTES)
 
 # --- [PLACEHOLDER_LOGIC_START] ---
-if page.startswith("1."):
+if page.startswith("0."):
+    st.header("📌 사령부 출석체크 및 오늘 한 줄")
+    
+    # 데이터 준비
+    if not os.path.exists(ATTENDANCE_FILE):
+        pd.DataFrame(columns=["시간", "아이디", "인사", "등급"]).to_csv(ATTENDANCE_FILE, index=False, encoding="utf-8-sig")
+    
+    df_att = pd.read_csv(ATTENDANCE_FILE, encoding="utf-8-sig")
+    total_visits = len(df_att)
+    
+    # 상단 요약 바 (방문자 수 & 날씨)
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.markdown(f"""
+        <div class='glass-card' style='text-align: center; padding: 20px;'>
+            <h4 style='margin:0; color:#FFD700;'>🛸 누적 사령부 방문</h4>
+            <span style='font-size: 2.5rem; font-weight: 900; color: #00FF00;'>{total_visits:,}</span>
+            <p style='margin:0; color:#888;'>Operatives Engaged</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with c2:
+        # 간단한 날씨 MOCK (실제 API 대신 시각에 따른 날씨 이모지)
+        hour = datetime.now(pytz.timezone('Asia/Seoul')).hour
+        weather_icon = "☀️" if 6 <= hour < 18 else "🌙"
+        weather_text = "맑음/쾌적" if 6 <= hour < 18 else "은은한 달빛"
+        st.markdown(f"""
+        <div class='glass-card' style='text-align: center; padding: 20px;'>
+            <h4 style='margin:0; color:#FFD700;'>🌤️ 작전 지역 날씨</h4>
+            <span style='font-size: 2.5rem;'>{weather_icon}</span>
+            <p style='margin:0; color:#888;'>서울 기준: {weather_text}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    st.divider()
+    
+    # 출석 입력
+    with st.form("attendance_form", clear_on_submit=True):
+        st.markdown("### 🏹 오늘 한 줄 다짐 (Attendance)")
+        greeting = st.text_input("사령부에 임하는 오늘의 한 마디", placeholder="예: 오늘도 원칙 매매! 뇌동매매 금지!")
+        if st.form_submit_button("🛡️ 출석 완료 및 서명"):
+            if greeting:
+                now_kst = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d %H:%M")
+                new_row = pd.DataFrame([[now_kst, st.session_state.current_user, greeting, curr_grade]], columns=["시간", "아이디", "인사", "등급"])
+                new_row.to_csv(ATTENDANCE_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                st.success("✅ 사령부 명부에 정상 등록되었습니다. 오늘의 전술을 확인하십시오.")
+                st.balloons()
+                st.rerun()
+            else:
+                st.error("❌ 한 줄 인사를 입력해 주세요.")
+
+    st.subheader("📡 실시간 출석 현황")
+    if not df_att.empty:
+        # 최근 20개만 표시
+        for _, row in df_att.iloc[::-1].head(20).iterrows():
+            is_admin_att = row["등급"] in ["방장", "관리자"]
+            bg = "rgba(255,215,0,0.15)" if is_admin_att else "rgba(255,255,255,0.05)"
+            tag = "👑" if is_admin_att else "👤"
+            st.markdown(f"""
+            <div style='background: {bg}; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 4px solid {"#FFD700" if is_admin_att else "#444"};'>
+                <div style='display: flex; justify-content: space-between; font-size: 0.8rem; color: #888;'>
+                    <b>{tag} {row["아이디"]} ({row["등급"]})</b>
+                    <span>{row["시간"]}</span>
+                </div>
+                <div style='margin-top: 5px; color: #EEE;'>{row["인사"]}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("오늘 첫 번째로 출석하여 사령부의 문을 여십시오!")
+
+elif page.startswith("1."):
     st.header("🎯 주도주 VCP & EP 마스터 스캐너")
     st.markdown("<div class='glass-card'>미너비니의 VCP(변동성 축소)와 본데의 EP(에피소딕 피벗) 4단계 통합 검색 엔진입니다.</div>", unsafe_allow_html=True)
     
@@ -675,19 +789,45 @@ elif page.startswith("6."):
             end_idx = start_idx + ppp
             
             for idx, row in df_b.iloc[start_idx:end_idx].iterrows():
-                st.markdown(f"""
-                <div class='glass-card' style='padding: 20px; border-left: 5px solid #FFD700; margin-bottom: 10px;'>
-                    <span style='color: #FFD700; font-size: 0.8rem;'>📅 {row['날짜']} | 작성자: {row['작성자']}</span><br>
-                    <div style='margin-top: 10px; font-size: 1.1rem;'>{row['내용']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-                if is_admin:
-                    if st.button(f"🗑️ 삭제 (ID:{idx})", key=f"del_brief_{idx}"):
+                # 수정 모드 체크
+                is_editing = (st.session_state.get("edit_brief_id") == idx)
+                
+                if is_editing:
+                    st.markdown(f"<div class='glass-card' style='border-color: #FFD700;'>", unsafe_allow_html=True)
+                    st.markdown(f"**📝 브리핑 수정 중 (ID: {idx})**")
+                    edited_content = st.text_area("내용 편집", value=row['내용'], key=f"edit_text_{idx}", height=250)
+                    c_s1, c_s2 = st.columns(2)
+                    if c_s1.button("💾 변경사항 저장", key=f"save_brief_{idx}", use_container_width=True):
                         temp_df = pd.read_csv(BRIEF_FILE, encoding="utf-8-sig")
-                        temp_df = temp_df.drop(idx)
+                        temp_df.at[idx, '내용'] = edited_content
                         temp_df.to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
-                        st.warning("내용이 삭제되었습니다.")
+                        st.success("✅ 브리핑이 성공적으로 수정되었습니다.")
+                        del st.session_state["edit_brief_id"]
                         st.rerun()
+                    if c_s2.button("❌ 수정 취소", key=f"cancel_brief_{idx}", use_container_width=True):
+                        del st.session_state["edit_brief_id"]
+                        st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class='glass-card' style='padding: 20px; border-left: 5px solid #FFD700; margin-bottom: 10px;'>
+                        <span style='color: #FFD700; font-size: 0.8rem;'>📅 {row['날짜']} | 작성자: {row['작성자']}</span><br>
+                        <div style='margin-top: 10px; font-size: 1.1rem; white-space: pre-wrap;'>{row['내용']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if is_admin:
+                        bc1, bc2, bc3 = st.columns([1, 1, 2])
+                        with bc1:
+                            if st.button(f"📝 수정", key=f"edit_btn_{idx}", use_container_width=True):
+                                st.session_state.edit_brief_id = idx
+                                st.rerun()
+                        with bc2:
+                            if st.button(f"🗑️ 삭제", key=f"del_brief_{idx}", use_container_width=True):
+                                temp_df = pd.read_csv(BRIEF_FILE, encoding="utf-8-sig")
+                                temp_df = temp_df.drop(idx)
+                                temp_df.to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
+                                st.warning("내용이 삭제되었습니다.")
+                                st.rerun()
         else:
             st.info("아직 등록된 브리핑이 없습니다.")
     except Exception as e:
@@ -1046,7 +1186,137 @@ elif page.startswith("15."):
                         st.warning(f"⚠️ {u} 요원이 명부에서 삭제되었습니다.")
                         st.rerun()
     else:
-        st.info("현재 사령부에 등록된 관리 대상 대원이 없습니다.")
+        st.info("현재 사령부에서 관리할 대원이 없습니다.")
+
+elif page.startswith("16."):
+    st.markdown("<h1 style='color: #FFD700; text-align: center; font-size: 3rem;'>🏛️ StockDragonfly 차트 아카데미</h1>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class='glass-card' style='text-align: center; padding: 30px; border: 1px solid #FFD700; background: rgba(255,215,0,0.02);'>
+        <p style='font-size: 1.2rem; color: #EEE; line-height: 1.8;'>
+            "성공적인 트레이딩은 본능이 아니라 훈련된 반사 신경의 결과입니다."<br>
+            본 교육 섹션은 윌리엄 오닐과 프라딥 본데의 철학을 바탕으로, 시장 주도주의 탄생 원리를 몸소 체득할 수 있도록 설계되었습니다. 
+            눈으로 읽는 공부를 넘어, 차트 1,000개를 뇌에 각인시키는 <b>딥 다이브(Deep Dive)</b> 훈련을 시작하십시오.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    tab1, tab2, tab3 = st.tabs(["🏛️ Master's Archive", "🎯 Training Room", "📺 Live Academy"])
+
+    with tab1:
+        st.subheader("1. 마스터 아카이브: 대가들의 정석 패턴")
+        st.markdown("<div class='glass-card'>지난 10년간 시장을 주도했던 100% 이상 폭등주의 돌파 직전 데이터를 한곳에 모았습니다.</div>", unsafe_allow_html=True)
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("""
+            <div style='background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border-top: 4px solid #FF4B4B;'>
+                <h4 style='color: #FF4B4B;'>유형별 집중 학습</h4>
+                <p style='color: #AAA; font-size: 0.9rem;'>컵앤핸들, VCP(변동성 축소), 에피소딕 피벗(EP) 등 정석 패턴별 분류 데이터를 제공합니다.</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with c2:
+            st.markdown("""
+            <div style='background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border-top: 4px solid #00FF00;'>
+                <h4 style='color: #00FF00;'>시세의 인과관계</h4>
+                <p style='color: #AAA; font-size: 0.9rem;'>돌파 전의 정적인 응축과 돌파 후의 폭발적 상승을 비교 분석하여 승률을 높입니다.</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with c3:
+            st.markdown("""
+            <div style='background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border-top: 4px solid #FFD700;'>
+                <h4 style='color: #FFD700;'>데이터 학습</h4>
+                <p style='color: #AAA; font-size: 0.9rem;'>본데의 코드 33과 수급의 결합이 어떻게 시세를 만드는지 실증 데이터로 확인합니다.</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.info("💡 아카이브 내부 데이터는 매주 업데이트되며, 현재 1,200개 이상의 폭등주 샘플이 데이터베이스에 등록되어 있습니다.")
+
+    with tab2:
+        st.subheader("2. 트레이닝 룸: 실전 타점 훈련")
+        st.markdown("<div class='glass-card'>차트를 보고 직접 매수 급소를 클릭하며 실전 감각을 기르는 인터랙티브 훈련장입니다.</div>", unsafe_allow_html=True)
+        
+        cc1, cc2 = st.columns([2, 1])
+        with cc1:
+            st.markdown("""
+            <div style='height: 400px; display: flex; align-items: center; justify-content: center; background: #111; border: 2px dashed #444; border-radius: 15px;'>
+                <div style='text-align: center; color: #666;'>
+                    <h3>[피벗 포인트 퀴즈 모드]</h3>
+                    <p>랜덤 과거 차트 로드 중... 타점을 클릭하세요.</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with cc2:
+            st.markdown("#### 🛡️ 훈련 지침")
+            st.warning("""
+            **반사 신경 강화:**  
+            장중에 머리로 고민하지 않고 손이 먼저 반응하도록 무한 반복 훈련합니다.
+            """)
+            if st.button("🚀 무작위 훈련 시작"):
+                st.toast("사령부 데이터베이스에서 무작위 폭등주 과거 차트를 추출합니다.")
+            
+            st.markdown("---")
+            st.markdown("**전술 피드백:**")
+            st.info("클릭 결과에 따라 본데의 철학이 담긴 정교한 해설과 뼈 때리는 일침이 제공됩니다.")
+
+    with tab3:
+        st.subheader("3. 라이브 아카메디: 현재 주도주 실시간 분석")
+        st.markdown("<div class='glass-card'>현재 시장에서 꿈틀되는 종목들에 대가들의 분석 엔진을 직접 투영해 봅니다.</div>", unsafe_allow_html=True)
+        
+        l1, l2 = st.columns([3, 1])
+        with l2:
+            live_tic = st.text_input("분석 종목 (Ticker)", "NVDA").upper()
+            st.markdown("""
+            <div style='background: rgba(0,255,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid #00FF00;'>
+                <b style='color: #00FF00;'>🍌 나노바나나 스캔</b><br>
+                <small>돌파 임박도 (잘 익었는지):</small>
+                <div style='background: #333; height: 10px; border-radius: 5px; margin-top: 5px;'>
+                    <div style='background: #00FF00; width: 85%; height: 100%; border-radius: 5px;'></div>
+                </div>
+                <div style='text-align: right; font-size: 0.8rem; margin-top: 3px;'>85% Ready</div>
+            </div>
+            <br>
+            <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid #FFD700;'>
+                <b style='color: #FFD700;'>🏷️ 자동 어노테이션</b><br>
+                <small>• RS 신고가 감지됨</small><br>
+                <small>• VCP 3단계 수축 진행중</small><br>
+                <small>• 거래량 말라감(Dry-up) 포착</small>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with l1:
+            st.components.v1.html(f"""
+                <iframe src='https://s.tradingview.com/widgetembed/?symbol={live_tic}&interval=D&theme=dark' width='100%' height='550'></iframe>
+            """, height=560)
+            st.success(f"📺 {live_tic} 실시간 실전 판독 엔진 가동 중")
+
+    st.divider()
+    st.subheader("📝 StockDragonfly 아카데미 운영 지침")
+    
+    # 운영 지침 요약 테이블
+    st.markdown("""
+    <table style='width: 100%; border-collapse: collapse; color: white;'>
+        <tr style='background: rgba(255,215,0,0.1);'>
+            <th style='padding: 12px; border: 1px solid #444;'>단계</th>
+            <th style='padding: 12px; border: 1px solid #444;'>기능 명칭</th>
+            <th style='padding: 12px; border: 1px solid #444;'>핵심 학습 내용</th>
+        </tr>
+        <tr>
+            <td style='padding: 12px; border: 1px solid #444; text-align: center;'>1단계</td>
+            <td style='padding: 12px; border: 1px solid #444;'>Deep Dive</td>
+            <td style='padding: 12px; border: 1px solid #444;'>대가들의 정석 패턴 1,000개 뇌에 각인</td>
+        </tr>
+        <tr>
+            <td style='padding: 12px; border: 1px solid #444; text-align: center;'>2단계</td>
+            <td style='padding: 12px; border: 1px solid #444;'>Action Quiz</td>
+            <td style='padding: 12px; border: 1px solid #444;'>피벗 포인트 포착 및 절차적 기억 형성</td>
+        </tr>
+        <tr>
+            <td style='padding: 12px; border: 1px solid #444; text-align: center;'>3단계</td>
+            <td style='padding: 12px; border: 1px solid #444;'>Real-time Check</td>
+            <td style='padding: 12px; border: 1px solid #444;'>현재 주도주의 셋업 완성도 나노 단위 분석</td>
+        </tr>
+    </table>
+    """, unsafe_allow_html=True)
     
 # --- 🛰️ 시스템 하단 글로벌 전술 푸터 (Global Footer) ---
 st.write("") # 스페이싱
