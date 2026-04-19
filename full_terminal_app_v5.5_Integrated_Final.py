@@ -1648,6 +1648,10 @@ elif page.startswith("5-f."):
                             c_new.to_csv(COMMENTS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
                             st.rerun()
                 st.write("") # 스페이싱
+        else:
+            st.info("아직 등록된 성찰 기록이 없습니다. 아픔을 나누면 반이 됩니다.")
+    except:
+        st.info("데이터 로딩 중...")
 
 elif page.startswith("2-b."):
     st.header("🗺️ 실시간 주도주 히트맵 (Market OverView)")
