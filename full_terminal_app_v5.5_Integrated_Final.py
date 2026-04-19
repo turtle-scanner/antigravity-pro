@@ -545,8 +545,11 @@ with st.sidebar:
                     st.session_state.page = m
                     st.rerun()
 
+# --- 🌍 [GLOBAL RECONNAISSANCE] 공통 시각 및 상태 설정 ---
+now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+
 # 최종 선택된 미션을 page 변수에 할당하여 본문 렌더링
-page = st.session_state.page
+page = st.session_state.get("page", "6-a. 📌 출석체크(오늘한줄)")
 
 # --- 🔴 상단 브랜드 헤더 ---
 c_logo1, c_logo2, c_logo3 = st.columns([1, 2, 1])
@@ -1000,33 +1003,54 @@ elif page.startswith("4-a."):
 
 elif page.startswith("3-b."):
     st.header("🚀 주도주 실시간 랭킹 (Daily Live Ranking)")
+    # 유저가 새로 제공한 시트 링크 적용 (CSV 변환 완료)
     RANK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
     
-    @st.cache_data(ttl=600)
+    @st.cache_data(ttl=300)
     def fetch_rank_data(url):
-        try: return pd.read_csv(url)
-        except: return pd.DataFrame()
+        try: 
+            return pd.read_csv(url)
+        except Exception as e: 
+            return pd.DataFrame()
 
     with st.spinner("📊 전문가님의 데이터 센터에서 실시간 동기화 중..."):
         try:
             df_live = fetch_rank_data(RANK_SHEET_URL)
-            if 'ROE' in df_live.columns:
-                df_live['ROE_VAL'] = df_live['ROE'].astype(str).str.replace('%','').astype(float)
-                df_final = df_live[df_live['ROE_VAL'] >= 10.0].head(10)
+            if df_live.empty:
+                st.warning("⚠️ 시트에서 데이터를 가져올 수 없습니다. '공유 설정'을 확인해 주세요.")
             else:
-                df_final = df_live.head(10)
-            
-            st.markdown(f"<div class='glass-card'>📅 <b>{now_kst.strftime('%Y-%m-%d %H:%M')} KST</b> | ROE 10% 이상 주도주 우선순위</div>", unsafe_allow_html=True)
-            
-            display_cols = ["종목명", "ROE", "현재가", "진입가", "단계", "손절가", "목표가"]
-            available_cols = [c for c in display_cols if c in df_final.columns]
-            
-            if available_cols:
-                st.dataframe(df_final[available_cols], use_container_width=True, hide_index=True)
-            else:
-                st.dataframe(df_final, use_container_width=True, hide_index=True)
+                # 데이터 정제 및 필터링
+                st.markdown(f"<div class='glass-card'>📅 <b>{now_kst.strftime('%Y-%m-%d %H:%M')} KST</b> | 사령부 주도주 스캔 데이터</div>", unsafe_allow_html=True)
                 
-            st.success(f"✅ {now_kst.strftime('%H:%M')} 한국 시간 기준 업데이트 완료!")
+                # 시트의 헤더에 맞춰 유연하게 매핑
+                df_live = df_live.rename(columns={
+                    '종목명': '종목', '티커': '종목', 'Ticker': '종목',
+                    'ROE': 'ROE', 'roe': 'ROE',
+                    '현재가': '현재가', 'Price': '현재가',
+                    '진입가': '진입가', 'EP': '진입가',
+                    '단계': '단계', 'Stage': '단계',
+                    '손절가': '손절가', 'SL': '손절가',
+                    '목표가': '목표가', 'TP': '목표가'
+                })
+                
+                # ROE 10% 이상 필터링 (컬럼이 있을 경우만)
+                if 'ROE' in df_live.columns:
+                    try:
+                        df_live['ROE_VAL'] = df_live['ROE'].astype(str).str.replace('%','').astype(float)
+                        df_final = df_live[df_live['ROE_VAL'] >= 10.0].head(20)
+                    except: df_final = df_live.head(20)
+                else:
+                    df_final = df_live.head(20)
+                
+                display_cols = ["종목", "ROE", "현재가", "진입가", "단계", "손절가", "목표가"]
+                available_cols = [c for c in display_cols if c in df_final.columns]
+                
+                if available_cols:
+                    st.dataframe(df_final[available_cols], use_container_width=True, hide_index=True)
+                else:
+                    st.dataframe(df_final, use_container_width=True, hide_index=True)
+                    
+                st.success(f"✅ {now_kst.strftime('%H:%M')} 한국 시간 기준 동기화 완료!")
         except Exception as e:
             st.error(f"⚠️ 시트 연동 중 오류 발생: {e}")
             st.info("시트가 '링크가 있는 모든 사용자에게 공개(뷰어)' 상태인지 확인해 주세요.")
