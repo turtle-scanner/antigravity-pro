@@ -15,6 +15,7 @@ import time
 MASTER_GAS_URL = "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec"
 USERS_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1180564490"
 CHAT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=2147147361"
+POSTS_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 USER_DB_FILE = os.path.join(BASE_DIR, "users_db.json")
@@ -35,9 +36,22 @@ def load_users():
         df_u = pd.read_csv(USERS_SHEET_URL)
         for _, row in df_u.iterrows():
             u_id = str(row.get('아이디', '')).strip()
-            if u_id: users[u_id] = {"password": str(row.get('비밀번호', u_id)), "status": str(row.get('상태', 'approved')), "grade": str(row.get('등급', '회원')), "info": {}}
+            if u_id:
+                users[u_id] = {
+                    "password": str(row.get('비밀번호', u_id)).strip(),
+                    "status": str(row.get('상태', 'approved')).strip(),
+                    "grade": str(row.get('등급', '회원')).strip(),
+                    "info": {
+                        "area": str(row.get('지역', '-')),
+                        "age_group": str(row.get('연령대', '-')),
+                        "gender": str(row.get('성별', '-')),
+                        "exp": str(row.get('경력', '-')),
+                        "reg_date": str(row.get('가입일', '-')),
+                        "motive": str(row.get('매매동기', '-'))
+                    }
+                }
     except: pass
-    users["cntfed"] = {"password": "cntfed", "status": "approved", "grade": "방장"}
+    users["cntfed"] = {"password": "cntfed", "status": "approved", "grade": "방장", "info": {}}
     return users
 
 def save_users(users):
@@ -86,6 +100,9 @@ def show_global_notice():
     st.markdown("""<div style='background: rgba(0, 255, 0, 0.05); border-left: 5px solid #00FF00; padding: 15px; border-radius: 10px; margin-bottom: 25px;'><span style='color: #00FF00; font-weight: 800;'>[사령부 긴급 공지]</span> <span style='color: #e2e8f0; margin-left: 10px;'>🚨 보안 지침: 공용 보안 코드가 '1234'로 갱신되었습니다. (1-c)에서 변경하십시오.</span></div>""", unsafe_allow_html=True)
 
 def check_login():
+    st.markdown("<h1 style='text-align: center; color: #00FF00; text-shadow: 2px 2px 10px #00FF00; font-family: Outfit; font-weight: 900; margin-bottom: 0px;'>🛸 StockDragonfly Apex 🛸</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888; font-size: 1rem; margin-top: 0px;'>High-Performance Trading Command Center</p>", unsafe_allow_html=True)
+    
     users = load_users()
     if "show_signup" not in st.session_state: st.session_state.show_signup = False
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -106,12 +123,51 @@ def check_login():
                     else: st.error("❌ 정보 불일치")
             if st.button("🤝 신입 요원 자격 심사 신청"): st.session_state.show_signup = True; st.rerun()
         else:
-            st.markdown("<div class='glass-card' style='border: 1px solid #6366f1;'><h2 style='text-align: center; color: #6366f1;'>🏛️ StockDragonfly 마스터 훈련소: 주식 핵심 퀴즈 20선</h2></div>", unsafe_allow_html=True)
-            with st.form("sg_f"):
-                new_id = st.text_input("🎖️ 희망 요원 아이디")
-                new_pw = st.text_input("🔐 희망 보안 코드", type="password")
+            st.markdown("<div class='glass-card' style='border: 1px solid #6366f1;'><h2 style='text-align: center; color: #6366f1;'>📝 신입 요원 임관 신청서</h2></div>", unsafe_allow_html=True)
+            
+            # --- 🛠️ STEP 0: 아이디 사전 검증 ---
+            if "id_verified" not in st.session_state: st.session_state.id_verified = None
+            
+            check_col1, check_col2 = st.columns([3, 1])
+            with check_col1:
+                check_id = st.text_input("🎖️ 사용하실 요원 아이디를 먼저 입력하세요", value=st.session_state.get("pending_id", ""))
+            with check_col2:
+                st.write("") # 간격 조절
+                if st.button("🔍 중복 확인"):
+                    users = load_users()
+                    if not check_id: st.warning("ID 입력!")
+                    elif check_id in users: 
+                        st.error("❌ 이미 사용 중")
+                        st.session_state.id_verified = False
+                    else: 
+                        st.success("✅ 사용 가능!")
+                        st.session_state.id_verified = True
+                        st.session_state.pending_id = check_id
+            
+            if st.session_state.get("id_verified"):
+                st.info(f"🛡️ **{st.session_state.pending_id}** 아이디로 신청서를 작성합니다.")
+                with st.form("sg_f"):
+                    st.markdown("### [1단계: 요원 인적 사항 및 전사 프로필]")
+                    col_id, col_pw = st.columns(2)
+                    with col_id:
+                        new_id = st.text_input("🎖️ 요원 아이디 (확인됨)", value=st.session_state.pending_id, disabled=True)
+                    with col_pw:
+                        new_pw = st.text_input("🔐 희망 보안 코드", type="password", placeholder="비밀번호 설정")
+                    
+                    st.write("")
+                    col_info1, col_info2 = st.columns(2)
+                    with col_info1:
+                        u_age = st.number_input("🎂 나이", min_value=1, max_value=120, value=30)
+                        u_area = st.text_input("🌍 사는 곳 (거주 지역)", placeholder="예: 서울 강남구 / 부산 해운대구")
+                    with col_info2:
+                        u_gender = st.selectbox("🚻 성별", ["남성", "여성"])
+                        u_exp = st.selectbox("🏹 주식 연차 (경력)", ["입문 (1년 미만)", "병사 (1~3년)", "부사관 (3~5년)", "영관급 (5~10년)", "장성급 (10년 이상)"])
+                    
+                    u_motive = st.text_area("🔥 사령부 임관 및 매매 동기", placeholder="안티그래비티 사령부에 합류하려는 이유와 투자 목표를 자유롭게 기재하세요.")
+                
                 st.divider()
-                st.info("⚠️ 20문제 중 17문제 이상을 맞춰야 임관 신청이 가능합니다.")
+                st.markdown("### [2단계: 전술 지식 평가 (20 Munhang)]")
+                st.info("⚠️ 위 인적 사항을 모두 기재한 후, 아래 20문제 중 17문제 이상을 맞춰야 임관 신청이 가능합니다.")
                 
                 def get_q(txt, ops): return st.radio(txt, ops, index=None)
 
@@ -141,7 +197,8 @@ def check_login():
 
                 if st.form_submit_button("🛰️ 임관 신청서 최종 제출"):
                     ans = [q1,q2,q3,q4,q5,q6,q7,q8,q9,q10,q11,q12,q13,q14,q15,q16,q17,q18,q19,q20]
-                    if not new_id or not new_pw: st.error("정보 입력 필수")
+                    final_id = st.session_state.pending_id
+                    if not final_id or not new_pw: st.error("정보 입력 필수")
                     elif any(a is None for a in ans): st.warning("모든 문제를 풀어주세요.")
                     else:
                         score = 0
@@ -151,32 +208,67 @@ def check_login():
                         
                         if score >= 17:
                             users = load_users()
-                            if new_id in users: st.error("이미 존재하는 ID")
+                            if final_id in users: st.error("이미 존재하는 ID")
                             else:
-                                users[new_id] = {"password": new_pw, "status": "pending", "grade": "회원", "score": score}
-                                save_users(users); sync_user_to_cloud(new_id, users[new_id]); st.success(f"축하합니다! {score}점으로 자격 통과. 심사를 기다리세요."); time.sleep(2); st.session_state.show_signup = False; st.rerun()
+                                users[final_id] = {
+                                    "password": new_pw, "status": "pending", "grade": "회원", "score": score,
+                                    "info": {"age": u_age, "gender": u_gender, "area": u_area, "exp": u_exp, "motive": u_motive, "reg_date": datetime.now().strftime("%Y-%m-%d %H:%M")}
+                                }
+                                save_users(users)
+                                gsheet_sync("회원명단", 
+                                            ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"], 
+                                            [final_id, new_pw, "pending", "회원", u_area, u_age, u_gender, u_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), u_motive])
+                                st.success(f"축하합니다! {score}점으로 자격 통과. 심사를 기다리세요."); time.sleep(2)
+                                st.session_state.show_signup = False
+                                if "id_verified" in st.session_state: del st.session_state.id_verified
+                                st.rerun()
                         else: st.error(f"💀 점수 미달: {score}/20 (합격 컷: 17). 전술 공부 후 다시 도전하세요.")
             
-            with st.expander("💡 힌트 (Hint 센터)"):
+            with st.expander("💡 🏛️ StockDragonfly 전술 아카데미 (필독 학습 가이드)"):
                 st.markdown("""
-                - **약세장:** 지표가 평균선 아래로 떨어질 때 경계하세요.
-                - **VCP:** 폭발 전에는 항상 고요한 법입니다(Dry-up).
-                - **EP:** 펀더멘털의 강력한 변화가 캔들로 나타납니다.
-                - **캔들:** 빨강은 열정(상승), 파랑은 냉정(하락).
-                - **이평선:** 평균은 시장의 방향성을 보여줍니다.
-                """)
+                <div style='color: #FFFFFF; line-height: 1.9; font-size: 0.98rem; background: rgba(0, 255, 0, 0.03); padding: 25px; border-radius: 20px; border: 1px solid rgba(0, 255, 0, 0.2);'>
+                    <p style='color: #00FF00; font-size: 1.2rem; font-weight: 800; border-bottom: 2px solid #00FF00; padding-bottom: 10px; margin-bottom: 20px;'>📖 신입 요원 필독: 실전 전술 핵심 요약</p>
+                    
+                    <p>🛡️ <b>[PART 1. 마스터 전술 레슨]</b></p>
+                    <ul style='list-style-type: "🚀 ";'>
+                        <li><b>시장의 온도(Regime):</b> 지수가 20일/50일선 <b>아래</b>에 있으면 총을 내려놓으세요. 그것이 전사를 살리는 길입니다.</li>
+                        <li><b>VCP 패턴:</b> 마크 미너비니의 핵심! 주가가 폭발하기 전에는 반드시 변동폭이 좁아지며 거래량이 <b>마르는(Dry-up)</b> 구간이 나옵니다.</li>
+                        <li><b>손절(Stop-loss):</b> 본절을 지키는 최후의 보루는 당일의 <b>최저가(LOD)</b>입니다. 이곳이 뚫리면 미련 없이 퇴각하십시오.</li>
+                        <li><b>익절과 생존:</b> 8~20% 급등 시 <b>절반을 익절</b>하여 수익을 챙기고, 나머지 반의 손절선은 <b>본절가</b>로 올려 '무위험 매매'를 만드세요.</li>
+                        <li><b>추세 즐기기:</b> 홈런을 치고 싶다면 주가가 <b>10일 또는 20일 이동평균선</b>을 종가로 이탈할 때까지 끈질기게 버티십시오.</li>
+                        <li><b>추격 매수 금지:</b> 본데의 철칙! 이미 <b>3일 연속</b> 양봉이 떴다면 그것은 요원의 것이 아닙니다. 다음 기회를 기다리세요.</li>
+                        <li><b>에피소딕 피벗(EP):</b> 강력한 촉매제(실적 등)와 함께 역대급 거래량으로 <b>갭상승</b>하는 지점이 부의 추월차점입니다.</li>
+                        <li><b>진짜 돌파:</b> 거래량이 평소보다 <b>1.5배~3배 이상</b> 터지지 않는다면 기관의 수급이 없는 가짜 돌파(Fake)일 확률이 높습니다.</li>
+                        <li><b>ORB 타점:</b> 장 초반의 변동성을 이겨내고 <b>초기 고점(ORH)</b>을 뚫는 순간이 가장 날카로운 진입 시점입니다.</li>
+                    </ul>
+
+                    <p style='margin-top: 25px;'>📚 <b>[PART 2. 기초 전술 노하우]</b></p>
+                    <ul style='list-style-type: "💡 ";'>
+                        <li><b>캔들의 언어:</b> <b>빨강(양봉)</b>은 시가보다 높게 끝난 승전보, <b>파랑(음봉)</b>은 낮게 끝난 패전보입니다.</li>
+                        <li><b>거래량의 의미:</b> 가격보다 정직한 것은 <b>거래량</b>입니다. 장중에 터진 에너지의 총합을 항상 주시하십시오.</li>
+                        <li><b>격언의 지혜:</b> 발바닥에서 사려 하지 마세요. <b>무릎</b>에서 확인하고 <b>어깨</b>에서 내려오는 것이 가장 안전한 홈런 공식입니다.</li>
+                        <li><b>이동평균선:</b> 주가의 평균을 이은 이 선은 시장의 <b>방향성</b>을 알려주는 나침반과 같습니다.</li>
+                        <li><b>크로스의 마법:</b> 단기선이 위로 뚫으면 <b>골든크로스</b>(매수), 아래로 꺾이면 <b>데드크로스</b>(매도)입니다.</li>
+                        <li><b>가격의 화폐가치:</b> 주가가 우상향하는 근본 원인은 <b>인플레이션</b>에 의해 화폐의 가치가 점점 하락하기 때문입니다.</li>
+                    </ul>
+                    
+                    <p style='color: #FFD700; font-weight: 700; text-align: center; margin-top: 20px;'>⚠️ 위 가이드를 정독하면 20문항 모두 만점이 가능합니다. 건승을 빕니다!</p>
+                </div>
+                """, unsafe_allow_html=True)
             if st.button("⬅️ 로그인 화면으로 복귀"): st.session_state.show_signup = False; st.rerun()
 
 if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 if not st.session_state["password_correct"]: check_login(); st.stop()
 
-# --- 🚀 메인 시스템 가동 ---
+# --- 🚀 StockDragonfly 메인 시스템 가동 ---
+st.markdown("<h2 style='text-align: center; color: #00FF00; text-shadow: 2px 2px 8px #00FF00; font-family: Outfit; font-weight: 800; margin-top: -20px;'>🚀 StockDragonfly Tactical Command Center</h2>", unsafe_allow_html=True)
+show_global_notice()
 with st.sidebar:
     st.markdown(f"**{st.session_state.get('user_grade','회원')} {st.session_state['current_user']} 요원**")
     zones = {
         "🏰 1. 본부 사령부": ["1-a. 👑 관리자 승인 센터", "1-b. 🎖️ HQ 인적 자원 사령부", "1-c. 🔐 계정 보안 설정", "1-d. 🌙 탈퇴/휴식 신청", "1-e. 🏅 대원 활동 뱃지 보관함"],
         "📡 2. 시장 상황실": ["2-a. 📈 마켓 트렌드 요약", "2-b. 🗺️ 실시간 히트맵", "2-c. 🌡️ 시장 심리 게이지", "2-d. 🏛️ 제작 동기", "2-e. 🚦 업종별 섹터 로테이션", "2-f. 📢 AI 실시간 시황 브리핑"],
-        "🏹 3. 주도주 추격대": ["3-a. 🎯 주도주 타점 스캐너", "3-b. 🚀 주도주 랭킹 TOP 50", "3-c. 📊 본데 감시 리스트", "3-d. 📊 기관 수급 추격 레이더"]
+        "🏹 3. 주도주 추격대": ["3-a. 🎯 주도주 타점 스캐너", "3-b. 🚀 주도주 랭킹 TOP 50", "3-c. 📝 주도주 분석 게시판", "3-d. 📊 기관 수급 추격 레이더"]
     }
     selected_zone = st.selectbox("전술 구역", list(zones.keys()))
     page = st.radio("세부 작전지", zones[selected_zone])
@@ -208,11 +300,52 @@ with st.sidebar:
 show_global_notice()
 
 if page.startswith("1-a."):
-    st.header("👑 신입 요원 임관 심사")
+    st.header("👑 신입 요원 임관 승인 센터")
     users = load_users()
-    pending = {k: v for k, v in users.items() if v["status"] == "pending"}
-    for u, data in pending.items():
-        if st.button(f"승인: {u}"): users[u]["status"] = "approved"; save_users(users); sync_user_to_cloud(u, users[u]); st.rerun()
+    pending = [u for u in users if users[u].get("status") == "pending"]
+    if not pending: st.info("현재 대기 중인 임관 신청서가 없습니다.")
+    else:
+        for u in pending:
+            info = users[u].get("info", {})
+            with st.container():
+                st.markdown(f"""
+                <div class='glass-card' style='border: 1px solid #FFD700;'>
+                    <h4>🎖️ 요원 코드: {u}</h4>
+                    <p><b>[프로필 정보]</b></p>
+                    <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 10px;'>
+                        <span>🎂 나이: {info.get('age', info.get('age_group', '-'))}세</span>
+                        <span>🚻 성별: {info.get('gender', '-')}</span>
+                        <span>🌍 지역: {info.get('area', '-')}</span>
+                        <span>🏹 경력: {info.get('exp', '-')}</span>
+                    </div>
+                    <p style='margin-top: 10px;'><b>🔥 매매 동기</b><br>{info.get('motive', '-')}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button(f"🛡️ {u} 요원 임관 승인", key=f"app_btn_{u}"):
+                    users[u]["status"] = "approved"; save_users(users); sync_user_to_cloud(u, users[u]); st.success(f"{u} 요원 임관 완료!"); time.sleep(1); st.rerun()
+
+elif page.startswith("1-b."):
+    st.header("🎖️ HQ 인적 자원 사령부")
+    users = load_users()
+    approved = [u for u in users if users[u].get("status") == "approved"]
+    st.subheader(f"📊 활동 중인 정예 요원: {len(approved)}명")
+    for u in approved:
+        info = users[u].get("info", {})
+        with st.expander(f"👤 {users[u].get('grade','회원')} {u} 요원 상세 프로필"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"🎂 나이: {info.get('age', info.get('age_group', '-'))}")
+                st.write(f"🚻 성별: {info.get('gender', '-')}")
+                st.write(f"🏹 경력: {info.get('exp', '-')}")
+            with col2:
+                st.write(f"🌍 거주지: {info.get('area', '-')}")
+                st.write(f"📅 가입일: {info.get('reg_date', '-')}")
+                st.write(f"🏆 자격 점수: {users[u].get('score', '-')}")
+            st.markdown("**🔥 전사 임관 동기**")
+            st.write(info.get('motive', '-'))
+            if st.session_state.user_grade == "방장" and u != "cntfed":
+                if st.button(f"💀 {u} 요원 제명", key=f"kick_{u}"):
+                    del users[u]; save_users(users); st.error(f"{u} 요원 제명 완료"); time.sleep(1); st.rerun()
 
 elif page.startswith("2-a."):
     st.markdown("<h2 style='color: #00FF00;'>📈 마켓 트렌드 및 데일리 전술 점검</h2>", unsafe_allow_html=True)
@@ -330,6 +463,32 @@ elif page.startswith("5-f."):
                     st.warning("모든 문항에 답을 하셔야 사령관님께 제출됩니다.")
     else:
         st.info("현재 시험 기간이 아닙니다. 공부방(5-b)에서 실력을 먼저 쌓으십시오.")
+
+elif page.startswith("3-c."):
+    st.header("📝 주도주 분석 및 전술 게시판")
+    try:
+        df_p = pd.read_csv(POSTS_SHEET_URL)
+        if not df_p.empty:
+            # 시간순 역순 정렬 (최신글 상단)
+            df_p = df_p.iloc[::-1]
+            for _, row in df_p.iterrows():
+                sender = str(row.get('보낸사람', '사령관'))
+                tm = str(row.get('시간', '-'))
+                content = str(row.get('내용', '내용 없음'))
+                
+                st.markdown(f"""
+                <div class='glass-card'>
+                    <div style='display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px;'>
+                        <span style='color: #00FF00; font-weight: 800;'>🎖️ {sender}</span>
+                        <span style='color: #888; font-size: 0.85rem;'>{tm}</span>
+                    </div>
+                    <div style='font-size: 1.1rem; line-height: 1.6; color: #e2e8f0;'>
+                        {content}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else: st.info("아직 등록된 게시물이 없습니다.")
+    except: st.error("시트 데이터를 불러오는 데 실패했습니다 (URL/권한 확인 요망)")
 
 elif page.startswith("1-c."):
     st.header("🔐 계정 보안 설정")
