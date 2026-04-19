@@ -128,18 +128,47 @@ def save_users(users):
 
 @st.cache_data(ttl=600)
 def fetch_gs_attendance():
-    try: return pd.read_csv(ATTENDANCE_SHEET_URL)
-    except: return pd.DataFrame(columns=["시간", "아이디", "인사", "등급"])
+    try:
+        response = requests.get(ATTENDANCE_SHEET_URL, timeout=5)
+        if response.status_code == 200:
+            import io
+            df = pd.read_csv(io.StringIO(response.text))
+            # 🔍 유연한 헤더 매핑
+            df = df.rename(columns={
+                '시간': '시간', 'date': '시간', '날짜': '시간', '일시': '시간',
+                '아이디': '아이디', 'id': '아이디', 'ID': '아이디', 'User': '아이디',
+                '인사': '인사', '한줄인사': '인사', '내용': '인사', '댓글': '인사',
+                '등급': '등급', 'grade': '등급', 'Level': '등급'
+            })
+            # 필수 컬럼 보장
+            expected = ["시간", "아이디", "인사", "등급"]
+            for col in expected:
+                if col not in df.columns: df[col] = "nan"
+            return df[expected]
+    except: pass
+    return pd.DataFrame(columns=["시간", "아이디", "인사", "등급"])
 
 @st.cache_data(ttl=300)
 def fetch_gs_chat():
-    try: return pd.read_csv(CHAT_SHEET_URL)
-    except: return pd.DataFrame()
+    try:
+        response = requests.get(CHAT_SHEET_URL, timeout=5)
+        if response.status_code == 200:
+            import io
+            df = pd.read_csv(io.StringIO(response.text))
+            df = df.rename(columns={'시간': '시간', '아이디': '아이디', '내용': '내용', '등급': '등급'})
+            return df
+    except: pass
+    return pd.DataFrame()
 
 @st.cache_data(ttl=300)
 def fetch_gs_visitors():
-    try: return pd.read_csv(VISITOR_SHEET_URL)
-    except: return pd.DataFrame()
+    try:
+        response = requests.get(VISITOR_SHEET_URL, timeout=5)
+        if response.status_code == 200:
+            import io
+            return pd.read_csv(io.StringIO(response.text))
+    except: pass
+    return pd.DataFrame()
 
 def load_trades():
     if os.path.exists(TRADES_DB):
