@@ -26,12 +26,13 @@ ATTENDANCE_FILE = get_db_path("attendance.csv")
 MASTER_GAS_URL = "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec"
 
 # 🛡️ 영구 백업용 구글 시트 URL (CSV 내보내기 주소)
-# 여기에 '회원명단' 시트의 CSV 주소를 넣으시면 서버가 리셋되어도 회원이 유지됩니다.
 USERS_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1180564490" 
 ATTENDANCE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=0"
 CHAT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=2147147361"
 VISITOR_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=621380834"
 WITHDRAWN_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1873947039"
+# 🌍 전역 공지 및 UI 레이아웃 설정 (신설 - gid=1619623253 등 새 탭 권장)
+NOTICE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1619623253"
 
 TICKER_NAME_MAP = {
     "NVDA": "엔비디아", "TSLA": "테슬라", "AAPL": "애플", "MSFT": "마이크로소프트", "PLTR": "팔란티어", "SMCI": "슈퍼마이크로", 
@@ -170,6 +171,38 @@ def fetch_gs_visitors():
     except: pass
     return pd.DataFrame()
 
+@st.cache_data(ttl=900)
+def fetch_gs_notices():
+    try:
+        response = requests.get(NOTICE_SHEET_URL, timeout=5)
+        if response.status_code == 200:
+            import io
+            df = pd.read_csv(io.StringIO(response.text))
+            if not df.empty:
+                last_notice = df.iloc[-1]
+                return {"title": str(last_notice.get("제목", "📢 사령부 보안 업데이트 안내")), "content": str(last_notice.get("내용", "쾌적한 서비스 제공을 위해 엔진을 전면 개편하였습니다. 모든 회원 임시 비밀번호는 1234입니다."))}
+    except: pass
+    return {
+        "title": "🛡️ 사령부 고정 공지", 
+        "content": """더욱 쾌적하고 안전한 시스템 환경을 구축하기 위한 서버 업데이트 과정에서, 부득이하게 전체 회원의 비밀번호가 초기화되었습니다. 이용에 불편을 드려 대단히 죄송합니다.<br>
+아래 안내에 따라 비밀번호를 재설정해 주시기 바랍니다.<br><br>
+<b>🔐 비밀번호 초기화 및 재설정 방법</b><br>
+- 초기화 비밀번호: <b>1234</b><br>
+- 재설정 경로: <b>[1. 본부 사령부] → [1-c. 계정 보안 설정]</b><br><br>
+로그인 후 해당 메뉴에서 본인만의 안전한 비밀번호로 즉시 변경이 가능합니다. 개인정보 보호를 위해 접속 즉시 수정을 권장합니다."""
+    }
+
+# --- 🛰️ [BANNER SHIELD] 메뉴 UI 구조 고정 (v9.9 Platinum) ---
+ZONE_CONFIG = {
+    "🏰 1. 본부 사령부": ["1-a. 👑 관리자 승인 센터", "1-b. 🎖️ HQ 인적 자원 사령부", "1-c. 🔐 계정 보안 및 관리(18.)", "1-d. 🌙 탈퇴/휴식 신청"],
+    "📡 2. 시장 상황실": ["2-a. 📈 마켓 트렌드 요약", "2-b. 🗺️ 실시간 히트맵", "2-c. 🌡️ 시장 심리 게이지", "2-d. 🏛️ 제작 동기"],
+    "🏹 3. 주도주 추격대": ["3-a. 🎯 주도주 타점 스캐너", "3-b. 🚀 주도주 랭킹 TOP 50", "3-c. 📊 본데 감시 리스트"],
+    "🛡️ 4. 전략 및 리스크": ["4-a. 💎 프로 분석 리포트", "4-b. 🧮 리스크 계산기", "4-c. 🛡️ 리스크 방패"],
+    "🏛️ 5. 마스터 훈련소": ["5-a. 🐝 본데는 누구인가?", "5-b. 📚 주식공부방(차트)", "5-c. 🛰️ 나노바나나 레이더"],
+    "☕ 6. 안티그래비티 광장": ["6-a. 📌 출석체크(오늘한줄)", "6-b. 💬 소통 대화방", "6-c. 🤝 방문자 인사 신청"],
+    "🤖 7. 자동매매 사령부": ["7-a. 🚀 모의투자 매수테스트", "7-b. 📊 모의투자 현황/결과", "7-c. ⚙️ 자동매매 전략엔진", "7-d. 📈 자동투자 성적표", "7-e. 🏆 사령부 명예의 전당"]
+}
+
 def load_trades():
     if os.path.exists(TRADES_DB):
         try:
@@ -186,7 +219,7 @@ def gsheet_sync(sheet_name, headers, values):
     try: requests.post(MASTER_GAS_URL, json=payload, timeout=5)
     except: pass
 
-st.set_page_config(page_title="StockDragonfly Pro", page_icon="🛸", layout="wide")
+st.set_page_config(page_title="StockDragonfly Pro", page_icon="🐉", layout="wide")
 
 # --- 🌑 프리미엄 스타일 디자인 ---
 bg_b64 = ""
@@ -253,23 +286,15 @@ if not st.session_state["password_correct"]:
         if "show_notice" not in st.session_state: st.session_state["show_notice"] = True
         
         if st.session_state["show_notice"]:
+            cloud_notice = fetch_gs_notices()
             with st.container():
-                st.markdown("""
+                st.markdown(f"""
                 <div style='background: rgba(255, 0, 0, 0.1); border: 2px solid #FF4B4B; border-radius: 15px; padding: 25px; margin-bottom: 25px; color: white;'>
-                    <h3 style='color: #FF4B4B; margin-top: 0;'>🛡️ [공지] StockDragonfly 시스템 고도화 및 보안 업데이트 안내</h3>
-                    <p style='font-size: 1rem; line-height: 1.6;'>
-                        안녕하세요, 관리자입니다.<br><br>
-                        더 쾌적하고 나노 단위로 정교한 서비스 제공을 위해 시스템 엔진을 전면 개편하였습니다.<br>
-                        이 과정에서 보안 강화 및 데이터 최적화를 위해 <b>모든 회원의 임시 비밀번호가 1234로 초기화되었습니다.</b><br>
-                        이용에 불편을 드려 진심으로 사과드립니다.<br><br>
-                        <b>[조치 방법]</b><br>
-                        로그인 후 상단 <b>[1. 본부 사령부] -> [1-c 계정보안설정(비밀번호 변경가능)]</b> 배너에서 즉시 본인만의 비밀번호로 수정해 주시기 바랍니다.<br><br>
-                        여러분의 우상향하는 수익을 위해 끊임없이 진화하는 StockDragonfly가 되겠습니다.<br>
-                        감사합니다.
-                    </p>
+                    <h3 style='color: #FF4B4B; margin-top: 0;'>{cloud_notice['title']}</h3>
+                    <p style='font-size: 1rem; line-height: 1.6;'>{cloud_notice['content']}</p>
                 </div>
                 """, unsafe_allow_html=True)
-                if st.button("✅ 공지 확인 및 다시 열지 않기", use_container_width=True):
+                if st.button("✅ 공지 확인 및 열지 않기", use_container_width=True):
                     st.session_state["show_notice"] = False
                     st.rerun()
 
@@ -383,7 +408,7 @@ if not st.session_state["password_correct"]:
 
 with st.sidebar:
     if os.path.exists("StockDragonfly.png"): st.image("StockDragonfly.png")
-    st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🛸 StockDragonfly v9.9</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#FF914D; font-size:1.5rem; font-weight:900;'>🐉 StockDragonfly v9.9</p>", unsafe_allow_html=True)
     
     # 거시지표 표시
     macro_info = get_macro_indicators()
@@ -437,62 +462,24 @@ curr_user_data = users.get(st.session_state.current_user, {})
 curr_grade = curr_user_data.get("grade", "회원")
 is_admin = (curr_grade in ["관리자", "방장"])
 
-# --- 🛸 2단계 아코디언 메뉴 시스템 (Regulated Labeling) ---
+# --- 🐉 2단계 구성 (ZONE_CONFIG 참조) ---
 if 'page' not in st.session_state:
     st.session_state.page = "6-a. 📌 출석체크(오늘한줄)"
 
-zones = {
-    "🏰 1. 본부 사령부": [
-        "1-a. 👑 관리자 승인 센터", 
-        "1-b. 🎖️ HQ 인적 자원 사령부", 
-        "1-c. 🔐 계정 보안 설정", 
-        "1-d. 🌙 탈퇴/휴식 신청"
-    ],
-    "📡 2. 시장 상황실": [
-        "2-a. 📈 마켓 트렌드 요약", 
-        "2-b. 🗺️ 실시간 히트맵", 
-        "2-c. 🌡️ 시장 심리 게이지", 
-        "2-d. 🏛️ 제작 동기"
-    ],
-    "🏹 3. 주도주 추격대": [
-        "3-a. 🎯 주도주 타점 스캐너", 
-        "3-b. 🚀 주도주 랭킹 TOP 50", 
-        "3-c. 📊 본데 감시 리스트"
-    ],
-    "🛡️ 4. 전략 및 리스크": [
-        "4-a. 💎 프로 분석 리포트", 
-        "4-b. 🧮 리스크 계산기", 
-        "4-c. 🛡️ 리스크 방패"
-    ],
-    "🏛️ 5. 마스터 훈련소": [
-        "5-a. 🐝 본데는 누구인가?", 
-        "5-b. 📚 주식공부방(차트)", 
-        "5-c. 🛰️ 나노바나나 레이더"
-    ],
-    "☕ 6. 안티그래비티 광장": [
-        "6-a. 📌 출석체크(오늘한줄)", 
-        "6-b. 💬 소통 대화방", 
-        "6-c. 🤝 방문자 인사 신청"
-    ],
-    "🤖 7. 자동매매 사령부": [
-        "7-a. 🚀 모의투자 매수테스트",
-        "7-b. 📊 모의투자 현황/결과",
-        "7-c. ⚙️ 자동매매 전략엔진",
-        "7-d. 📈 자동투자 성적표",
-        "7-e. 🏆 사령부 명예의 전당"
-    ]
-}
+zones = {k: list(v) for k, v in ZONE_CONFIG.items()} # 원본 구조 복사
 
 # 보급 및 보안 권한에 따른 메뉴 필터링
 if curr_grade != "방장":
-    zones["🏰 1. 본부 사령부"].remove("1-b. 🎖️ HQ 인적 자원 사령부")
+    if "1-b. 🎖️ HQ 인적 자원 사령부" in zones["🏰 1. 본부 사령부"]:
+        zones["🏰 1. 본부 사령부"].remove("1-b. 🎖️ HQ 인적 자원 사령부")
 
 # 🤖 자동매매 사령부는 모든 승인된 대원(준회원 이상)이 접근 가능
 if curr_grade not in ["방장", "관리자", "정회원", "준회원"]:
-    del zones["🤖 7. 자동매매 사령부"]
+    if "🤖 7. 자동매매 사령부" in zones:
+        del zones["🤖 7. 자동매매 사령부"]
 
 with st.sidebar:
-    st.markdown("<p style='color: #FFD700; font-size: 0.9rem; font-weight: 700; margin-top: 10px; margin-bottom: 20px; letter-spacing: 1px;'>🛰️ MISSION CONTROL</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #FFD700; font-size: 0.9rem; font-weight: 700; margin-top: 10px; margin-bottom: 20px; letter-spacing: 1px;'>🐉 MISSION CONTROL</p>", unsafe_allow_html=True)
     
     for zone_name, missions in zones.items():
         is_active_zone = st.session_state.page in missions
