@@ -82,32 +82,33 @@ if os.path.exists("StockDragonfly2.png"):
     with open("StockDragonfly2.png", "rb") as imm: bg_b64 = base64.b64encode(imm.read()).decode()
 
 st.markdown(f"""
+    <style>
     /* 💎 네온 플럭스 디자인 고도화 */
-    .stApp { background-color: #000; {f'background-image: linear-gradient(rgba(0,0,0,0.92), rgba(0,0,0,0.92)), url("data:image/png;base64,{bg_b64}");' if bg_b64 else ""} background-size: cover; background-attachment: fixed; }
-    [data-testid="stSidebar"] { background-color: rgba(2,2,2,0.98) !important; border-right: 1px solid #FFD70022; backdrop-filter: blur(40px); }
+    .stApp {{ background-color: #000; {f'background-image: linear-gradient(rgba(0,0,0,0.92), rgba(0,0,0,0.92)), url("data:image/png;base64,{bg_b64}");' if bg_b64 else ""} background-size: cover; background-attachment: fixed; }}
+    [data-testid="stSidebar"] {{ background-color: rgba(2,2,2,0.98) !important; border-right: 1px solid #FFD70022; backdrop-filter: blur(40px); }}
     
-    h1, h2 { color: #FFD700 !important; font-weight: 900; text-shadow: 0 0 15px rgba(255,215,0,0.3); }
+    h1, h2 {{ color: #FFD700 !important; font-weight: 900; text-shadow: 0 0 15px rgba(255,215,0,0.3); }}
     
-    .glass-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 25px; backdrop-filter: blur(20px); margin-bottom: 30px; transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1); position: relative; overflow: hidden; }
-    .glass-card:hover { border-color: #FFD70066; transform: translateY(-8px) scale(1.01); box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 20px rgba(255,215,0,0.1); }
+    .glass-card {{ background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 25px; backdrop-filter: blur(20px); margin-bottom: 30px; transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1); position: relative; overflow: hidden; }}
+    .glass-card:hover {{ border-color: #FFD70066; transform: translateY(-8px) scale(1.01); box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 20px rgba(255,215,0,0.1); }}
     
     /* ✨ 네온 보더 애니메이션 */
-    .neon-border { position: relative; padding: 2px; background: linear-gradient(90deg, #FFD700, #00FF00, #FFD700); background-size: 200% 100%; animation: neon-flow 3s linear infinite; border-radius: 20px; }
-    .neon-inner { background: #000; border-radius: 18px; padding: 25px; }
-    @keyframes neon-flow { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
+    .neon-border {{ position: relative; padding: 2px; background: linear-gradient(90deg, #FFD700, #00FF00, #FFD700); background-size: 200% 100%; animation: neon-flow 3s linear infinite; border-radius: 20px; }}
+    .neon-inner {{ background: #000; border-radius: 18px; padding: 25px; }}
+    @keyframes neon-flow {{ 0% {{ background-position: 0% 0%; }} 100% {{ background-position: 200% 0%; }} }}
     
     /* 🍌 나노바나나 게이지 */
-    .banana-track { background: rgba(255,255,255,0.05); height: 12px; border-radius: 6px; position: relative; overflow: hidden; margin: 10px 0; border: 1px solid rgba(255,255,255,0.1); }
-    .banana-fill { height: 100%; border-radius: 6px; transition: width 1s ease-out; box-shadow: 0 0 10px currentColor; }
+    .banana-track {{ background: rgba(255,255,255,0.05); height: 12px; border-radius: 6px; position: relative; overflow: hidden; margin: 10px 0; border: 1px solid rgba(255,255,255,0.1); }}
+    .banana-fill {{ height: 100%; border-radius: 6px; transition: width 1s ease-out; box-shadow: 0 0 10px currentColor; }}
     
-    @keyframes pulse-glow { 0% { box-shadow: 0 0 10px rgba(0,255,0,0.2); opacity: 0.8; } 50% { box-shadow: 0 0 30px rgba(0,255,0,0.5); opacity: 1; } 100% { box-shadow: 0 0 10px rgba(0,255,0,0.2); opacity: 0.8; } }
-    .status-pulse { border: 1px solid #00FF0044; animation: pulse-glow 2s infinite; }
+    @keyframes pulse-glow {{ 0% {{ box-shadow: 0 0 10px rgba(0,255,0,0.2); opacity: 0.8; }} 50% {{ box-shadow: 0 0 30px rgba(0,255,0,0.5); opacity: 1; }} 100% {{ box-shadow: 0 0 10px rgba(0,255,0,0.2); opacity: 0.8; }} }}
+    .status-pulse {{ border: 1px solid #00FF0044; animation: pulse-glow 2s infinite; }}
     
-    @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
-    .ticker-wrap { overflow: hidden; background: rgba(0,0,0,0.6); white-space: nowrap; padding: 12px 0; border-bottom: 2px solid rgba(255,215,0,0.2); margin-bottom: 20px; backdrop-filter: blur(15px); }
-    .ticker-content { display: inline-block; animation: ticker 250s linear infinite; color: #FFD700; font-size: 0.95rem; font-weight: 600; font-family: 'Outfit'; animation-delay: 1s; }
-    .ticker-wrap:hover .ticker-content { animation-play-state: paused; }
-    .ticker-item { margin: 0 40px; display: inline-block; }
+    @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
+    .ticker-wrap {{ overflow: hidden; background: rgba(0,0,0,0.6); white-space: nowrap; padding: 12px 0; border-bottom: 2px solid rgba(255,215,0,0.2); margin-bottom: 20px; backdrop-filter: blur(15px); }}
+    .ticker-content {{ display: inline-block; animation: ticker 250s linear infinite; color: #FFD700; font-size: 0.95rem; font-weight: 600; font-family: 'Outfit'; animation-delay: 1s; }}
+    .ticker-wrap:hover .ticker-content {{ animation-play-state: paused; }}
+    .ticker-item {{ margin: 0 40px; display: inline-block; }}
     </style>
 """, unsafe_allow_html=True)
 
