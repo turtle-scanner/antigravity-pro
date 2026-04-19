@@ -225,8 +225,14 @@ def save_trades(trades):
 
 def gsheet_sync(sheet_name, headers, values):
     payload = {"sheetName": sheet_name, "headers": headers, "values": values}
-    try: requests.post(MASTER_GAS_URL, json=payload, timeout=5)
-    except: pass
+    try:
+        resp = requests.post(MASTER_GAS_URL, json=payload, timeout=7)
+        if resp.status_code != 200:
+            print(f"DEBUG: GSheet Sync Error {resp.status_code} - {resp.text}")
+        return resp
+    except Exception as e:
+        print(f"DEBUG: GSheet Sync Connection Failed: {e}")
+        return None
 
 st.set_page_config(page_title="StockDragonfly Pro", page_icon="🔴", layout="wide")
 
@@ -1522,30 +1528,67 @@ elif page.startswith("5-e."):
             
             if st.form_submit_button("🚀 전리품 등록 (자랑하기)"):
                 if tic and roi and p_val:
-                    t_now = now_kst.strftime("%Y-%m-%d %H:%M")
+                    now_k = datetime.now(pytz.timezone('Asia/Seoul'))
+                    t_now = now_k.strftime("%Y-%m-%d %H:%M")
                     d_str, t_str = t_now.split(" ")
                     u = st.session_state.current_user
                     pid = f"P_{int(time.time())}_{u}"
                     new_p = pd.DataFrame([[pid, t_now, u, tic, roi, p_val, msg]], columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
-                    new_p.to_csv(PROFIT_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                    # 💾 로컬 저장 (파일 잠금 대비 리트라이 로직)
+                    save_success = False
+                    for _ in range(3):
+                        try:
+                            new_p.to_csv(PROFIT_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                            save_success = True
+                            break
+                        except Exception:
+                            time.sleep(0.5)
                     
-                    # 전문가님 요청 양식에 맞춰 구글 시트 동기화 (익절방 탭)
-                    gsheet_sync("익절방", 
-                        ["날짜", "시간", "회원명", "종목명/티커", "수익률", "수익금", "승리소감 및 노하우"], 
-                        [d_str, t_str, u, tic, roi, p_val, msg]
-                    )
-                    st.success("🎊 대원님의 위대한 승리 기록이 사령부 통합 시트에 등록되었습니다!")
+                    if not save_success:
+                        st.error("❌ 로컬 파일(CSV) 저장에 실패했습니다. 파일이 다른 프로그램에 의해 열려 있는지 확인해 주세요.")
+                    
+                    # 📡 구글 시트 동기화 (익절방 탭)
+                    sync_resp = None
+                    try:
+                        sync_resp = gsheet_sync("익절방", 
+                            ["날짜", "시간", "회원명", "종목명/티커", "수익률", "수익금", "승리소감 및 노하우"], 
+                            [d_str, t_str, u, tic, roi, p_val, msg]
+                        )
+                    except: pass
+                    
+                    if sync_resp and sync_resp.status_code == 200:
+                        st.success("🎊 대원님의 위대한 승리 기록이 사령부 통합 시트(구글)에 기록되었습니다!")
+                    else:
+                        st.info("📂 로컬 저장 완료! (구글 시트 전송은 스크립트 설정을 확인해 주세요.)")
+                    
                     st.balloons()
+                    time.sleep(1) # 저장을 위한 짧은 지연
                     st.rerun()
                 else: st.error("종목, 수익률, 수익금은 필수 항목입니다.")
 
-    st.divider()
+    # --- 실시간 익절 첩보 디스플레이 ---
     st.subheader("📡 사령부 실시간 익절 첩보")
-    try:
-        pdf = pd.read_csv(PROFIT_FILE, encoding="utf-8-sig")
-        cdf = pd.read_csv(COMMENTS_FILE, encoding="utf-8-sig")
-        if not pdf.empty:
+    
+    # 데이터 읽기 함수 (파일 잠금 등 예외 대응)
+    def safe_read_csv(path, default_cols):
+        if not os.path.exists(path):
+            return pd.DataFrame(columns=default_cols)
+        try:
+            # utf-8-sig로 읽어서 BOM 문제 방지 및 엔진 최적화
+            df = pd.read_csv(path, encoding="utf-8-sig", on_bad_lines='skip')
+            return df
+        except Exception as e:
+            st.error(f"⚠️ 파일 읽기 오류 ({os.path.basename(path)}): {e}")
+            return pd.DataFrame(columns=default_cols)
+
+    pdf = safe_read_csv(PROFIT_FILE, ["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
+    cdf = safe_read_csv(COMMENTS_FILE, ["PostID", "시간", "작성자", "내용"])
+    
+    if not pdf.empty:
+        try:
             for _, row in pdf.iloc[::-1].iterrows():
+
+                pid = row['ID']
                 # 작성자 또는 관리자만 수정/삭제 가능
                 is_owner = (st.session_state.current_user == row['아이디']) or is_admin
                 
@@ -1612,15 +1655,18 @@ elif page.startswith("5-e."):
                     new_c = c_col1.text_input("격려의 한마디", key=f"c_input_{pid}", label_visibility="collapsed", placeholder="대원님 축하드립니다!")
                     if c_col2.button("🗨️ 등록", key=f"c_btn_{pid}"):
                         if new_c:
-                            t = now_kst.strftime("%m/%d %H:%M")
+                            now_c_t = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m/%d %H:%M")
                             u = st.session_state.current_user
-                            c_new = pd.DataFrame([[pid, t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
+                            c_new = pd.DataFrame([[pid, now_c_t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
                             c_new.to_csv(COMMENTS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
-                            gsheet_sync("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, t, u, new_c])
+                            gsheet_sync("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, now_c_t, u, new_c])
                             st.rerun()
                 st.write("") # 스페이싱
-        else: st.info("아직 도착한 익절 첩보가 없습니다. 첫 주인공이 되어보세요!")
-    except: st.info("데이터를 불러오는 중...")
+        except Exception as e:
+            st.error(f"❌ 첩보 목록을 렌더링하는 중 오류가 발생했습니다: {e}")
+    else:
+        st.info("아직 도착한 익절 첩보가 없습니다. 첫 주인공이 되어보세요!")
+
 
 elif page.startswith("5-f."):
     st.header("🩹 손실 위로 및 복기방 (Reflection & Support)")
@@ -1652,29 +1698,54 @@ elif page.startswith("5-f."):
             
             if st.form_submit_button("🛡️ 복기 완료 및 마음 다잡기"):
                 if l_tic and l_roi and l_msg:
-                    t_now = now_kst.strftime("%Y-%m-%d %H:%M")
+                    now_k = datetime.now(pytz.timezone('Asia/Seoul'))
+                    t_now = now_k.strftime("%Y-%m-%d %H:%M")
                     d_str, t_str = t_now.split(" ")
                     u = st.session_state.current_user
                     lid = f"L_{int(time.time())}_{u}"
                     new_l = pd.DataFrame([[lid, t_now, u, l_tic, l_roi, l_reason, l_msg]], columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
-                    new_l.to_csv(LOSS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                    # 💾 로컬 저장 (파일 잠금 대비 리트라이 로직)
+                    save_l_success = False
+                    for _ in range(3):
+                        try:
+                            new_l.to_csv(LOSS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                            save_l_success = True
+                            break
+                        except Exception:
+                            time.sleep(0.5)
                     
-                    # 전문가님 요청 양식에 맞춰 구글 시트 동기화 (손절방 탭)
-                    gsheet_sync("손절방", 
-                        ["날짜", "시간", "회원명", "종목명/티커", "손실률", "과오원인", "구체적인 상황 복기 및 향후 다짐"], 
-                        [d_str, t_str, u, l_tic, l_roi, l_reason, l_msg]
-                    )
-                    st.toast("사령부가 대원님의 용기 있는 성찰을 응원합니다. 훌훌 털어내십시오.")
+                    if not save_l_success:
+                        st.error("❌ 로컬 파일(CSV) 저장에 실패했습니다.")
+
+                    # 📡 구글 시트 동기화 (손절방 탭)
+                    sync_resp = None
+                    try:
+                        sync_resp = gsheet_sync("손절방", 
+                            ["날짜", "시간", "회원명", "종목명/티커", "손실률", "과오원인", "구체적인 상황 복기 및 향후 다짐"], 
+                            [d_str, t_str, u, l_tic, l_roi, l_reason, l_msg]
+                        )
+                    except: pass
+                    
+                    if sync_resp and sync_resp.status_code == 200:
+                        st.toast("✅ 성찰 기록이 구글 시트에 안전하게 백업되었습니다.")
+                    else:
+                        st.toast("📁 로컬 복기 완료! (구글 시트 연결 지연 중)")
+                    
+                    time.sleep(1)
                     st.rerun()
                 else: st.error("필수 항목을 모두 입력해 주세요.")
 
     st.divider()
+    # --- 실시간 손실 복기 디스플레이 ---
     st.subheader("🤝 함께 나누는 성찰의 시간")
-    try:
-        ldf = pd.read_csv(LOSS_FILE, encoding="utf-8-sig")
-        cdf = pd.read_csv(COMMENTS_FILE, encoding="utf-8-sig")
-        if not ldf.empty:
+    
+    ldf = safe_read_csv(LOSS_FILE, ["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
+    cdf = safe_read_csv(COMMENTS_FILE, ["PostID", "시간", "작성자", "내용"])
+    
+    if not ldf.empty:
+        try:
             for _, row in ldf.iloc[::-1].iterrows():
+
                 pid = row['ID']
                 is_owner = (st.session_state.current_user == row['아이디']) or is_admin
                 
@@ -1735,17 +1806,18 @@ elif page.startswith("5-f."):
                     new_c = c_col1.text_input("따뜻한 한마디", key=f"c_input_{pid}", label_visibility="collapsed", placeholder="대원님, 고생 많으셨습니다. 힘내세요!")
                     if c_col2.button("🗨️ 등록", key=f"c_btn_{pid}"):
                         if new_c:
-                            t = now_kst.strftime("%m/%d %H:%M")
+                            now_c_t = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m/%d %H:%M")
                             u = st.session_state.current_user
-                            c_new = pd.DataFrame([[pid, t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
+                            c_new = pd.DataFrame([[pid, now_c_t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
                             c_new.to_csv(COMMENTS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
-                            gsheet_sync("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, t, u, new_c])
+                            gsheet_sync("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, now_c_t, u, new_c])
                             st.rerun()
                 st.write("") # 스페이싱
-        else:
-            st.info("아직 등록된 성찰 기록이 없습니다. 아픔을 나누면 반이 됩니다.")
-    except:
-        st.info("데이터 로딩 중...")
+        except Exception as e:
+            st.error(f"❌ 복기 목록을 렌더링하는 중 오류가 발생했습니다: {e}")
+    else:
+        st.info("아직 등록된 성찰 기록이 없습니다. 아픔을 나누면 반이 됩니다.")
+
 
 elif page.startswith("2-b."):
     st.header("🗺️ 실시간 주도주 히트맵 (Market OverView)")
