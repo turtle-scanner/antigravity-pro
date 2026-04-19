@@ -90,6 +90,9 @@ def check_login():
     if "show_signup" not in st.session_state: st.session_state.show_signup = False
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
+        if os.path.exists("StockDragonfly.png"):
+            st.image("StockDragonfly.png", use_container_width=True)
+            st.write("")
         show_major_announcement()
         if not st.session_state.show_signup:
             st.markdown("<div class='glass-card' style='border: 1px solid #00FF00; margin-top: 20px;'><h2 style='text-align: center; color: #00FF00;'>🛡️ 안티그래비티 사령부 입장</h2></div>", unsafe_allow_html=True)
