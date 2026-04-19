@@ -719,9 +719,9 @@ if page.startswith("6-a."):
     
     # 데이터 준비
     if not os.path.exists(ATTENDANCE_FILE):
-        pd.DataFrame(columns=["시간", "아이디", "인사", "등급"]).to_csv(ATTENDANCE_FILE, index=False, encoding="utf-8-sig")
+        safe_write_csv(pd.DataFrame(columns=["시간", "아이디", "인사", "등급"]), ATTENDANCE_FILE)
     
-    df_att = pd.read_csv(ATTENDANCE_FILE, encoding="utf-8-sig")
+    df_att = safe_read_csv(ATTENDANCE_FILE, ["시간", "아이디", "인사", "등급"])
     total_visits = len(df_att)
     
     # 상단 요약 바 (방문자 수 & 날씨)
@@ -757,7 +757,7 @@ if page.startswith("6-a."):
             if greeting:
                 now_kst = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d %H:%M")
                 new_row = pd.DataFrame([[now_kst, st.session_state.current_user, greeting, curr_grade]], columns=["시간", "아이디", "인사", "등급"])
-                new_row.to_csv(ATTENDANCE_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                safe_write_csv(new_row, ATTENDANCE_FILE, mode='a', header=False)
                 
                 # 📡 구글 시트(시트1)와 즉시 동기화
                 gsheet_sync("시트1", ["시간", "아이디", "인사", "등급"], [now_kst, st.session_state.current_user, greeting, curr_grade])
@@ -771,7 +771,7 @@ if page.startswith("6-a."):
     st.subheader("📡 실시간 출석 현황")
     # 구글 시트 데이터와 로컬 데이터 병합
     gs_att = fetch_gs_attendance()
-    local_att = pd.read_csv(ATTENDANCE_FILE, encoding="utf-8-sig") if os.path.exists(ATTENDANCE_FILE) else pd.DataFrame()
+    local_att = safe_read_csv(ATTENDANCE_FILE, ["시간", "아이디", "인사", "등급"])
     df_att = pd.concat([gs_att, local_att]).drop_duplicates(subset=["시간", "아이디", "인사"]).tail(20)
 
     if not df_att.empty:
@@ -1506,16 +1506,15 @@ elif page.startswith("5-e."):
     st.markdown("<div class='glass-card'>지옥 같은 시장을 이겨내고 획득한 귀중한 전리품(익절)을 사령부 전역에 자랑하세요!</div>", unsafe_allow_html=True)
     
     if not os.path.exists(PROFIT_FILE):
-        pd.DataFrame(columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"]).to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
+        safe_write_csv(pd.DataFrame(columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"]), PROFIT_FILE)
     else:
         # 헤더 정합성 체크 (ID 컬럼 누락 방지)
-        temp_df = pd.read_csv(PROFIT_FILE, nrows=0)
+        temp_df = safe_read_csv(PROFIT_FILE, ["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
         if "ID" not in temp_df.columns:
-            old_df = pd.read_csv(PROFIT_FILE)
-            old_df.insert(0, "ID", [f"P_{int(time.time())}_{i}" for i in range(len(old_df))])
-            old_df.to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
+            temp_df.insert(0, "ID", [f"P_{int(time.time())}_{i}" for i in range(len(temp_df))])
+            safe_write_csv(temp_df, PROFIT_FILE)
     if not os.path.exists(COMMENTS_FILE):
-        pd.DataFrame(columns=["PostID", "시간", "작성자", "내용"]).to_csv(COMMENTS_FILE, index=False, encoding="utf-8-sig")
+        safe_write_csv(pd.DataFrame(columns=["PostID", "시간", "작성자", "내용"]), COMMENTS_FILE)
 
     with st.expander("🔥 나의 익절 기록 하달하기", expanded=True):
         with st.form("profit_form", clear_on_submit=True):
@@ -1534,18 +1533,11 @@ elif page.startswith("5-e."):
                     u = st.session_state.current_user
                     pid = f"P_{int(time.time())}_{u}"
                     new_p = pd.DataFrame([[pid, t_now, u, tic, roi, p_val, msg]], columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
-                    # 💾 로컬 저장 (파일 잠금 대비 리트라이 로직)
-                    save_success = False
-                    for _ in range(3):
-                        try:
-                            new_p.to_csv(PROFIT_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
-                            save_success = True
-                            break
-                        except Exception:
-                            time.sleep(0.5)
+                    # 💾 로컬 저장 (파일 잠금 대비 리트라이 로직 포함)
+                    save_success = safe_write_csv(new_p, PROFIT_FILE, mode='a', header=False)
                     
                     if not save_success:
-                        st.error("❌ 로컬 파일(CSV) 저장에 실패했습니다. 파일이 다른 프로그램에 의해 열려 있는지 확인해 주세요.")
+                        st.error("❌ 로컬 파일(CSV) 저장에 실패했습니다. 파일 잠금을 확인해 주세요.")
                     
                     # 📡 구글 시트 동기화 (익절방 탭)
                     sync_resp = None
@@ -1601,9 +1593,9 @@ elif page.startswith("5-e."):
                         e_msg = st.text_area("소감 수정", value=row['포부'])
                         c_edit1, c_edit2 = st.columns(2)
                         if c_edit1.form_submit_button("💾 저장"):
-                            temp_df = pd.read_csv(PROFIT_FILE, encoding="utf-8-sig")
+                            temp_df = safe_read_csv(PROFIT_FILE)
                             temp_df.loc[temp_df['ID'] == pid, ['수익률', '수익금', '포부']] = [e_roi, e_val, e_msg]
-                            temp_df.to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
+                            safe_write_csv(temp_df, PROFIT_FILE)
                             del st.session_state[edit_key]
                             st.rerun()
                         if c_edit2.form_submit_button("❌ 취소"):
@@ -1639,9 +1631,9 @@ elif page.startswith("5-e."):
                             st.session_state[edit_key] = True
                             st.rerun()
                         if o_col2.button("🗑️ 삭제", key=f"del_btn_{pid}", use_container_width=True):
-                            temp_df = pd.read_csv(PROFIT_FILE, encoding="utf-8-sig")
+                            temp_df = safe_read_csv(PROFIT_FILE)
                             temp_df = temp_df[temp_df['ID'] != pid]
-                            temp_df.to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
+                            safe_write_csv(temp_df, PROFIT_FILE)
                             st.warning("항목이 삭제되었습니다.")
                             st.rerun()
                 
@@ -1658,7 +1650,7 @@ elif page.startswith("5-e."):
                             now_c_t = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m/%d %H:%M")
                             u = st.session_state.current_user
                             c_new = pd.DataFrame([[pid, now_c_t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
-                            c_new.to_csv(COMMENTS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                            safe_write_csv(c_new, COMMENTS_FILE, mode='a', header=False)
                             gsheet_sync("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, now_c_t, u, new_c])
                             st.rerun()
                 st.write("") # 스페이싱
@@ -1673,16 +1665,15 @@ elif page.startswith("5-f."):
     st.markdown("<div class='glass-card'>실패는 성공의 어머니가 아니라, <b>실패에 대한 복기</b>가 성공의 어머니입니다. 아픔을 나누고 더 단단해지는 공간입니다.</div>", unsafe_allow_html=True)
     
     if not os.path.exists(LOSS_FILE):
-        pd.DataFrame(columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"]).to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
+        safe_write_csv(pd.DataFrame(columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"]), LOSS_FILE)
     else:
         # 헤더 정합성 체크 (ID 컬럼 누락 방지)
-        temp_df = pd.read_csv(LOSS_FILE, nrows=0)
+        temp_df = safe_read_csv(LOSS_FILE, ["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
         if "ID" not in temp_df.columns:
-            old_df = pd.read_csv(LOSS_FILE)
-            old_df.insert(0, "ID", [f"L_{int(time.time())}_{i}" for i in range(len(old_df))])
-            old_df.to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
+            temp_df.insert(0, "ID", [f"L_{int(time.time())}_{i}" for i in range(len(temp_df))])
+            safe_write_csv(temp_df, LOSS_FILE)
     if not os.path.exists(COMMENTS_FILE):
-        pd.DataFrame(columns=["PostID", "시간", "작성자", "내용"]).to_csv(COMMENTS_FILE, index=False, encoding="utf-8-sig")
+        safe_write_csv(pd.DataFrame(columns=["PostID", "시간", "작성자", "내용"]), COMMENTS_FILE)
 
     with st.expander("🩹 오늘의 아픔 기록하고 털어내기", expanded=True):
         with st.form("loss_form", clear_on_submit=True):
@@ -1704,15 +1695,8 @@ elif page.startswith("5-f."):
                     u = st.session_state.current_user
                     lid = f"L_{int(time.time())}_{u}"
                     new_l = pd.DataFrame([[lid, t_now, u, l_tic, l_roi, l_reason, l_msg]], columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
-                    # 💾 로컬 저장 (파일 잠금 대비 리트라이 로직)
-                    save_l_success = False
-                    for _ in range(3):
-                        try:
-                            new_l.to_csv(LOSS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
-                            save_l_success = True
-                            break
-                        except Exception:
-                            time.sleep(0.5)
+                    # 💾 로컬 저장 (파일 잠금 대비 리트라이 로직 포함)
+                    save_l_success = safe_write_csv(new_l, LOSS_FILE, mode='a', header=False)
                     
                     if not save_l_success:
                         st.error("❌ 로컬 파일(CSV) 저장에 실패했습니다.")
@@ -1760,9 +1744,9 @@ elif page.startswith("5-f."):
                         e_lmsg = st.text_area("복기 수정", value=row['다짐'])
                         cl_edit1, cl_edit2 = st.columns(2)
                         if cl_edit1.form_submit_button("💾 저장"):
-                            temp_df = pd.read_csv(LOSS_FILE, encoding="utf-8-sig")
+                            temp_df = safe_read_csv(LOSS_FILE)
                             temp_df.loc[temp_df['ID'] == pid, ['손실률', '원인', '다짐']] = [e_lroi, e_lreason, e_lmsg]
-                            temp_df.to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
+                            safe_write_csv(temp_df, LOSS_FILE)
                             del st.session_state[edit_key]
                             st.rerun()
                         if cl_edit2.form_submit_button("❌ 취소"):
@@ -1790,9 +1774,9 @@ elif page.startswith("5-f."):
                             st.session_state[edit_key] = True
                             st.rerun()
                         if ol_col2.button("🗑️ 삭제", key=f"ldel_btn_{pid}", use_container_width=True):
-                            temp_df = pd.read_csv(LOSS_FILE, encoding="utf-8-sig")
+                            temp_df = safe_read_csv(LOSS_FILE)
                             temp_df = temp_df[temp_df['ID'] != pid]
-                            temp_df.to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
+                            safe_write_csv(temp_df, LOSS_FILE)
                             st.warning("복기 내역이 삭제되었습니다.")
                             st.rerun()
 
@@ -1809,7 +1793,7 @@ elif page.startswith("5-f."):
                             now_c_t = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m/%d %H:%M")
                             u = st.session_state.current_user
                             c_new = pd.DataFrame([[pid, now_c_t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
-                            c_new.to_csv(COMMENTS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                            safe_write_csv(c_new, COMMENTS_FILE, mode='a', header=False)
                             gsheet_sync("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, now_c_t, u, new_c])
                             st.rerun()
                 st.write("") # 스페이싱
@@ -2171,7 +2155,7 @@ elif page.startswith("1-c."):
                     st.error("❌ 비밀번호는 최소 4자 이상이어야 합니다.")
                 else:
                     users[u_id]["password"] = new_pw_input
-                    with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f)
+                    safe_save_json(users, USER_DB_FILE)
                     gsheet_sync("회원명단", 
                         ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
                         [u_id, new_pw_input, u_data.get("status", "approved"), u_data.get("grade", "회원"), u_info.get("region", "-"), u_info.get("age", "-"), u_info.get("gender", "-"), u_info.get("exp", "-"), u_info.get("joined_at", "-"), u_info.get("motivation", "-")]
