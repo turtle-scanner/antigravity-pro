@@ -25,6 +25,7 @@ VISITOR_FILE = get_db_path("visitor_requests.csv")
 ATTENDANCE_FILE = get_db_path("attendance.csv")
 PROFIT_FILE = get_db_path("profit_brags.csv")
 LOSS_FILE = get_db_path("loss_reviews.csv")
+COMMENTS_FILE = get_db_path("shared_comments.csv")
 MASTER_GAS_URL = "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec"
 
 # 🛡️ 영구 백업용 구글 시트 URL (CSV 내보내기 주소)
@@ -625,9 +626,9 @@ st.markdown(f"""
             <span style='color: #888; font-size: 0.85rem; letter-spacing: 1px;'>LIVE OPS CENTER</span>
         </div>
         <div style='margin-top: 5px;'>
-            <span style='color: #EEE; font-size: 1rem; font-weight: 700;'>🇰🇷 {now_kr.strftime('%H:%M:%S')}</span>
+            <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>🇰🇷 한국: {now_kr.strftime('%m/%d')}/{['월','화','수','목','금','토','일'][now_kr.weekday()]}/{now_kr.strftime('%H:%M:%S')}</span>
             <span style='color: #444; margin: 0 10px;'>|</span>
-            <span style='color: #EEE; font-size: 1rem; font-weight: 700;'>🇺🇸 {now_us.strftime('%H:%M:%S')}</span>
+            <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>🇺🇸 미국: {now_us.strftime('%m/%d')}/{['월','화','수','목','금','토','일'][now_us.weekday()]}/{now_us.strftime('%H:%M:%S')}</span>
         </div>
     </div>
     <div class='responsive-indices' style='display: flex; gap: 30px;'>
@@ -1499,7 +1500,9 @@ elif page.startswith("5-e."):
     st.markdown("<div class='glass-card'>지옥 같은 시장을 이겨내고 획득한 귀중한 전리품(익절)을 사령부 전역에 자랑하세요!</div>", unsafe_allow_html=True)
     
     if not os.path.exists(PROFIT_FILE):
-        pd.DataFrame(columns=["시간", "아이디", "종목", "수익률", "수익금", "포부"]).to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
+        pd.DataFrame(columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"]).to_csv(PROFIT_FILE, index=False, encoding="utf-8-sig")
+    if not os.path.exists(COMMENTS_FILE):
+        pd.DataFrame(columns=["PostID", "시간", "작성자", "내용"]).to_csv(COMMENTS_FILE, index=False, encoding="utf-8-sig")
 
     with st.expander("🔥 나의 익절 기록 하달하기", expanded=True):
         with st.form("profit_form", clear_on_submit=True):
@@ -1514,10 +1517,10 @@ elif page.startswith("5-e."):
                 if tic and roi and p_val:
                     t = now_kst.strftime("%Y-%m-%d %H:%M")
                     u = st.session_state.current_user
-                    new_p = pd.DataFrame([[t, u, tic, roi, p_val, msg]], columns=["시간", "아이디", "종목", "수익률", "수익금", "포부"])
+                    pid = f"P_{int(time.time())}_{u}"
+                    new_p = pd.DataFrame([[pid, t, u, tic, roi, p_val, msg]], columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
                     new_p.to_csv(PROFIT_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
-                    # 구글 시트 백업 연동 (별도 시트 gid 필요하나 여기서는 로컬 보존 위주)
-                    gsheet_sync("익절자랑_통합", ["시간", "아이디", "종목", "수익률", "수익금", "소감"], [t, u, tic, roi, p_val, msg])
+                    gsheet_sync("익절자랑_통합", ["ID", "시간", "아이디", "종목", "수익률", "수익금", "소감"], [pid, t, u, tic, roi, p_val, msg])
                     st.success("🎊 대원님의 위대한 승리 기록이 본부에 등록되었습니다!")
                     st.balloons()
                     st.rerun()
@@ -1527,10 +1530,12 @@ elif page.startswith("5-e."):
     st.subheader("📡 사령부 실시간 익절 첩보")
     try:
         pdf = pd.read_csv(PROFIT_FILE, encoding="utf-8-sig")
+        cdf = pd.read_csv(COMMENTS_FILE, encoding="utf-8-sig")
         if not pdf.empty:
             for _, row in pdf.iloc[::-1].iterrows():
+                pid = row['ID']
                 st.markdown(f"""
-                <div style='background: rgba(0,255,0,0.03); border: 1px solid #00FF0033; border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
+                <div style='background: rgba(0,255,0,0.03); border: 1px solid #00FF0033; border-radius: 12px; padding: 20px; margin-bottom: 10px;'>
                     <div style='display: flex; justify-content: space-between;'>
                         <b style='color: #FFD700; font-size: 1.1rem;'>🎖️ {row['아이디']} 대원의 승전보</b>
                         <span style='color: #888; font-size: 0.8rem;'>{row['시간']}</span>
@@ -1551,6 +1556,23 @@ elif page.startswith("5-e."):
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                # 댓글 섹션
+                with st.container():
+                    item_comments = cdf[cdf['PostID'] == pid]
+                    for _, c in item_comments.iterrows():
+                        st.markdown(f"<div style='margin-left: 20px; font-size: 0.9rem; border-left: 2px solid #555; padding-left: 10px; margin-bottom: 5px;'><b style='color: #FFD700;'>{c['작성자']}:</b> {c['내용']} <span style='color: #555; font-size: 0.7rem;'>({c['시간']})</span></div>", unsafe_allow_html=True)
+                    
+                    c_col1, c_col2 = st.columns([8, 2])
+                    new_c = c_col1.text_input("격려의 한마디", key=f"c_input_{pid}", label_visibility="collapsed", placeholder="대원님 축하드립니다!")
+                    if c_col2.button("🗨️ 등록", key=f"c_btn_{pid}"):
+                        if new_c:
+                            t = now_kst.strftime("%m/%d %H:%M")
+                            u = st.session_state.current_user
+                            c_new = pd.DataFrame([[pid, t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
+                            c_new.to_csv(COMMENTS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                            st.rerun()
+                st.write("") # 스페이싱
         else: st.info("아직 도착한 익절 첩보가 없습니다. 첫 주인공이 되어보세요!")
     except: st.info("데이터를 불러오는 중...")
 
@@ -1559,7 +1581,9 @@ elif page.startswith("5-f."):
     st.markdown("<div class='glass-card'>실패는 성공의 어머니가 아니라, <b>실패에 대한 복기</b>가 성공의 어머니입니다. 아픔을 나누고 더 단단해지는 공간입니다.</div>", unsafe_allow_html=True)
     
     if not os.path.exists(LOSS_FILE):
-        pd.DataFrame(columns=["시간", "아이디", "종목", "손실률", "원인", "다짐"]).to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
+        pd.DataFrame(columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"]).to_csv(LOSS_FILE, index=False, encoding="utf-8-sig")
+    if not os.path.exists(COMMENTS_FILE):
+        pd.DataFrame(columns=["PostID", "시간", "작성자", "내용"]).to_csv(COMMENTS_FILE, index=False, encoding="utf-8-sig")
 
     with st.expander("🩹 오늘의 아픔 기록하고 털어내기", expanded=True):
         with st.form("loss_form", clear_on_submit=True):
@@ -1577,9 +1601,10 @@ elif page.startswith("5-f."):
                 if l_tic and l_roi and l_msg:
                     t = now_kst.strftime("%Y-%m-%d %H:%M")
                     u = st.session_state.current_user
-                    new_l = pd.DataFrame([[t, u, l_tic, l_roi, l_reason, l_msg]], columns=["시간", "아이디", "종목", "손실률", "원인", "다짐"])
+                    lid = f"L_{int(time.time())}_{u}"
+                    new_l = pd.DataFrame([[lid, t, u, l_tic, l_roi, l_reason, l_msg]], columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
                     new_l.to_csv(LOSS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
-                    gsheet_sync("손실복기_통합", ["시간", "아이디", "종목", "손실률", "원인", "다짐"], [t, u, l_tic, l_roi, l_reason, l_msg])
+                    gsheet_sync("손실복기_통합", ["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"], [lid, t, u, l_tic, l_roi, l_reason, l_msg])
                     st.toast("사령부가 대원님의 용기 있는 성찰을 응원합니다. 훌훌 털어내십시오.")
                     st.rerun()
                 else: st.error("필수 항목을 모두 입력해 주세요.")
@@ -1588,12 +1613,14 @@ elif page.startswith("5-f."):
     st.subheader("🤝 함께 나누는 성찰의 시간")
     try:
         ldf = pd.read_csv(LOSS_FILE, encoding="utf-8-sig")
+        cdf = pd.read_csv(COMMENTS_FILE, encoding="utf-8-sig")
         if not ldf.empty:
             for _, row in ldf.iloc[::-1].iterrows():
+                pid = row['ID']
                 st.markdown(f"""
-                <div style='background: rgba(255,255,255,0.02); border: 1px solid #6366f133; border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
+                <div style='background: rgba(255,255,255,0.02); border: 1px solid #6366f133; border-radius: 12px; padding: 20px; margin-bottom: 10px;'>
                     <div style='display: flex; justify-content: space-between;'>
-                        <b style='color: #6366f1;'>🩹 {row['아이디']} 대원의 정직한 성찰</b>
+                        <b style='color: #6366f1;'>🩹 {row['아이디']} 대원에게 따뜻한 위로를</b>
                         <span style='color: #888; font-size: 0.8rem;'>{row['시간']}</span>
                     </div>
                     <div style='margin-top: 12px; font-size: 0.95rem; color: #BBB;'>
@@ -1604,8 +1631,23 @@ elif page.startswith("5-f."):
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-        else: st.info("아직 등록된 성찰 기록이 없습니다. 아픔을 나누면 반이 됩니다.")
-    except: st.info("데이터 로딩 중...")
+
+                # 댓글 섹션
+                with st.container():
+                    item_comments = cdf[cdf['PostID'] == pid]
+                    for _, c in item_comments.iterrows():
+                        st.markdown(f"<div style='margin-left: 20px; font-size: 0.9rem; border-left: 2px solid #555; padding-left: 10px; margin-bottom: 5px;'><b style='color: #6366f1;'>{c['작성자']}:</b> {c['내용']} <span style='color: #555; font-size: 0.7rem;'>({c['시간']})</span></div>", unsafe_allow_html=True)
+                    
+                    c_col1, c_col2 = st.columns([8, 2])
+                    new_c = c_col1.text_input("따뜻한 한마디", key=f"c_input_{pid}", label_visibility="collapsed", placeholder="대원님, 고생 많으셨습니다. 힘내세요!")
+                    if c_col2.button("🗨️ 등록", key=f"c_btn_{pid}"):
+                        if new_c:
+                            t = now_kst.strftime("%m/%d %H:%M")
+                            u = st.session_state.current_user
+                            c_new = pd.DataFrame([[pid, t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
+                            c_new.to_csv(COMMENTS_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                            st.rerun()
+                st.write("") # 스페이싱
 
 elif page.startswith("2-b."):
     st.header("🗺️ 실시간 주도주 히트맵 (Market OverView)")
