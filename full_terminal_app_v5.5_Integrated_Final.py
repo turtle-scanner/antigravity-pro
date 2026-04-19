@@ -184,22 +184,75 @@ if "current_user" not in st.session_state: st.session_state["current_user"] = ""
 
 def check_login():
     users = load_users()
-    with st.sidebar:
-        st.markdown("<h2 style='text-align: center; color: #00FF00;'>🛡️ 안티그래비티 사령부</h2>", unsafe_allow_html=True)
-        u_id = st.text_input("요원 아이디 (ID)", placeholder="ID를 입력하세요")
-        u_pw = st.text_input("보안 코드 (PW)", type="password", placeholder="PASSWORD")
-        if st.button("🚀 사령부 입장", use_container_width=True):
-            if u_id in users and users[u_id]["password"] == u_pw:
-                if users[u_id]["status"] == "approved":
-                    st.session_state["password_correct"] = True
-                    st.session_state["current_user"] = u_id
-                    st.session_state["user_grade"] = users[u_id].get("grade", "회원")
-                    st.session_state["login_success_gate"] = True
-                    st.rerun()
-                elif users[u_id]["status"] == "withdrawn":
-                    st.error("🔥 전역(탈퇴) 처리된 계정입니다.")
-                else: st.warning("🚷 미승인 계정입니다.")
-            else: st.error("❌ 비밀번호 오류")
+    
+    if "show_signup" not in st.session_state: st.session_state.show_signup = False
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        show_major_announcement()
+        
+        if not st.session_state.show_signup:
+            st.markdown("""
+            <div class='glass-card' style='border: 1px solid #00FF00; margin-top: 20px;'>
+                <h2 style='text-align: center; color: #00FF00;'>🛡️ 안티그래비티 사령부 입장</h2>
+                <p style='text-align: center; color: #666;'>정예 요원 전용 보안 게이트입니다.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            with st.form("login_gate"):
+                u_id = st.text_input("🎖️ 요원 아이디", placeholder="ID")
+                u_pw = st.text_input("🔐 보안 코드", type="password", placeholder="PASSWORD")
+                if st.form_submit_button("🚀 사령부 입장"):
+                    if u_id in users and users[u_id]["password"] == u_pw:
+                        if users[u_id]["status"] == "approved":
+                            st.session_state["password_correct"] = True
+                            st.session_state["current_user"] = u_id
+                            st.session_state["user_grade"] = users[u_id].get("grade", "회원")
+                            st.rerun()
+                        else: st.warning("🚷 임관 심사 대기 또는 전역 계정입니다.")
+                    else: st.error("❌ 정보 불일치")
+            
+            if st.button("🤝 신입 요원 자격 심사 신청 (Join Now)"):
+                st.session_state.show_signup = True
+                st.rerun()
+
+        else:
+            st.markdown("""
+            <div class='glass-card' style='border: 1px solid #6366f1;'>
+                <h2 style='text-align: center; color: #6366f1;'>📝 신입 요원 자격 심사</h2>
+                <p style='text-align: center;'>사령부의 일원이 되기 위한 기초 정보를 입력하십시오.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            with st.form("signup_form"):
+                new_id = st.text_input("아이디 (영문/숫자)")
+                new_pw = st.text_input("비밀번호", type="password")
+                region = st.selectbox("전술 활동 지역", ["서울", "경기", "강원", "충청", "경상", "전라", "제주", "해외"])
+                age = st.selectbox("연령대", ["20대", "30대", "40대", "50대", "60대 이상"])
+                exp = st.selectbox("트레이딩 경력", ["입문(1년미만)", "실전(1~3년)", "베테랑(3~7년)", "마스터(7년이상)"])
+                motivation = st.text_area("사령부 임관 동기 및 각오")
+                
+                if st.form_submit_button("🛰️ 임관 신청서 제출 (Submit)"):
+                    if not new_id or not new_pw:
+                        st.error("필수 정보를 입력하십시오.")
+                    elif new_id in users:
+                        st.error("이미 사용 중인 요원 아이디입니다.")
+                    else:
+                        users[new_id] = {
+                            "password": new_pw, "status": "pending", "grade": "회원",
+                            "info": {
+                                "region": region, "age": age, "exp": exp,
+                                "motivation": motivation, "joined_at": datetime.now().strftime("%Y-%m-%d")
+                            }
+                        }
+                        save_users(users)
+                        sync_user_to_cloud(new_id, users[new_id])
+                        st.success("🛰️ 임관 신청이 완료되었습니다! 사령관님의 승인을 기다려 주십시오.")
+                        time.sleep(2)
+                        st.session_state.show_signup = False
+                        st.rerun()
+            
+            if st.button("⬅️ 로그인 화면으로 복귀"):
+                st.session_state.show_signup = False
+                st.rerun()
 
 if not st.session_state["password_correct"]:
     check_login()
