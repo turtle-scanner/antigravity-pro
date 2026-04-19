@@ -306,12 +306,13 @@ show_global_notice()
 with st.sidebar:
     st.markdown(f"**{st.session_state.get('user_grade','회원')} {st.session_state['current_user']} 요원**")
     zones = {
-        "🏰 1. 본부 사령부 (HQ & Admin)": ["8. 관리자 승인 센터", "15. HQ 인적 자원 사령부", "18. 계정 보안 및 관리", "19. 탈퇴 및 임시휴식"],
-        "📡 2. 시장 상황실 (Market Intelligence)": ["6. 마켓 트렌드 요약", "13. 실시간 히트맵", "14. 시장 심리 게이지", "10. 사이트 제작 동기"],
-        "🏹 3. 주도주 추격대 (Alpha Hunter)": ["1. 주도주 타점 스캐너", "4. 주도주 랭킹 TOP 50", "7. 본데 감시 리스트"],
-        "🛡️ 4. 전략 및 리스크 통제소 (Tactics & Shield)": ["3. 프로 분석 리포트", "5. 리스크 계산기", "12. 리스크 방패"],
-        "🎓 5. 마스터 훈련소 (The Academy)": ["9. 본데는 누구인가?", "16. 주식공부방(차트분석)", "17. 나노바나나 정밀 레이더"],
-        "🏢 6. 안티그래비티 광장 (The Lounge)": ["0. 출석체크", "2. 소통 대화방", "11. 방문자 인사말 신청"]
+        "🏰 1. 본부 사령부": ["1-a. 👑 관리자 승인 센터", "1-b. 🎖️ HQ 인적 자원 사령부", "1-c. 🔐 계정 보안 설정", "1-d. 🌙 탈퇴/휴식 신청"],
+        "📡 2. 시장 상황실": ["2-a. 📈 마켓 트렌드 요약", "2-b. 🗺️ 실시간 히트맵", "2-c. 🌡️ 시장 심리 게이지", "2-d. 🏛️ 사이트 제작 동기"],
+        "🏹 3. 주도주 추격대": ["3-a. 🎯 주도주 타점 스캐너", "3-b. 🚀 주도주 랭킹 TOP 50", "3-c. 📝 본데 감시 리스트"],
+        "🛡️ 4. 전략 및 리스크": ["4-a. 🔬 프로 분석 리포트", "4-b. 📐 리스크 관리 계산기", "4-c. 🛡️ 리스크 방패"],
+        "🎓 5. 마스터 훈련소": ["5-a. 🐝 본데는 누구인가?", "5-b. 📚 주식공부방(차트분석)", "5-c. 📡 나노바나나 정밀 레이더"],
+        "🏢 6. 안티그래비티 광장": ["6-a. ✅ 출석체크", "6-b. 💬 소통 대화방", "6-c. 🤝 방문자 인사말 신청"],
+        "🤖 7. 자동매매 사령부": ["7-a. 🧪 주식자동매수프로그램(Mock)", "7-b. 📊 자동매매 현황", "7-c. 🏆 사령부 명예의 전당"]
     }
     selected_zone = st.selectbox("전술 구역", list(zones.keys()))
     page = st.radio("세부 작전지", zones[selected_zone])
@@ -342,7 +343,7 @@ with st.sidebar:
 
 show_global_notice()
 
-if page.startswith("8."):
+if page.startswith("1-a."):
     st.header("👑 신입 요원 임관 승인 센터")
     users = load_users()
     pending = [u for u in users if users[u].get("status") == "pending"]
@@ -367,7 +368,7 @@ if page.startswith("8."):
                 if st.button(f"🛡️ {u} 요원 임관 승인", key=f"app_btn_{u}"):
                     users[u]["status"] = "approved"; save_users(users); sync_user_to_cloud(u, users[u]); st.success(f"{u} 요원 임관 완료!"); time.sleep(1); st.rerun()
 
-elif page.startswith("15."):
+elif page.startswith("1-b."):
     st.header("🎖️ HQ 인적 자원 사령부")
     users = load_users()
     approved = [u for u in users if users[u].get("status") == "approved"]
@@ -390,7 +391,7 @@ elif page.startswith("15."):
                 if st.button(f"💀 {u} 요원 제명", key=f"kick_{u}"):
                     del users[u]; save_users(users); st.error(f"{u} 요원 제명 완료"); time.sleep(1); st.rerun()
 
-elif page.startswith("6."):
+elif page.startswith("2-a."):
     st.header("📈 마켓 트렌드 및 데일리 전술 점검")
     score, gainers_4, losers_4, rockets, breadth_ratio = get_market_sentiment()
     status = "Risk-ON 🟢" if score >= 70 else "Neutral 🟡" if score >= 40 else "Risk-OFF 🔴"
@@ -442,7 +443,7 @@ elif page.startswith("6."):
     
     st.info("💡 **전술 지침:** 체크리스트 중 12개 이상이 통과되지 않는다면, 현금을 보유하고 관망하는 것이 가장 훌륭한 전략입니다.")
 
-elif page.startswith("1."):
+elif page.startswith("3-a."):
     st.header("🎯 주도주 타점 및 RS 스캐너")
     if st.button("🪲 나노급 스캔"):
         df = run_fast_scanner()
@@ -543,7 +544,7 @@ elif page.startswith("2."):
         else: st.info("아직 등록된 게시물이 없습니다.")
     except: st.error("시트 데이터를 불러오는 데 실패했습니다 (URL/권한 확인 요망)")
 
-elif page.startswith("18."):
+elif page.startswith("1-c."):
     st.header("🔐 계정 보안 설정")
     with st.form("pw_f"):
         c_pw = st.text_input("현재 PW", type="password")
@@ -552,7 +553,7 @@ elif page.startswith("18."):
             users = load_users(); u_id = st.session_state.current_user
             if users[u_id]["password"] == c_pw: users[u_id]["password"] = n_pw; save_users(users); st.success("변경 완료")
 
-elif page.startswith("3."):
+elif page.startswith("4-a."):
     st.header("🏛️ BMS Analyzer Pro (Tactical Insight)")
     search_input = st.text_input("분석할 종목명 또는 코드를 입력하세요", "NVDA")
     pro_ticker = resolve_ticker(search_input).upper()
@@ -583,7 +584,7 @@ elif page.startswith("3."):
                     st.markdown(f"<div style='background-color: #111; padding: 25px; border: 2px solid {status_color}; border-radius: 20px; text-align: center;'><h1 style='color: {status_color}; font-size: 4rem;'>{total_score}</h1><p>BMS 전술 등급</p></div>", unsafe_allow_html=True)
         except: st.error("엔진 가동 오류")
 
-elif page.startswith("5."):
+elif page.startswith("4-b."):
     st.header("🧮 리스크 관리 및 포지션 사이징")
     c1, c2 = st.columns(2)
     capital = c1.number_input("총 투자 자산 (KRW)", value=10000000)
@@ -601,20 +602,20 @@ elif page.startswith("12."):
     st.header("🛡️ 리스크 방패 (Trailing Stop)")
     st.info("자산 보호 전략 및 트레일링 스톱 가이드 구역입니다.")
 
-elif page.startswith("9."):
+elif page.startswith("5-a."):
     st.header("🏛️ 본데는 누구인가? (Master Class)")
     st.markdown("### 🏆 Pradeep Bonde의 트레이딩 철학")
     st.write("대가의 마인드셋과 실전 전술을 학습하는 사령부 최고 교육 과정입니다.")
 
-elif page.startswith("0."):
+elif page.startswith("6-a."):
     st.header("✅ 오늘의 출석 체크")
     if st.button("🎖️ 출석 도장 찍기"): st.success("오늘도 전우애로 승리하십시오!"); st.balloons()
 
-elif page.startswith("19."):
+elif page.startswith("1-d."):
     st.header("🌙 탈퇴 및 휴식 신청")
     if st.button("🔥 전역하기"): st.error("전역 처리 중..."); time.sleep(2); st.session_state["password_correct"] = False; st.rerun()
 
-elif page.startswith("13."):
+elif page.startswith("2-b."):
     st.header("🔥 Thematic Momentum Heatmap")
     try:
         heatmap_tickers = ["NVDA", "AMD", "AVGO", "SMCI", "TSLA", "AAPL", "MSFT", "GOOGL", "META", "CRWD", "PLTR", "005930.KS", "000660.KS", "196170.KQ", "042700.KS", "003230.KS", "007660.KS", "322000.KS"]
@@ -630,13 +631,13 @@ elif page.startswith("13."):
         st.plotly_chart(fig_map, use_container_width=True)
     except: st.error("히트맵 생성 중 오류")
 
-elif page.startswith("14."):
+elif page.startswith("2-c."):
     st.header("🧠 시장 심리 게이지 (Fear & Greed)")
     score, _, _, _, _ = get_market_sentiment()
     gauge_txt = "탐욕(Greedy)" if score >= 70 else "중립(Neutral)" if score >= 40 else "공포(Fear)"
     st.metric("현재 시장 심리 지수", f"{score} / 100", delta=gauge_txt)
     st.progress(score/100)
-elif page.startswith("10."):
+elif page.startswith("2-d."):
     st.header("🏛️ 제작 동기: StockDragonfly의 철학과 비전")
     st.markdown("""
         <div style='background: rgba(255, 215, 0, 0.05); padding: 30px; border-radius: 20px; border: 1px solid #FFD700;'>
@@ -646,7 +647,7 @@ elif page.startswith("10."):
             결국 경제적 자유라는 최고 사령부에 안착하는 것이 우리의 목표입니다.</p>
         </div>
     """, unsafe_allow_html=True)
-elif page.startswith("4."):
+elif page.startswith("3-b."):
     st.header("📊 본데의 주식 50선 (Momentum Playbook)")
     try:
         sheet_url = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
@@ -668,13 +669,34 @@ elif page.startswith("4."):
             </div>
         """, unsafe_allow_html=True)
     except: st.error("데이터 싱크 오류")
-elif page.startswith("7."): st.header("📋 본데 감시 리스트"); st.info("피벗 포인트 돌파 전 관심주 구역입니다.")
-elif page.startswith("16."):
+elif page.startswith("3-c."): st.header("📋 본데 감시 리스트"); st.info("피벗 포인트 돌파 전 관심주 구역입니다.")
+elif page.startswith("4-c."): st.header("🛡️ 리스크 방패 (Trailing Stop)"); st.info("자산 보호 전략 및 트레일링 스톱 가이드 구역입니다.")
+elif page.startswith("6-b."): st.header("💬 소통 대화방"); st.info("실시간 시장 상황 공유 및 회원 간 종목 토론 구역입니다.")
+
+elif page.startswith("7-a."):
+    st.header("🧪 주식자동매수프로그램 (Trader Bot Mock)")
+    st.markdown("""
+        <div style='background: rgba(0,255,0,0.05); padding: 30px; border-radius: 20px; border: 2px solid #00FF00;'>
+            <h3 style='color: #00FF00;'>🤖 알고리즘 자동 매수 엔진 가동 중</h3>
+            <p style='color: #EEE;'>선택된 주도주가 설정한 피벗 포인트를 돌파하는 순간, 시스템이 기계적으로 매수를 집행합니다.</p>
+            <hr style='border: 0.5px solid #333;'>
+            <div style='display: flex; justify-content: space-around;'>
+                <div><p style='margin:0; color:#888;'>오늘의 매수 집행</p><h3>5건</h3></div>
+                <div><p style='margin:0; color:#888;'>평균 체결가 대비</p><h3 style='color:#00FF00;'>+2.45%</h3></div>
+                <div><p style='margin:0; color:#888;'>봇 상태</p><h3 style='color:#00FF00;'>ACTIVE</h3></div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    if st.button("🚀 알고리즘 긴급 정지"): st.error("시스템이 중단되었습니다.")
+
+elif page.startswith("7-b."): st.header("📊 자동매매 현황"); st.info("현재 봇이 관리 중인 포지션과 수익률 실시간 현황판입니다.")
+elif page.startswith("7-c."): st.header("🏆 사령부 명예의 전당"); st.success("사령부 최고의 수익률을 기록한 요원들의 기록실입니다.")
+elif page.startswith("5-b."):
     st.header("📚 주식공부방: 1,000개 폭등주 패턴 딥 다이브")
     st.info("📊 과거 100년간의 폭등주들이 보였던 VCP(변동성 수축)와 컵앤핸들 패턴의 정수를 학습합니다.")
     st.markdown("### 🏹 전술 교본 도서관\n- **교본 1:** 마크 미너비니의 '승자처럼 생각하고 행동하라' 핵심 요약\n- **교본 2:** 윌리엄 오닐의 CANSLIM 원칙 실전 적용")
 
-elif page.startswith("17."):
+elif page.startswith("5-c."):
     st.header("📡 나노바나나 정밀 레이더: 숙성도 판독 훈련")
     st.markdown("""
         <div style='background: #111; padding: 25px; border-radius: 15px; border-left: 5px solid #FFFF00;'>
@@ -684,7 +706,7 @@ elif page.startswith("17."):
         </div>
     """, unsafe_allow_html=True)
 
-elif page.startswith("11."):
+elif page.startswith("6-c."):
     st.header("🤝 방문자 인사말 신청")
     st.info("새롭게 합류한 전우들에게 따뜻한 환영과 격려의 인사를 남기는 공간입니다. (로딩 중...)")
 
