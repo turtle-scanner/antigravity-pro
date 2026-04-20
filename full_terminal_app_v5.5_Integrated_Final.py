@@ -31,12 +31,12 @@ def safe_get(url, timeout=3):
 # --- 🤖 Rule-based Tactical Advisor (Platinum Engine) ---
 def get_tactical_advice(tic, rs, roe):
         advice = []
-        if rs > 80: advice.append("🚀 강력한 Relative Strength 포착. 시장을 압도하는 주도주입니다.")
-        elif rs > 50: advice.append("📈 양호한 추세 유지 중. 섹터 순환매 수급을 확인하십시오.")
-        else: advice.append("⚠️ 추세가 다소 정체됨. 지지선 이탈 여부를 엄격히 감시하십시오.")
+        if rs > 80: advice.append("[ MOMENTUM ] 강력한 Relative Strength 포착. 시장을 압도하는 주도주입니다.")
+        elif rs > 50: advice.append("[ UP-TREND ] 양호한 추세 유지 중. 섹터 순환매 수급을 확인하십시오.")
+        else: advice.append("[ CAUTION ] 추세가 다소 정체됨. 지지선 이탈 여부를 엄격히 감시하십시오.")
         
-        if roe > 20: advice.append("💎 압도적 ROE. 기관이 가장 선호하는 우량 성장주 셋업입니다.")
-        elif roe > 10: advice.append("✅ 견고한 펀더멘털. 실적 발표 전후 돌파 타점을 노리십시오.")
+        if roe > 20: advice.append("[ PREMIUM ] 압도적 ROE. 기관이 가장 선호하는 우량 성장주 셋업입니다.")
+        elif roe > 10: advice.append("[ STRONG ] 견고한 펀더멘털. 실적 발표 전후 돌파 타점을 노리십시오.")
         
         # 보너스 스타일 조언
         quotes = [
@@ -44,7 +44,7 @@ def get_tactical_advice(tic, rs, roe):
             "손절은 패배가 아닌, 다음 승리를 위한 보험료입니다.",
             "거래량이 마를 때를 기다리십시오. 폭발은 고요함 속에서 시작됩니다."
         ]
-        advice.append(f"\n💡 **Bonde's Insight:** {random.choice(quotes)}")
+        advice.append(f"\nINFO: Bonde's Insight: {random.choice(quotes)}")
         return "\n".join(advice)
 
 def get_footer_quote():
@@ -141,7 +141,7 @@ def safe_read_csv(file_path, columns=None):
         return df
     except Exception as e:
         # 파일이 실제 존재하는데 읽기에 실패한 경우 경고 출력
-        st.warning(f"⚠️ 데이터 파일([.csv]) 읽기 시도 중 지연이 발생하고 있습니다. 잠시 후 자동 복구됩니다. ({os.path.basename(file_path)})")
+        st.warning(f"WAIT: 데이터 파일([.csv]) 읽기 시도 중 지연이 발생하고 있습니다. 잠시 후 자동 복구됩니다. ({os.path.basename(file_path)})")
         return pd.DataFrame(columns=columns) if columns else pd.DataFrame()
 
 def safe_write_csv(df, file_path, mode='w', header=True, backup=True):
@@ -1465,8 +1465,8 @@ elif page.startswith("4-a."):
 
         st.subheader("🛡️ 사령부 핵심 전술 지침")
         st.warning("""
-        "추세를 즐기되 수익 실현과 헤지 전략을 병행하십시오. 신규 진입 시에는 타이트한 손절가 설정이 필수적입니다. 
-        하방 변동성 발생 시 **S&P 500 기준 6,675선**을 심리적 지지선으로 설정하십시오."
+        추세를 즐기되 수익 실현과 헤지 전략을 병행하십시오. 신규 진입 시에는 타이트한 손절가 설정이 필수적입니다.
+        하방 변동성 발생 시 S&P 500 기준 6,675선을 심리적 지지선으로 설정하십시오.
         """)
         
         st.write("") # 스페이싱
