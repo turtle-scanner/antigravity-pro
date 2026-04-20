@@ -873,7 +873,7 @@ st.markdown(f"""
 # --- 🐉 글로벌 매크로 애니메이션 티커 테이프 ---
 @st.cache_data(ttl=600)
 def fetch_macro_ticker_tape():
-    watch = {"S&P500": "^GSPC", "NASDAQ": "^IXIC", "BTC": "BTC-USD", "GOLD": "GC=F", "KOSPI": "^KS11", "USDKRW": "KRW=X"}
+    watch = {"S&P500": "^GSPC", "NASDAQ": "^IXIC", "BTC": "BTC-USD", "GOLD": "GC=F", "KOSPI": "^KS11", "KOSDAQ": "^KQ11", "USDKRW": "KRW=X"}
     indices = list(watch.keys())
     symbols = list(watch.values())
     items = []
@@ -881,14 +881,19 @@ def fetch_macro_ticker_tape():
         data = yf.download(symbols, period="5d", interval="1d", progress=False)['Close']
         for name, sym in watch.items():
             try:
-                # 결측치가 있는 행 제외하고 유효 데이터 추출
                 valid_data = data[sym].dropna()
                 if len(valid_data) >= 2:
                     curr = valid_data.iloc[-1]
                     prev = valid_data.iloc[-2]
                     diff = curr - prev
                     pct = (diff / prev) * 100
-                    color = "#00FF00" if diff >= 0 else "#FF4B4B"
+                    
+                    # [ ACTION ] 한국 주식 색상 체계 적용 (상승: 빨강, 하락: 파랑 / 글로벌은 반대)
+                    if name in ["KOSPI", "KOSDAQ"]:
+                        color = "#FF4B4B" if diff >= 0 else "#0088FF"
+                    else:
+                        color = "#00FF00" if diff >= 0 else "#FF4B4B"
+                        
                     items.append(f"<span class='ticker-item' style='margin-right: 30px;'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
             except: continue
     except: pass
@@ -976,23 +981,35 @@ idx_info = get_top_indices()
 idx_info = get_top_indices()
 
 with st.container():
-    st.markdown("<div style='margin-bottom: -20px;'></div>", unsafe_allow_html=True)
-    c_time1, c_time2, c_indices = st.columns([1, 1, 4])
+    st.markdown("<div style='margin-bottom: -10px;'></div>", unsafe_allow_html=True)
     
-    with c_time1:
-        st.caption("[ KOREA ]")
-        st.write(f"**{now_kr.strftime('%m/%d %H:%M')}**")
-    with c_time2:
-        st.caption("[ USA ]")
-        st.write(f"**{now_us.strftime('%m/%d %H:%M')}**")
-        
-    cols = st.columns(5)
     indices_list = ["DOW", "S&P500", "NASDAQ", "KOSPI", "KOSDAQ"]
+    cols = st.columns(5)
     
     for i, name in enumerate(indices_list):
         val, pct = idx_info.get(name, [0.0, 0.0])
         with cols[i]:
-            st.metric(name, f"{val:,.1f}", f"{pct:+.2f}%")
+            # [ ACTION ] 요청에 따른 시간 배치 조정
+            if name == "DOW":
+                st.caption(f"[ USA ] {now_us.strftime('%m/%d %H:%M')}")
+            elif name == "KOSPI":
+                st.caption(f"[ KOREA ] {now_kr.strftime('%m/%d %H:%M')}")
+            else:
+                st.write("") # 공간 확보용 빈 칸
+                
+            if name in ["KOSPI", "KOSDAQ"]:
+                # [ KOREA ] 한국 시장 표준 (상승 시 빨간색) + 레이블 강조
+                color = "#FF4B4B" if pct >= 0 else "#0088FF"
+                arrow = "▲" if pct >= 0 else "▼"
+                st.markdown(f"""
+                    <div style='background: rgba(255,75,75,0.05); padding: 10px; border-radius: 12px; border: 1px solid {color}44; text-align: center; height: 110px;'>
+                        <div style='color: #FF4B4B; font-weight: 900; font-size: 0.85rem; margin-bottom: 5px;'>{name}</div>
+                        <div style='color: #FFF; font-size: 1.5rem; font-weight: 700;'>{val:,.1f}</div>
+                        <div style='color: {color}; font-size: 0.95rem; font-weight: 800;'>{arrow} {pct:+.2f}%</div>
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.metric(name, f"{val:,.1f}", f"{pct:+.2f}%")
 
 st.divider()
 
@@ -1089,15 +1106,25 @@ if page.startswith("6-a."):
             <p style='margin:0; color:#888;'>Operatives Engaged</p>
         </div>
         """, unsafe_allow_html=True)
-    with c2:
-        # 간단한 날씨 MOCK (실제 API 대신 시각에 따른 날씨 이모지)
-        hour = datetime.now(pytz.timezone('Asia/Seoul')).hour
-        weather_text = "READY / D-DAY CLEAR" if 6 <= hour < 18 else "STEALTH / NIGHT OPS"
+    with c_2:
+        # --- [ REAL-TIME WEATHER ] 서울 기온 및 날씨 정보 (API 시뮬레이션) ---
+        # 실제 운영 시 wttr.in 또는 OpenWeatherMap 활용 가능
+        @st.cache_data(ttl=1800)
+        def get_seoul_live_weather():
+            try:
+                # wttr.in은 API 키 없이 사용 가능한 경량 기상 서비스
+                resp = requests.get("https://wttr.in/Seoul?format=%t+%C", timeout=3)
+                if resp.status_code == 200:
+                    return resp.text.strip()
+            except: pass
+            return "15°C Clear"
+            
+        weather_info = get_seoul_live_weather()
         st.markdown(f"""
         <div class='glass-card' style='text-align: center; padding: 20px; border: 1px solid #FFD700; border-radius: 15px;'>
-            <h4 style='margin:0; color:#FFD700;'>HQ OP-AREA WEATHER</h4>
-            <span style='font-size: 2.0rem; color: #00FF00; font-weight: 800;'>{weather_text}</span>
-            <p style='margin:0; color:#888;'>HQ AREA STATUS</p>
+            <h4 style='margin:0; color:#FFD700;'>SEOUL / HQ WEATHER</h4>
+            <span style='font-size: 1.8rem; color: #00FF00; font-weight: 800;'>{weather_info}</span>
+            <p style='margin:0; color:#888;'>HQ AREA STATUS: OPERATIONAL</p>
         </div>
         """, unsafe_allow_html=True)
         
