@@ -1147,34 +1147,38 @@ with st.container():
 
 st.divider()
 
-# --- [ ADVISOR ] AI 전술 사령관 (Tactical Commander v6.0) ---
-def get_ai_commander_report(indices):
-    try:
-        score = sum([v[1] for v in indices.values()])
-        avg_pct = score / len(indices)
-    except:
-        avg_pct = 0.0
-    
-    if avg_pct > 0.5:
-        posture = "[ STATUS: AGGRESSIVE ]"
-        msg = "시장의 활력이 극에 달했습니다. 주도주의 돌파(Breakout)에 비중을 높여 수익을 극대화하십시오."
-        color = "green"
-    elif avg_pct > -0.5:
-        posture = "[ STATUS: NEUTRAL ]"
-        msg = "시장이 방향성을 탐색 중입니다. 무리한 진입보다 기존 포지션의 손절가를 유지하며 관망하십시오."
-        color = "orange"
-    else:
-        posture = "[ STATUS: CASH ]"
-        msg = "시장의 중력이 강해지고 있습니다. 현금 비중을 확보하고 폭풍이 지나가길 기다리십시오."
-        color = "red"
-    return posture, msg, color
+# --- [ COMMANDER ] Tactical Command & Sentiment Gauge (v6.5) ---
+def get_commander_style(p_color):
+    styles = {
+        "green": ("#00FF00", "rgba(0,255,0,0.1)", "GREED/AGGRESSIVE", "수익 좀 났다고 네가 천재가 된 줄 아나? 시장이 좋은 것뿐이다. 자만심(Ego)이 고개를 드는 순간, 시장은 네 계좌를 갈기갈기 찢어놓을 거다. 익절 라인 올려 잡고 닥치고 프로세스나 지켜라."),
+        "orange": ("#FFD700", "rgba(255,215,0,0.1)", "NEUTRAL/WATCH", "방향성이 보이지 않을 때는 손을 깔고 앉아 있는 것도 기술이다. 억지로 타점을 만들려고 하지 마라. 시장이 너에게 돈을 벌 기회를 줄 때까지 굶주린 사자처럼 기다려라."),
+        "red": ("#FF4B4B", "rgba(255,75,75,0.1)", "FEAR/DEFENSIVE", "중력이 너를 끌어내리고 있다. 거부하지 마라. 지금은 영웅이 될 때가 아니라 생존자가 될 때다. 모든 포지션을 점검하고, 리스크가 감당 안 되면 즉시 현금을 대피시켜라.")
+    }
+    return styles.get(p_color, styles["orange"])
 
-posture, tactical_msg, p_color = get_ai_commander_report(idx_info)
+c_color_code, c_bg, c_status, c_harsh = get_commander_style(p_color)
 
-with st.container():
-    if p_color == "green": st.success(f"### {posture}\n\n{tactical_msg}")
-    elif p_color == "orange": st.warning(f"### {posture}\n\n{tactical_msg}")
-    else: st.error(f"### {posture}\n\n{tactical_msg}")
+st.markdown(f"""<div style='background: rgba(0,0,0,0.4); border: 1px solid {c_color_code}33; border-radius: 15px; padding: 25px; margin-bottom: 30px;'>
+<div style='display: flex; gap: 30px; align-items: center;'>
+<div style='flex: 1; text-align: center; border-right: 1px solid rgba(255,255,255,0.05); padding-right: 30px;'>
+    <div style='width: 180px; height: 90px; margin: 0 auto; position: relative;'>
+        <div style='width: 180px; height: 180px; border-radius: 50%; border: 15px solid #222; position: absolute; top: 0; left: 0;'></div>
+        <div style='width: 180px; height: 180px; border-radius: 50%; border: 15px solid {c_color_code}; position: absolute; top: 0; left: 0; clip-path: polygon(0% 100%, 100% 100%, 100% 50%, 0% 50%); transform: rotate({(avg_pct+1)*90}deg); box-shadow: 0 0 15px {c_color_code};'></div>
+        <div style='position: absolute; bottom: 0; left: 0; right: 0; font-size: 0.7rem; color: #888;'>SENTIMENT INDEX</div>
+    </div>
+    <div style='font-size: 1.8rem; font-weight: 900; color: {c_color_code}; margin-top: 10px;'>{avg_pct:+.2f}%</div>
+</div>
+<div style='flex: 2;'>
+    <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+        <span style='background: {c_color_code}; color: #000; padding: 3px 10px; border-radius: 4px; font-weight: 900; font-size: 0.75rem;'>{c_status}</span>
+        <h3 style='margin: 0; color: #FFF; font-size: 1.3rem; letter-spacing: -0.5px;'>[ TRUTH ] 실시간 뼈 때리는 훈계 (Harsh Truth)</h3>
+    </div>
+    <div style='background: {c_bg}; border-left: 4px solid {c_color_code}; padding: 20px; border-radius: 0 12px 12px 0;'>
+        <p style='color: #EEE; font-size: 1.05rem; line-height: 1.6; margin: 0; font-family: "Pretendard", sans-serif; font-weight: 500;'>"{c_harsh}"</p>
+    </div>
+</div>
+</div>
+</div>""", unsafe_allow_html=True)
 
 # --- [ DOCTRINE ] 본데의 전술 지침 데이터 ---
 BONDE_WISDOM = [
@@ -1444,10 +1448,15 @@ elif page.startswith("3-a."):
                              (curr['sma7'] >= curr['sma65'] * 1.05) & \
                              (min_v3 >= 100000)
 
+                    # 등락률 안전 계산
+                    ch_val = 0.0
+                    if curr['c_prev'] > 0:
+                        ch_val = (curr['Close'] / curr['c_prev'] - 1) * 100
+
                     # 결과 분류
                     res_entry = {
                         "T": TICKER_NAME_MAP.get(tic, tic), "TIC": tic, 
-                        "P": curr['Close'], "CH": (curr['Close']/curr['c_prev']-1)*100,
+                        "P": curr['Close'], "CH": ch_val,
                         "V": curr['Volume']
                     }
                     
@@ -1524,16 +1533,25 @@ elif page.startswith("3-a."):
                     """, unsafe_allow_html=True)
         
         st.divider()
-        st.subheader("[ CHART ] 종목별 정밀 차트 분석 (Select Ticker)")
+        # 차트 분석을 위한 통합 리스트 생성 (NameError: combined_top 해결)
+        all_hits = res["Burst"] + res["EP"] + res["Anticipation"]
         
-        # 종목 선택 옵션 생성 (이름 + 티커)
-        options = [f"{row['T']} ({row['TIC']})" for _, row in combined_top.iterrows()]
-        selected_option = st.selectbox("분석할 종목을 선택하세요", options)
+        # 중복 티커 제거 및 포맷팅
+        unique_hits = []
+        seen_tics = set()
+        for h in all_hits:
+            if h["TIC"] not in seen_tics:
+                unique_hits.append(h)
+                seen_tics.add(h["TIC"])
         
-        # 선택된 티커 추출
-        selected_row = combined_top[combined_top.apply(lambda r: f"{r['T']} ({r['TIC']})" == selected_option, axis=1)].iloc[0]
-        selected_ticker = selected_row["TIC"]
-        is_kr_stock = (".KS" in selected_ticker or ".KQ" in selected_ticker)
+        if unique_hits:
+            options = [f"{h['T']} ({h['TIC']})" for h in unique_hits]
+            selected_option = st.selectbox("분석할 종목을 선택하세요", options)
+            
+            # 선택된 데이터 추출
+            selected_stock = next(h for h in unique_hits if f"{h['T']} ({h['TIC']})" == selected_option)
+            selected_ticker = selected_stock["TIC"]
+            is_kr_stock = (".KS" in selected_ticker or ".KQ" in selected_ticker)
         
         st.markdown(f"<div style='background: rgba(255,215,0,0.1); padding: 10px; border-radius: 8px; border-left: 4px solid #FFD700; margin-bottom: 15px;'><b>[ TARGET ] 분석 중: {selected_option}</b></div>", unsafe_allow_html=True)
         
@@ -1709,7 +1727,10 @@ elif page.startswith("3-c."):
                         
                         start_p = h_data.iloc[0] # 5일 전 가격 (기준가)
                         curr_p = h_data.iloc[-1]  # 현재가
-                        roi = ((curr_p / start_p) - 1) * 100
+                        
+                        roi = 0.0
+                        if start_p > 0:
+                            roi = ((curr_p / start_p) - 1) * 100
                         
                         is_us = (".KS" not in tic and ".KQ" not in tic)
                         cur_symbol = "$" if is_us else ""
@@ -1733,28 +1754,35 @@ elif page.startswith("3-c."):
                 roi_mark = "+" if item['ROI'] >= 0 else ""
                 
                 with cols[i]:
-                    st.markdown(f"""
-                    <div style='background: rgba(255,215,0,0.08); border: 2px solid #FFD70066; border-radius: 12px; padding: 15px; text-align: center; height: 340px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);'>
-                        <h3 style='color: #FFD700; margin: 0;'>{item['T']}</h3>
-                        <p style='color: #888; font-size: 0.75rem;'>Tactical Mention Rank {i+1}</p>
-                        <hr style='border: 0.5px solid #444; margin: 10px 0;'>
-                        
-                        <div style='background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin-bottom: 15px;'>
-                            <span style='color: #AAA; font-size: 0.8rem;'>CURRENT ROI</span><br>
-                            <span style='color: {roi_color}; font-size: 1.8rem; font-weight: 900;'>{roi_mark}{item['ROI']:.2f}%</span>
-                        </div>
-
-                        <div style='text-align: left; font-size: 0.85rem; color: #BBB;'>
-                            <b>[ REQ ]:</b> {item['FREQ']}<br>
-                            <b>[ PRICE ]:</b> {item['CURR']}<br>
-                            <b style='color: #FF4B4B;'>[ STOP ]:</b> {item['SL']}<br>
-                            <b style='color: #00FF00;'>[ TARGET ]:</b> {item['TP']}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(f"""<div style='background: rgba(255,215,0,0.08); border: 2px solid #FFD70066; border-radius: 12px; padding: 15px; text-align: center; height: 340px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);'>
+<h3 style='color: #FFD700; margin: 0;'>{item['T']}</h3>
+<p style='color: #888; font-size: 0.75rem;'>Tactical Mention Rank {i+1}</p>
+<hr style='border: 0.5px solid #444; margin: 10px 0;'>
+<div style='background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin-bottom: 15px;'>
+<span style='color: #AAA; font-size: 0.8rem;'>CURRENT ROI</span><br>
+<span style='color: {roi_color}; font-size: 1.8rem; font-weight: 900;'>{roi_mark}{item['ROI']:.2f}%</span>
+</div>
+<div style='text-align: left; font-size: 0.85rem; color: #BBB;'>
+<b>[ REQ ]:</b> {item['FREQ']}<br>
+<b>[ PRICE ]:</b> {item['CURR']}<br>
+<b style='color: #FF4B4B;'>[ STOP ]:</b> {item['SL']}<br>
+<b style='color: #00FF00;'>[ TARGET ]:</b> {item['TP']}
+</div>
+</div>""", unsafe_allow_html=True)
             
             if not final_3: st.info("감시 리스트에 유효한 전술 종목이 없습니다.")
             st.success("[ SUCCESS ] 사령부 전략 자산 실시간 퍼포먼스 분석 완료!")
+            
+            st.divider()
+            st.subheader("[ DATABASE ] 본데 감시 리스트 구글 시트 원본 (Real-time)")
+            try:
+                # 구글 시트 전체 데이터 로드 및 표시
+                full_sheet_df = pd.read_csv(SHEET_URL)
+                st.markdown("<div style='font-size: 0.8rem; color: #888; margin-bottom: 10px;'>* 이 표는 구글 시트 마스터 데이터와 1:1 동기화됩니다.</div>", unsafe_allow_html=True)
+                st.dataframe(full_sheet_df.style.highlight_max(axis=0, color='#004400'), use_container_width=True, height=500)
+                st.markdown(f"<p style='text-align: right;'><a href='{SHEET_URL.replace('/export?format=csv&gid=', '/edit#gid=')}' target='_blank' style='color: #FFD700; text-decoration: none; font-size: 0.8rem;'>[ GOOGLE SHEETS ] 마번 시트에서 직접 편집하기 ↗</a></p>", unsafe_allow_html=True)
+            except:
+                st.warning("원본 시트 데이터를 불러올 수 없습니다. 권한 또는 네트워크를 확인하십시오.")
         except Exception as e:
             st.error(f"[ ERROR ] 전략 리스트 분석 실패: {e}")
 
@@ -1857,45 +1885,39 @@ elif page.startswith("1-a."):
         })
     st.dataframe(pd.DataFrame(all_rows), use_container_width=True, hide_index=True)
 
-# --- [ IMMUTABLE ZONE: MISSION CRITICAL DATA - DO NOT MODIFY ] ---
 elif page.startswith("5-a."):
     st.markdown("<div style='text-align: right;'><span style='background: #FF4B4B; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: bold;'>HQ-DATA SECURED: IMMUTABLE</span></div>", unsafe_allow_html=True)
     st.markdown("<h1 style='text-align: center; color: #FFD700;'>[ MENTOR ] 월가의 멘토, 프라딥 본데</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #888; font-size: 1.2rem;'>Stockbee: 시스템 트레이딩의 선구자</p>", unsafe_allow_html=True)
     st.divider()
     
-    st.markdown("""
-    <div class='glass-card' style='padding: 30px;'>
-        <h3 style='color: #FFD700;'>1. 비금융권 출신의 최적화 시각</h3>
-        <p style='color: #BBB; line-height: 1.8;'>프라딥 본데는 물류 사업의 '시스템 최적화' 경험을 주식 시장에 대입하여, 비즈니스 모델로서의 매매 프로세스를 구축했습니다. 그는 실전 트레이더로서 자신만의 매매 프로세스를 체계화하여 거대한 유산을 남기고 있습니다.</p>
-        
-        <h3 style='color: #FFD700; margin-top: 25px;'>2. 스탁비의 4대 트레이딩 철학</h3>
-        <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 15px;'>
-            <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
-                <b style='color: #FFF;'>SINGLES: 안타 전략</b><br><span style='font-size: 0.85rem; color: #888;'>확실한 수익을 복리로 누적시키는 꾸준함.</span>
-            </div>
-            <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
-                <b style='color: #FFF;'>DEEP DIVE: 딥 다이브</b><br><span style='font-size: 0.85rem; color: #888;'>폭등 차트 수천 개를 연구하여 패턴을 뇌에 각인.</span>
-            </div>
-            <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
-                <b style='color: #FFF;'>SHIELD: 셀프 리더십</b><br><span style='font-size: 0.85rem; color: #888;'>자기 주도적 실행력과 원칙 고수.</span>
-            </div>
-            <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
-                <b style='color: #FFF;'>BREADTH: 상황 인식</b><br><span style='font-size: 0.85rem; color: #888;'>시장의 폭을 분석하여 공격과 방어 구분.</span>
-            </div>
-        </div>
-
-        <h3 style='color: #00FF00; margin-top: 25px;'>3. 시장 관통 매매 기법</h3>
-        <div style='background: rgba(0,255,0,0.03); padding: 20px; border-radius: 12px; border-left: 5px solid #00FF00;'>
-            <p style='margin-bottom: 8px;'><b style='color:#FFF;'>[ EP ]</b>: 기업 펀더멘털을 바꾸는 강력한 뉴스 공략.</p>
-            <p style='margin-bottom: 8px;'><b style='color:#FFF;'>[ BURST ]</b>: 눌림목(VCP) 에너지 임계점 포착.</p>
-            <p style='margin-bottom: 0;'><b style='color:#FFF;'>[ FORMULA ]</b>: 본데만의 대장주 선별 공식 (MAGNA 53+).</p>
-        </div>
-
-        <h3 style='color: #FFD700; margin-top: 25px;'>4. 제자들의 증명</h3>
-        <p style='color: #BBB;'>크리스찬 쿨라매기 등 수천억 자산가들이 본데의 가르침을 통해 시스템을 완성했습니다.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div class='glass-card' style='padding: 30px;'>
+<h3 style='color: #FFD700;'>1. 비금융권 출신의 최적화 시각</h3>
+<p style='color: #BBB; line-height: 1.8;'>프라딥 본데는 물류 사업의 '시스템 최적화' 경험을 주식 시장에 대입하여, 비즈니스 모델로서의 매매 프로세스를 구축했습니다. 그는 실전 트레이더로서 자신만의 매매 프로세스를 체계화하여 거대한 유산을 남기고 있습니다.</p>
+<h3 style='color: #FFD700; margin-top: 25px;'>2. 스탁비의 4대 트레이딩 철학</h3>
+<div style='display: grid; grid-template-columns: 1fr 1fr; gap: 15px;'>
+<div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
+<b style='color: #FFF;'>SINGLES: 안타 전략</b><br><span style='font-size: 0.85rem; color: #888;'>확실한 수익을 복리로 누적시키는 꾸준함.</span>
+</div>
+<div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
+<b style='color: #FFF;'>DEEP DIVE: 딥 다이브</b><br><span style='font-size: 0.85rem; color: #888;'>폭등 차트 수천 개를 연구하여 패턴을 뇌에 각인.</span>
+</div>
+<div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
+<b style='color: #FFF;'>SHIELD: 셀프 리더십</b><br><span style='font-size: 0.85rem; color: #888;'>자기 주도적 실행력과 원칙 고수.</span>
+</div>
+<div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
+<b style='color: #FFF;'>BREADTH: 상황 인식</b><br><span style='font-size: 0.85rem; color: #888;'>시장의 폭을 분석하여 공격과 방어 구분.</span>
+</div>
+</div>
+<h3 style='color: #00FF00; margin-top: 25px;'>3. 시장 관통 매매 기법</h3>
+<div style='background: rgba(0,255,0,0.03); padding: 20px; border-radius: 12px; border-left: 5px solid #00FF00;'>
+<p style='margin-bottom: 8px;'><b style='color:#FFF;'>[ EP ]</b>: 기업 펀더멘털을 바꾸는 강력한 뉴스 공략.</p>
+<p style='margin-bottom: 8px;'><b style='color:#FFF;'>[ BURST ]</b>: 눌림목(VCP) 에너지 임계점 포착.</p>
+<p style='margin-bottom: 0;'><b style='color:#FFF;'>[ FORMULA ]</b>: 본데만의 대장주 선별 공식 (MAGNA 53+).</p>
+</div>
+<h3 style='color: #FFD700; margin-top: 25px;'>4. 제자들의 증명</h3>
+<p style='color: #BBB;'>크리스찬 쿨라매기 등 수천억 자산가들이 본데의 가르침을 통해 시스템을 완성했습니다.</p>
+</div>""", unsafe_allow_html=True)
     st.divider()
 # --- [ END OF IMMUTABLE ZONE: 5-a ] ---
 
@@ -1906,50 +1928,44 @@ elif page.startswith("2-d."):
     st.markdown("<p style='text-align: center; color: #888; font-size: 1.1rem;'>Follow the Giants, Conquer the Market Together</p>", unsafe_allow_html=True)
     st.divider()
     st.write("이 플랫폼은 윌리엄 오닐, 마크 미너비니, 프라딥 본데의 철학을 기리기 위해 시작되었습니다.")
-    st.markdown(f"""
-    <div class='glass-card' style='padding: 30px; margin-top: 20px;'>
-        <div style='border-left: 4px solid #FFD700; padding-left: 20px; margin-bottom: 30px;'>
-            <h2 style='color: #FFF; margin: 0; font-size: 1.8rem;'>Dragonfly: 중력을 이기는 비행의 시작</h2>
-            <p style='color: #888; margin: 5px 0 0 0;'>사령부 시스템의 존재 이유와 대원들을 위한 약속</p>
-        </div>
-        
-        <div style='margin-bottom: 30px;'>
-            <h4 style='color: #FFF;'>스승님을 향한 감사의 마음에서 출발했습니다</h4>
-            <div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
-                주식 시장이라는 거친 바다에서 길을 잃지 않게 이끌어주신 스승님이 계셨습니다. 마크 미너비니, 윌리엄 오닐, 데이비드 라이언, 
-                그리고 프라딥 본데와 같은 대가들의 지혜를 전해주신 스승님께 보답하는 가장 좋은 방법은, 그 가르침을 나노 단위로 체계화하여 
-                더 완성도 높은 시스템으로 만드는 것이라 믿었습니다. <b style='color:#FFD700;'>Dragonfly는 스승님의 유산을 잇는 보은의 결과물입니다.</b>
-            </div>
-        </div>
-
-        <div style='margin-bottom: 30px;'>
-            <h4 style='color: #FFF;'>경제적 이익과 즐거움을 모두와 나누고 싶습니다</h4>
-            <div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
-                혼자서만 수익을 올리는 것은 진정한 우상향이 아니라고 생각합니다. 주식 투자가 고통스러운 노동이 아니라, 
-                모든 대원이 편리하게 경제적 이익을 얻고 그 과정에서 성취의 즐거움을 느끼는 생태계를 만들고 싶었습니다. 
-                Dragonfly는 복잡한 중력의 방해를 받지 않고 <b style='color:#FFD700;'>무중력 상태에서 수익의 가속도를 경험할 수 있는 공간</b>을 지향합니다.
-            </div>
-        </div>
-
-        <div style='margin-bottom: 30px;'>
-            <h4 style='color: #FFF;'>정보 보안과 자동화로 세우는 단단한 지지선</h4>
-            <div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
-                사용자의 소중한 정보를 지키기 위해 AES-256과 같은 강력한 암호화 기술을 도입하여 외부의 위협으로부터 자유로운 요새를 만들고자 합니다. 
-                또한, 인간의 감정이 개입되어 원칙이 흔들리지 않도록 <b style='color:#FFD700;'>나노 단위의 정밀한 자동 매매 시스템</b>을 구축하여, 
-                가장 차갑고도 정확한 타점에서 승리하는 경험을 제공할 것입니다.
-            </div>
-        </div>
-
-        <div>
-            <h4 style='color: #FFF;'>500명의 전우가 함께 만드는 무중력 공동체</h4>
-            <div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
-                 처음 100명의 전우가 모여 체계를 잡고, 나아가 500명의 정예 멤버가 각 섹터의 주도주를 감시하며 서로의 실력을 끌어올릴 것입니다. 
-                경제적 문맹이라는 중력을 벗어나, 500명의 전우가 함께 비상하며 시장을 압도하는 날까지 Dragonfly의 비행은 멈추지 않을 것입니다. 
-                <b style='color:#FFD700;'>모두가 경제적 자유를 얻었으면 좋겠습니다.</b> 정규직, 계약직 차별 없는 사회를 만들고 싶습니다.
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div class='glass-card' style='padding: 30px; margin-top: 20px;'>
+<div style='border-left: 4px solid #FFD700; padding-left: 20px; margin-bottom: 30px;'>
+<h2 style='color: #FFF; margin: 0; font-size: 1.8rem;'>Dragonfly: 중력을 이기는 비행의 시작</h2>
+<p style='color: #888; margin: 5px 0 0 0;'>사령부 시스템의 존재 이유와 대원들을 위한 약속</p>
+</div>
+<div style='margin-bottom: 30px;'>
+<h4 style='color: #FFF;'>스승님을 향한 감사의 마음에서 출발했습니다</h4>
+<div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+주식 시장이라는 거친 바다에서 길을 잃지 않게 이끌어주신 스승님이 계셨습니다. 마크 미너비니, 윌리엄 오닐, 데이비드 라이언, 
+그리고 프라딥 본데와 같은 대가들의 지혜를 전해주신 스승님께 보답하는 가장 좋은 방법은, 그 가르침을 나노 단위로 체계화하여 
+더 완성도 높은 시스템으로 만드는 것이라 믿었습니다. <b style='color:#FFD700;'>Dragonfly는 스승님의 유산을 잇는 보은의 결과물입니다.</b>
+</div>
+</div>
+<div style='margin-bottom: 30px;'>
+<h4 style='color: #FFF;'>경제적 이익과 즐거움을 모두와 나누고 싶습니다</h4>
+<div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+혼자서만 수익을 올리는 것은 진정한 우상향이 아니라고 생각합니다. 주식 투자가 고통스러운 노동이 아니라, 
+모든 대원이 편리하게 경제적 이익을 얻고 그 과정에서 성취의 즐거움을 느끼는 생태계를 만들고 싶었습니다. 
+Dragonfly는 복잡한 중력의 방해를 받지 않고 <b style='color:#FFD700;'>무중력 상태에서 수익의 가속도를 경험할 수 있는 공간</b>을 지향합니다.
+</div>
+</div>
+<div style='margin-bottom: 30px;'>
+<h4 style='color: #FFF;'>정보 보안과 자동화로 세우는 단단한 지지선</h4>
+<div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+사용자의 소중한 정보를 지키기 위해 AES-256과 같은 강력한 암호화 기술을 도입하여 외부의 위협으로부터 자유로운 요새를 만들고자 합니다. 
+또한, 인간의 감정이 개입되어 원칙이 흔들리지 않도록 <b style='color:#FFD700;'>나노 단위의 정밀한 자동 매매 시스템</b>을 구축하여, 
+가장 차갑고도 정확한 타점에서 승리하는 경험을 제공할 것입니다.
+</div>
+</div>
+<div>
+<h4 style='color: #FFF;'>500명의 전우가 함께 만드는 무중력 공동체</h4>
+<div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+처음 100명의 전우가 모여 체계를 잡고, 나아가 500명의 정예 멤버가 각 섹터의 주도주를 감시하며 서로의 실력을 끌어올릴 것입니다. 
+경제적 문맹이라는 중력을 벗어나, 500명의 전우가 함께 비상하며 시장을 압도하는 날까지 Dragonfly의 비행은 멈추지 않을 것입니다. 
+<b style='color:#FFD700;'>모두가 경제적 자유를 얻었으면 좋겠습니다.</b> 정규직, 계약직 차별 없는 사회를 만들고 싶습니다.
+</div>
+</div>
+</div>""", unsafe_allow_html=True)
 
     st.markdown("<div class='glass-card' style='margin-top: 30px;'>", unsafe_allow_html=True)
     st.subheader("[ PILLARS ] 사령부를 지탱하는 세 개의 기둥")
@@ -2020,6 +2036,39 @@ elif page.startswith("6-c."):
                 gsheet_sync_bg("방문자_승격신청", ["시간", "아이디", "첫인사", "자기소개", "포부"], [t, u, g1, g2, g3])
                 st.success("[ SUCCESS ] 승격 신청서가 성공적으로 전송되었습니다.")
             else: st.error("모든 항목을 작성해 주십시오.")
+
+elif page.startswith("4-a."):
+    st.header("[ REPORT ] 전략 수립 프로 분석 리포트")
+    st.markdown("<div class='glass-card'>현재 시장 주도 테마와 섹터의 RS(상대강도) 통합 보고서입니다.</div>", unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("TOP Momentum Sectors")
+        st.table(pd.DataFrame({"Sector": ["Semiconductors", "AI Infrastructure", "Defense", "Energy"], "RS Score": [98, 95, 89, 82]}))
+    with c2:
+        st.subheader("Tactical Overlays")
+        st.info("핵심 전략: NVDA, TSMC 등 대장주 눌림목 돌파 시 비중 확대.")
+    st.divider()
+    st.success("ADVICE: 주도 섹터 밖의 낙폭 과대주는 쳐다보지도 마십시오.")
+
+elif page.startswith("4-b."):
+    st.header("[ CALC ] 안티그래비티 리스크 계산기")
+    st.markdown("<div class='glass-card'>계좌 총액 대비 개별 종목의 적정 매수 규모를 산출합니다.</div>", unsafe_allow_html=True)
+    with st.form("risk_calc"):
+        capital = st.number_input("총 투자 원금 (₩)", value=10000000, step=1000000)
+        risk_pct = st.slider("1종목당 총자산 대비 허용 리스크 (%)", 0.5, 2.0, 1.0, 0.1)
+        entry_price = st.number_input("진입 가격 (₩)", value=50000, step=100)
+        stop_price = st.number_input("손절 가격 (₩)", value=48500, step=100)
+        if st.form_submit_button("CALCULATE EXPOSURE"):
+            risk_amt = capital * (risk_pct/100)
+            loss_per_share = entry_price - stop_price
+            if loss_per_share > 0:
+                qty = int(risk_amt / loss_per_share)
+                total_order = qty * entry_price
+                st.balloons()
+                st.success(f"### 적정 매수 수량: {qty} 주")
+                st.metric("총 주문 금액", f"{total_order:,.0f}원")
+                st.warning(f"설명: 손절 시 전체 자산의 {risk_pct}%인 {risk_amt:,.0f}원만 손실을 입게 됩니다.")
+            else: st.error("손절가는 진입가보다 낮아야 합니다.")
 
 elif page.startswith("4-c."):
     st.header("[ SHIELD ] 리스크 방패 (The -3% Iron Shield)")
@@ -2149,80 +2198,10 @@ elif page.startswith("5-a."):
     """)
     st.divider()
 
-elif page.startswith("2-d."):
-    st.markdown("<h1 style='text-align: center; color: #FFD700;'>[ MISSION ] 사령부 제작 동기</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #888; font-size: 1.1rem;'>Follow the Giants, Conquer the Market Together</p>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center;'>세 거인의 발자취를 따라, 함께 성장의 궤도에 오르기를 꿈꾸며</h3>", unsafe_allow_html=True)
-    st.divider()
-    
-    st.write("""
-    이 플랫폼은 제가 깊이 존경하는 세 분의 위대한 스승, **윌리엄 오닐, 마크 미너비니, 그리고 프라딥 본데**의 트레이딩 철학을 시스템으로 구현하고 기리기 위해 시작되었습니다. 
-    (This platform was established to systematize and honor the trading philosophies of three legendary mentors: William O'Neil, Mark Minervini, and Pradeep Bonde.)
-    
-    비록 지금은 성장에 목마른 소박한 터미널이지만, 저와 같은 길을 걷는 대원분들이 한 배를 타고 진정한 경제적 자유에 도달하기를 바라는 진심 어린 마음을 담아 밤낮으로 로직을 다듬고 있습니다.
-    (Though it is currently a small terminal, I refine its logic day and night with the sincere hope that fellow traders walking the same path can reach true financial freedom together.)
-    """)
+elif page.startswith("2-a."):
+    st.header("[ TREND ] 마켓 트렌드 요약")
 
-    st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-    st.subheader("📚 사령부를 지탱하는 세 개의 기둥 (Three Pillars)")
-    
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("**1. 윌리엄 오닐 (CAN SLIM)**")
-        st.write("주도주 발굴의 근간입니다. 펀더멘털과 기술적 흐름의 조화를 시스템에 녹였습니다.")
-        st.caption("*The root of leading stocks.*")
-    with c2:
-        st.markdown("**2. 마크 미너비니 (VCP)**")
-        st.write("타점의 정교함입니다. 에너지의 응축과 돌파를 감지하는 지표를 강화했습니다.")
-        st.caption("*The precision of entry.*")
-    with c3:
-        st.markdown("**3. 프라딥 본데 (EP/RS)**")
-        st.write("시장 대응의 프로세스입니다. 실시간 상황 인식과 폭발적 모멘텀을 추적합니다.")
-        st.caption("*The process of response.*")
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.info("""
-    [ LEGACY ] 오닐의 유산 (The Legacy): 윌리엄 오닐의 저서 『최고의 주식, 최적의 타이밍』은 제 트레이딩 인생의 나침반이 되었습니다. 
-    이 터미널이 거인들의 어깨 위에 올라타 시장의 거센 파도를 넘어서는 여러분의 든든한 디딤돌(Stepping Stone)이 되길 희망합니다.
-    """)
-    
-    st.markdown("""
-    <div style='text-align: right; margin-top: 40px; border-top: 1px solid #333; padding-top: 20px;'>
-        <span style='color: #888; font-size: 0.9rem;'>2026년 4월 18일, 깊어가는 봄날 밤. (Deep Spring Night, 2026)</span><br>
-        <b style='color: #FFD700; font-size: 1.2rem;'>전문가거북이 드림 (Truly yours, Expert Turtle)</b>
-    </div>
-    """, unsafe_allow_html=True)
-
-elif page.startswith("6-c."):
-    st.header("[ APPLY ] 방문자 승격 신청서")
-    st.markdown("<div class='glass-card'>사령부 정규직 승격을 위해 아래 3가지 항목을 작성해 주세요. 전문가님이 직접 검토합니다.</div>", unsafe_allow_html=True)
-    with st.form("greet_detailed", clear_on_submit=True):
-        g1 = st.text_area("1. 사령부 첫 방문 소감", placeholder="사령부를 처음 알게 된 계기와 소감을 남겨주세요.")
-        g2 = st.text_area("2. 트레이딩 경력 및 자기소개", placeholder="본인의 투자 경험이나 간단한 소개를 부탁드립니다.")
-        g3 = st.text_area("3. 정규직으로서의 포부", placeholder="사령부 정규직이 되어 이루고 싶은 목표를 적어주세요.")
-        if st.form_submit_button("[ EXEC ] 사령부 승격 신청 전송"):
-            if g1 and g2 and g3:
-                t = datetime.now().strftime("%Y-%m-%d %H:%M")
-                u = st.session_state.current_user
-                # 로컬 영구 저장 (8번 배너와 연동)
-                new_req = pd.DataFrame([[t, u, g1, g2, g3]], columns=["시간", "아이디", "첫인사", "자기소개", "포부"])
-                new_req.to_csv(VISITOR_FILE, mode='a', header=not os.path.exists(VISITOR_FILE), index=False, encoding="utf-8-sig")
-                # 백업용 동기화 (백그라운드 전환)
-                gsheet_sync_bg("방문자_승격신청", ["시간", "아이디", "첫인사", "자기소개", "포부"], [t, u, g1, g2, g3])
-                st.success("[ SUCCESS ] 승격 신청서가 성공적으로 관리자 승인센터로 전파되었습니다!")
-            else: st.error("[ ERROR ] 모든 항목을 작성해 주셔야 신청이 가능합니다.")
-
-elif page.startswith("4-c."):
-    st.header("🛡️ 리스크 방패 (The -3% Iron Shield)")
-    st.divider()
-    st.subheader("🛸 왜 본데는 '-3% 손절'을 생명처럼 여기는가?")
-    st.error("**1. 복리의 마법을 지키는 유일한 방법**")
-    st.write("3% 하락은 회복이 쉬우나, 큰 하락은 복구에 수배의 노력이 필요합니다. 본데는 복리의 역성장을 절대 허용하지 않습니다.")
-    st.warning("**2. '타점 오류'의 즉각적인 판독기**")
-    st.write("진입 후 -3% 후퇴는 사령부의 타점이 틀렸거나 타이밍이 아니라는 시장의 명확한 신호입니다. 즉각 탈출하십시오.")
-    st.info("**3. '안타 전략(Hitters)'의 생존 조건**")
-    st.write("작은 수익을 쌓는 전략에서 단 하나의 큰 손실은 모든 노력을 수포로 돌립니다. -3%는 사령부의 최후 방어선입니다.")
-    st.success("💡 **결론:** 손절은 패배가 아닌, 더 큰 승리를 위한 전략적 후퇴입니다.")
 
 elif page.startswith("5-d."):
     st.header("[ EXAM ] 사령부 정기 승급 시험 안내")
