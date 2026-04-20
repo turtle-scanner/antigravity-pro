@@ -966,41 +966,29 @@ def get_top_indices():
 
 idx_info = get_top_indices()
 
-st.markdown(f"""
-<div class='responsive-bar' style='background: rgba(10,10,10,0.9); border-radius: 12px; padding: 12px 25px; border: 1px solid #333; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;'>
-    <div style='font-family: inherit;'>
-        <div style='display: flex; align-items: center; gap: 8px;'>
-            <div style='width: 8px; height: 8px; background: #00FF00; border-radius: 50%;'></div>
-            <span style='color: #888; font-size: 0.85rem;'>LIVE OPS CENTER</span>
-        </div>
-        <div style='margin-top: 5px;'>
-            <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>[KOR] 한국: {now_kr.strftime('%m/%d')} | [USA] 미국: {now_us.strftime('%m/%d')}</span>
-        </div>
-    </div>
-    <div style='display: flex; gap: 12px;'>
-        <div style='text-align: right;'>
-            <small style='color: #888;'>DOW</small><br>
-            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["DOW"][0]:,.0f}</b>
-            <span style='color: {"#00FF00" if idx_info["DOW"][1]>=0 else "#FF4B4B"}; font-size: 0.75rem;'>{idx_info["DOW"][1]:+.2f}%</span>
-        </div>
-        <div style='text-align: right;'>
-            <small style='color: #888;'>S&P500</small><br>
-            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["S&P500"][0]:,.0f}</b>
-            <span style='color: {"#00FF00" if idx_info["S&P500"][1]>=0 else "#FF4B4B"}; font-size: 0.75rem;'>{idx_info["S&P500"][1]:+.2f}%</span>
-        </div>
-        <div style='text-align: right;'>
-            <small style='color: #888;'>NASDAQ</small><br>
-            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["NASDAQ"][0]:,.0f}</b>
-            <span style='color: {"#00FF00" if idx_info["NASDAQ"][1]>=0 else "#FF4B4B"}; font-size: 0.75rem;'>{idx_info["NASDAQ"][1]:+.2f}%</span>
-        </div>
-        <div style='text-align: right;'>
-            <small style='color: #888;'>KOSPI</small><br>
-            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["KOSPI"][0]:,.1f}</b>
-            <span style='color: {"#00FF00" if idx_info["KOSPI"][1]>=0 else "#FF4B4B"}; font-size: 0.75rem;'>{idx_info["KOSPI"][1]:+.1f}%</span>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# --- 🛰️ 사령부 통합 지수 관제 센터 (Stable v6.1) ---
+idx_info = get_top_indices()
+
+with st.container():
+    st.markdown("<div style='margin-bottom: -20px;'></div>", unsafe_allow_html=True)
+    c_time1, c_time2, c_indices = st.columns([1, 1, 4])
+    
+    with c_time1:
+        st.caption("🇰🇷 KOREA")
+        st.write(f"**{now_kr.strftime('%m/%d %H:%M')}**")
+    with c_time2:
+        st.caption("🇺🇸 USA")
+        st.write(f"**{now_us.strftime('%m/%d %H:%M')}**")
+        
+    cols = st.columns(5)
+    indices_list = ["DOW", "S&P500", "NASDAQ", "KOSPI", "KOSDAQ"]
+    
+    for i, name in enumerate(indices_list):
+        val, pct = idx_info.get(name, [0.0, 0.0])
+        with cols[i]:
+            st.metric(name, f"{val:,.1f}", f"{pct:+.2f}%")
+
+st.divider()
 
 # --- 🛰️ AI 전술 사령관 (Tactical Commander v6.0) ---
 def get_ai_commander_report(indices):
@@ -1013,26 +1001,23 @@ def get_ai_commander_report(indices):
     if avg_pct > 0.5:
         posture = "🔥 FULL ATTACK (AGGRESSIVE)"
         msg = "시장의 활력이 극에 달했습니다. 주도주의 돌파(Breakout)에 비중을 높여 수익을 극대화하십시오."
-        color = "#00FF00"
+        color = "green"
     elif avg_pct > -0.5:
         posture = "⚖️ TACTICAL PAUSE (NEUTRAL)"
         msg = "시장이 방향성을 탐색 중입니다. 무리한 진입보다 기존 포지션의 손절가를 유지하며 관망하십시오."
-        color = "#FFD700"
+        color = "orange"
     else:
         posture = "🛡️ DEFENSIVE SHIELD (CASH)"
         msg = "시장의 중력이 강해지고 있습니다. 현금 비중을 확보하고 폭풍이 지나가길 기다리십시오."
-        color = "#FF4B4B"
+        color = "red"
     return posture, msg, color
 
 posture, tactical_msg, p_color = get_ai_commander_report(idx_info)
 
-st.markdown(f"""
-<div style='background: rgba(0,0,0,0.9); border: 2px solid {p_color}; border-radius: 20px; padding: 25px; text-align: center; margin-bottom: 25px;'>
-    <div style='color: #888; font-size: 0.7rem; letter-spacing: 5px; margin-bottom: 10px;'>TACTICAL COMMAND CENTER v6.0</div>
-    <h1 style='color: {p_color}; margin: 0; font-size: 2.2rem; font-weight: 900;'>{posture}</h1>
-    <div style='color: #EEE; font-size: 1.1rem; margin-top: 10px; font-weight: 500; line-height: 1.5;'>"{tactical_msg}"</div>
-</div>
-""", unsafe_allow_html=True)
+with st.container():
+    if p_color == "green": st.success(f"### {posture}\n\n{tactical_msg}")
+    elif p_color == "orange": st.warning(f"### {posture}\n\n{tactical_msg}")
+    else: st.error(f"### {posture}\n\n{tactical_msg}")
 
 # --- 🛰️ 본데의 전술 지침 데이터 ---
 BONDE_WISDOM = [
