@@ -967,44 +967,36 @@ def get_top_indices():
 idx_info = get_top_indices()
 
 st.markdown(f"""
-<div class='responsive-bar' style='background: rgba(10,10,10,0.9); border-radius: 12px; padding: 12px 25px; border: 1px solid #333; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);'>
+<div class='responsive-bar' style='background: rgba(10,10,10,0.9); border-radius: 12px; padding: 12px 25px; border: 1px solid #333; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;'>
     <div style='font-family: inherit;'>
         <div style='display: flex; align-items: center; gap: 8px;'>
-            <div style='width: 8px; height: 8px; background: #00FF00; border-radius: 50%; box-shadow: 0 0 10px #00FF00;'></div>
-            <span style='color: #888; font-size: 0.85rem; letter-spacing: 1px;'>LIVE OPS CENTER</span>
+            <div style='width: 8px; height: 8px; background: #00FF00; border-radius: 50%;'></div>
+            <span style='color: #888; font-size: 0.85rem;'>LIVE OPS CENTER</span>
         </div>
         <div style='margin-top: 5px;'>
-            <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>[KOR] 한국: {now_kr.strftime('%m/%d')}/{['월','화','수','목','금','토','일'][now_kr.weekday()]}/{now_kr.strftime('%H:%M:%S')}</span>
-            <span style='color: #444; margin: 0 10px;'>|</span>
-            <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>[USA] 미국: {now_us.strftime('%m/%d')}/{['월','화','수','목','금','토','일'][now_us.weekday()]}/{now_us.strftime('%H:%M:%S')}</span>
+            <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>[KOR] 한국: {now_kr.strftime('%m/%d')} | [USA] 미국: {now_us.strftime('%m/%d')}</span>
         </div>
     </div>
-    <div class='responsive-indices' style='display: flex; gap: 15px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 5px;'>
-        <style> .responsive-indices::-webkit-scrollbar {{ display: none; }} </style>
-        <div style='text-align: right; min-width: 65px;'>
-            <span style='color: #888; font-size: 0.65rem;'>DOW</span><br>
-            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["DOW"][0]:,.1f}</b><br>
-            <span style='color: {"#00FF00" if idx_info["DOW"][1]>=0 else "#FF4B4B"}; font-weight: 800; font-size: 0.7rem;'>{idx_info["DOW"][1]:+.2f}%</span>
+    <div style='display: flex; gap: 12px;'>
+        <div style='text-align: right;'>
+            <small style='color: #888;'>DOW</small><br>
+            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["DOW"][0]:,.0f}</b>
+            <span style='color: {"#00FF00" if idx_info["DOW"][1]>=0 else "#FF4B4B"}; font-size: 0.75rem;'>{idx_info["DOW"][1]:+.2f}%</span>
         </div>
-        <div style='text-align: right; min-width: 65px;'>
-            <span style='color: #888; font-size: 0.65rem;'>S&P 500</span><br>
-            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["S&P500"][0]:,.1f}</b><br>
-            <span style='color: {"#00FF00" if idx_info["S&P500"][1]>=0 else "#FF4B4B"}; font-weight: 800; font-size: 0.7rem;'>{idx_info["S&P500"][1]:+.2f}%</span>
+        <div style='text-align: right;'>
+            <small style='color: #888;'>S&P500</small><br>
+            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["S&P500"][0]:,.0f}</b>
+            <span style='color: {"#00FF00" if idx_info["S&P500"][1]>=0 else "#FF4B4B"}; font-size: 0.75rem;'>{idx_info["S&P500"][1]:+.2f}%</span>
         </div>
-        <div style='text-align: right; min-width: 65px;'>
-            <span style='color: #888; font-size: 0.65rem;'>NASDAQ</span><br>
-            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["NASDAQ"][0]:,.1f}</b><br>
-            <span style='color: {"#00FF00" if idx_info["NASDAQ"][1]>=0 else "#FF4B4B"}; font-weight: 800; font-size: 0.7rem;'>{idx_info["NASDAQ"][1]:+.2f}%</span>
+        <div style='text-align: right;'>
+            <small style='color: #888;'>NASDAQ</small><br>
+            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["NASDAQ"][0]:,.0f}</b>
+            <span style='color: {"#00FF00" if idx_info["NASDAQ"][1]>=0 else "#FF4B4B"}; font-size: 0.75rem;'>{idx_info["NASDAQ"][1]:+.2f}%</span>
         </div>
-        <div style='text-align: right; min-width: 60px;'>
-            <span style='color: #888; font-size: 0.65rem;'>KOSPI</span><br>
-            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["KOSPI"][0]:,.1f}</b><br>
-            <span style='color: {"#00FF00" if idx_info["KOSPI"][1]>=0 else "#FF4B4B"}; font-weight: 800; font-size: 0.7rem;'>{idx_info["KOSPI"][1]:+.2f}%</span>
-        </div>
-        <div style='text-align: right; min-width: 65px;'>
-            <span style='color: #888; font-size: 0.65rem;'>KOSDAQ</span><br>
-            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["KOSDAQ"][0]:,.1f}</b><br>
-            <span style='color: {"#00FF00" if idx_info["KOSDAQ"][1]>=0 else "#FF4B4B"}; font-weight: 800; font-size: 0.7rem;'>{idx_info["KOSDAQ"][1]:+.2f}%</span>
+        <div style='text-align: right;'>
+            <small style='color: #888;'>KOSPI</small><br>
+            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["KOSPI"][0]:,.1f}</b>
+            <span style='color: {"#00FF00" if idx_info["KOSPI"][1]>=0 else "#FF4B4B"}; font-size: 0.75rem;'>{idx_info["KOSPI"][1]:+.1f}%</span>
         </div>
     </div>
 </div>
@@ -1012,8 +1004,11 @@ st.markdown(f"""
 
 # --- 🛰️ AI 전술 사령관 (Tactical Commander v6.0) ---
 def get_ai_commander_report(indices):
-    score = sum([v[1] for v in indices.values()])
-    avg_pct = score / len(indices)
+    try:
+        score = sum([v[1] for v in indices.values()])
+        avg_pct = score / len(indices)
+    except:
+        avg_pct = 0.0
     
     if avg_pct > 0.5:
         posture = "🔥 FULL ATTACK (AGGRESSIVE)"
@@ -1032,14 +1027,10 @@ def get_ai_commander_report(indices):
 posture, tactical_msg, p_color = get_ai_commander_report(idx_info)
 
 st.markdown(f"""
-<div style='background: rgba(0,0,0,0.9); border: 2px solid {p_color}; border-radius: 20px; padding: 25px; text-align: center; margin-bottom: 25px; box-shadow: 0 0 30px {p_color}33;'>
-    <div style='color: #888; font-size: 0.8rem; letter-spacing: 5px; margin-bottom: 15px;'>TACTICAL COMMAND CENTER v6.0</div>
-    <h1 style='color: {p_color}; margin: 0; font-size: 2.8rem; font-weight: 900; text-shadow: 0 0 15px {p_color}88;'>{posture}</h1>
-    <div style='color: #EEE; font-size: 1.2rem; margin-top: 15px; font-weight: 500; line-height: 1.6;'>"{tactical_msg}"</div>
-    <div style='display: flex; justify-content: center; gap: 20px; margin-top: 20px;'>
-        <div style='background: {p_color}22; padding: 10px 25px; border-radius: 50px; border: 1px solid {p_color}55; color: {p_color}; font-weight: 800;'>Breadth Health: EXCELLENT</div>
-        <div style='background: {p_color}22; padding: 10px 25px; border-radius: 50px; border: 1px solid {p_color}55; color: {p_color}; font-weight: 800;'>Trend Velocity: HIGH</div>
-    </div>
+<div style='background: rgba(0,0,0,0.9); border: 2px solid {p_color}; border-radius: 20px; padding: 25px; text-align: center; margin-bottom: 25px;'>
+    <div style='color: #888; font-size: 0.7rem; letter-spacing: 5px; margin-bottom: 10px;'>TACTICAL COMMAND CENTER v6.0</div>
+    <h1 style='color: {p_color}; margin: 0; font-size: 2.2rem; font-weight: 900;'>{posture}</h1>
+    <div style='color: #EEE; font-size: 1.1rem; margin-top: 10px; font-weight: 500; line-height: 1.5;'>"{tactical_msg}"</div>
 </div>
 """, unsafe_allow_html=True)
 
