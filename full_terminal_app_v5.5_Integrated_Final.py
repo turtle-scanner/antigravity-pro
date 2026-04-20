@@ -145,11 +145,18 @@ def resolve_ticker(query):
 @st.cache_data(ttl=600)
 def get_macro_data():
     try:
-        m_data = yf.download(["USDKRW=X", "^TNX"], period="2d", progress=False)['Close']
-        rate = float(m_data["USDKRW=X"].iloc[-1])
-        yield10y = float(m_data["^TNX"].iloc[-1])
+        m_data = yf.download(["USDKRW=X", "^TNX"], period="5d", progress=False)['Close']
+        
+        # 🛡️ NaN 방지 및 유효한 최신 데이터 추출
+        rate_series = m_data["USDKRW=X"].dropna()
+        rate = float(rate_series.iloc[-1]) if not rate_series.empty else 1400.0
+        
+        yield_series = m_data["^TNX"].dropna()
+        yield10y = float(yield_series.iloc[-1]) if not yield_series.empty else 4.3
+        
         return rate, yield10y
-    except: return 1400.0, 4.5
+    except: 
+        return 1400.0, 4.3
 
 def get_macro_indicators():
     rate, yield10y = get_macro_data()
@@ -310,6 +317,27 @@ def fetch_gs_notices():
 - 재설정 경로: <b>[1. 본부 사령부] → [1-c. 계정 보안 설정]</b><br><br>
 로그인 후 해당 메뉴에서 본인만의 안전한 비밀번호로 즉시 변경이 가능합니다. 개인정보 보호를 위해 접속 즉시 수정을 권장합니다."""
     }
+
+@st.cache_data
+def get_cached_bg_b64():
+    if os.path.exists("StockDragonfly2.png"):
+        with open("StockDragonfly2.png", "rb") as imm: return base64.b64encode(imm.read()).decode()
+    elif os.path.exists("StockDragonfly.png"):
+        with open("StockDragonfly.png", "rb") as imm: return base64.b64encode(imm.read()).decode()
+    return ""
+
+# --- 🛸 [CORE UI] CSS & Background (Performance Optimized) ---
+bg_b64 = get_cached_bg_b64()
+st.markdown(f"""
+    <style>
+        .stApp {{
+            background-color: #0E1117;
+            background-image: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url("data:image/png;base64,{bg_b64}");
+            background-attachment: fixed;
+            background-size: cover;
+        }}
+    </style>
+""", unsafe_allow_html=True)
 
 # --- 🛰️ [BANNER SHIELD] 메뉴 UI 구조 고정 (v9.9 Platinum) ---
 ZONE_CONFIG = {
@@ -629,22 +657,25 @@ with st.sidebar:
 
     if target_bgm and os.path.exists(target_bgm):
         # 🚀 오디오 성능 최적화: 캐시에 저장된 base64 사용 (매번 인코딩 방지)
-        @st.cache_data(show_spinner=False)
+        @st.cache_data(show_spinner=False, ttl=3600)
         def get_base64_audio(file_path):
-            with open(file_path, "rb") as f: 
-                return base64.b64encode(f.read()).decode()
+            try:
+                with open(file_path, "rb") as f: 
+                    return base64.b64encode(f.read()).decode()
+            except: return ""
         
         b64 = get_base64_audio(target_bgm)
-        # onended 이벤트를 활용하여 랜덤 믹스 시 다음 곡으로 넘어가게 설정 (Streamlit 한계상 재실행 필요)
-        st.components.v1.html(f"""
-            <audio id='aud' autoplay loop>
-                <source src='data:audio/mp3;base64,{b64}' type='audio/mp3'>
-            </audio>
-            <script>
-                var audio = document.getElementById('aud');
-                audio.volume = {vol};
-            </script>
-        """, height=0)
+        if b64:
+            # onended 이벤트를 활용하여 랜덤 믹스 시 다음 곡으로 넘어가게 설정 (Streamlit 한계상 재실행 필요)
+            st.components.v1.html(f"""
+                <audio id='aud' autoplay loop>
+                    <source src='data:audio/mp3;base64,{b64}' type='audio/mp3'>
+                </audio>
+                <script>
+                    var audio = document.getElementById('aud');
+                    audio.volume = {vol};
+                </script>
+            """, height=0)
 
 # --- 유저 등급 판독 ---
 users = load_users()
@@ -864,7 +895,8 @@ if page.startswith("6-a."):
         safe_write_csv(pd.DataFrame(columns=["시간", "아이디", "인사", "등급"]), ATTENDANCE_FILE)
     
     df_att = safe_read_csv(ATTENDANCE_FILE, ["시간", "아이디", "인사", "등급"])
-    total_visits = len(df_att)
+    # ⭐ [USER REQ] 방문자 수 500부터 시작하도록 오프셋 추가
+    total_visits = len(df_att) + 500
     
     # 상단 요약 바 (방문자 수 & 날씨)
     c1, c2 = st.columns([1, 1])
@@ -903,8 +935,8 @@ if page.startswith("6-a."):
                 # 🚀 최적화: 백업 생략 (이미 수동 백업 로직이 상단에 있음)
                 safe_write_csv(new_row, ATTENDANCE_FILE, mode='a', header=False, backup=False)
                 
-                # 📡 구글 시트(시트1)와 백그라운드 동기화 (속도 최적화)
-                gsheet_sync_bg("시트1", ["시간", "아이디", "인사", "등급"], [now_kst, st.session_state.current_user, greeting, curr_grade])
+                # 📡 구글 시트 백업 (사용자 요청에 따라 출석체크는 실시간 연동 중단 - 속도 최적화)
+                # gsheet_sync_bg("시트1", ["시간", "아이디", "인사", "등급"], [now_kst, st.session_state.current_user, greeting, curr_grade])
                 
                 st.success("✅ 사령부 명부에 정상 등록되었습니다. 오늘의 전술을 확인하십시오.")
                 st.balloons()
