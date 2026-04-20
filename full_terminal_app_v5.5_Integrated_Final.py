@@ -62,9 +62,9 @@ def get_footer_quote():
 def trigger_ai_chat():
     """AI 대원들이 랜덤하게 소통방에 메시지를 남기는 엔진 (6인 체제)"""
     ai_users = [
-        {"name": "[ AI ] Stella", "grade": "AI_대원"},
-        {"name": "[ AI ] Olive", "grade": "AI_대원"},
-        {"name": "[ AI ] Pure", "grade": "AI_대원"},
+        {"name": "[ AI ] minsu", "grade": "AI_대원 (코스피)"},
+        {"name": "[ AI ] Olive", "grade": "AI_대원 (코스닥)"},
+        {"name": "[ AI ] Pure", "grade": "AI_대원 (나스닥)"},
         {"name": "[ AI ] Harmony", "grade": "AI_대원"},
         {"name": "[ AI ] Mint Soft", "grade": "AI_대원"},
         {"name": "[ AI ] Calm Blue12", "grade": "AI_대원"}
@@ -251,9 +251,9 @@ def get_macro_indicators():
 
 # --- [ AI ] 사령부 AI 정예 요원 (NPC Operatives) 설정 ---
 AI_OPERATIVES = {
-    "DeepDragon-01": {"strategy": "VCP Breakthrough", "risk": "Aggressive", "win_rate": 0.68},
-    "CyberTurtle-Alpha": {"strategy": "Trend Following", "risk": "Balanced", "win_rate": 0.55},
-    "QuantWolf-S": {"strategy": "Mean Reversion", "risk": "Conservative", "win_rate": 0.62}
+    "minsu": {"strategy": "KOSPI Specialist", "risk": "Aggressive", "win_rate": 0.65},
+    "Olive": {"strategy": "KOSDAQ Specialist", "risk": "Balanced", "win_rate": 0.70},
+    "Pure": {"strategy": "NASDAQ Specialist", "risk": "Conservative", "win_rate": 0.75}
 }
 
 @st.cache_data(ttl=300)
@@ -740,35 +740,55 @@ with st.sidebar:
     
     # [NEW] 실시간 작전 대원 상태 (AI 6인방)
     st.markdown("<p style='margin-top:20px; font-weight:bold; font-size:0.8rem; color:#888;'>[ LIVE ] AI OPERATIVES STATUS</p>", unsafe_allow_html=True)
-    ai_team_sidebar = ["[ AI ] Stella", "[ AI ] Olive", "[ AI ] Pure", "[ AI ] Harmony", "[ AI ] Mint Soft", "[ AI ] Calm Blue12"]
+    ai_team_sidebar = [
+        {"name": "[ AI ] minsu", "mission": "KOSPI"}, 
+        {"name": "[ AI ] Olive", "mission": "KOSDAQ"}, 
+        {"name": "[ AI ] Pure", "mission": "NASDAQ"}, 
+        {"name": "[ AI ] Harmony", "mission": "Analyzing"}, 
+        {"name": "[ AI ] Mint Soft", "mission": "Analyzing"}, 
+        {"name": "[ AI ] Calm Blue12", "mission": "Analyzing"}
+    ]
     for ai_s in ai_team_sidebar:
         st.markdown(f"""
         <div style='display: flex; justify-content: space-between; padding: 4px 10px; background: rgba(0,255,255,0.03); border-radius: 5px; margin-bottom: 4px; border-left: 2px solid #00FFFF;'>
-            <span style='font-size: 0.75rem; color: #BBB;'>{ai_s}</span>
-            <span style='color: #00FF00; font-size: 0.6rem;'>● Analyzing</span>
+            <span style='font-size: 0.75rem; color: #BBB;'>{ai_s['name']}</span>
+            <span style='color: #00FF00; font-size: 0.6rem;'>● {ai_s['mission']}</span>
         </div>
         """, unsafe_allow_html=True)
 
     # [NEW] 금주의 우수 요원 랭킹 (전술 지표 포함)
-    with st.expander("[ TOP ] COMMANDER RANKING (WEEKLY)", expanded=False):
+    with st.expander("[ TOP ] COMMANDER RANKING (WEEKLY)", expanded=True):
         ranking_data = [
-            {"name": "[ AI ] Stella", "pts": 126, "win": 78, "pick": "NVDA"},
-            {"name": "[ AI ] Olive", "pts": 112, "win": 72, "pick": "TSLA"},
-            {"name": "[ AI ] Pure", "pts": 98, "win": 65, "pick": "PLTR"}
+            {"name": "[ AI ] minsu", "pts": 1250, "win": 78, "pick": "005930.KS", "entry": 71800, "roi": "+4.2%", "exit": "04/20 14:30"},
+            {"name": "[ AI ] Olive", "pts": 980, "win": 72, "pick": "247540.KQ", "entry": 285000, "roi": "+6.8%", "exit": "04/20 15:15"},
+            {"name": "[ AI ] Pure", "pts": 1120, "win": 65, "pick": "NVDA", "entry": 128.5, "roi": "+12.4%", "exit": "04/19 23:50"}
         ]
         for r_item in ranking_data:
+            roi_color = "#00FF00" if "+" in r_item['roi'] else "#FF4B4B"
+            # [ ACTION ] 한국 주식명 매핑 및 가격 포맷팅 (원 표시)
+            disp_ticker = TICKER_NAME_MAP.get(r_item['pick'], r_item['pick'])
+            is_kr = ".KS" in r_item['pick'] or ".KQ" in r_item['pick']
+            price_fmt = f"{int(r_item['entry']):,} 원" if is_kr else f"${r_item['entry']:,.2f}"
+            
             st.markdown(f"""
-            <div style='margin-bottom: 12px; padding: 10px; background: rgba(255,215,0,0.05); border-radius: 8px; border: 1px solid rgba(255,215,0,0.1);'>
+            <div style='margin-bottom: 15px; padding: 15px; background: rgba(255,215,0,0.03); border-radius: 12px; border: 1px solid rgba(255,215,0,0.1); border-left: 4px solid #FFD700;'>
                 <div style='display: flex; justify-content: space-between;'>
-                    <b style='color: #FFD700;'>{r_item['name']}</b>
-                    <span style='color: #888; font-size: 0.75rem;'>{r_item['pts']}pts</span>
+                    <b style='color: #FFD700; font-size: 1rem;'>{r_item['name']}</b>
+                    <span style='color: #888; font-size: 0.8rem;'>{r_item['pts']:,} pts</span>
                 </div>
-                <div style='margin-top: 5px; font-size: 0.8rem; display: flex; justify-content: space-between;'>
-                    <span style='color: #00FF00;'>Recent: <b>{r_item['pick']}</b></span>
-                    <span style='color: #00FFFF;'>Win rate: {r_item['win']}%</span>
+                <div style='margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.85rem;'>
+                    <span style='color: #555;'>Target: <b style='color: #EEE;'>{disp_ticker}</b></span>
+                    <span style='color: #555;'>Entry: <b style='color: #DDD;'>{price_fmt}</b></span>
+                    <span style='color: #555;'>Return: <b style='color: {roi_color};'>{r_item['roi']}</b></span>
+                    <span style='color: #555;'>Sold: <b style='color: #888;'>{r_item['exit']}</b></span>
+                </div>
+                <div style='margin-top: 8px; text-align: right;'>
+                    <span style='color: #00FFFF; font-size: 0.75rem;'>Win Rate: {r_item['win']}%</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+
 
     # --- [ AUDIO ] 고도화된 전술 BGM 제어판 ---
     st.divider()
@@ -1115,26 +1135,34 @@ if page.startswith("6-a."):
         </div>
         """, unsafe_allow_html=True)
     with c2:
-        # --- [ REAL-TIME WEATHER ] 서울 기온 및 날씨 정보 (API 시뮬레이션) ---
-        # 실제 운영 시 wttr.in 또는 OpenWeatherMap 활용 가능
+        # --- [ REAL-TIME WEATHER ] 지역별 기온 및 습도 정보 (wttr.in 활용) ---
+        locations = {"대한민국": "Seoul", "일본": "Tokyo", "미국": "New York"}
+        
+        # UI 레이아웃 내부에 셀렉트박스 배치 (공간 효율을 위해 소형으로)
+        sel_region = st.selectbox("기상 지역 소환", list(locations.keys()), index=0, label_visibility="collapsed")
+        loc_id = locations[sel_region]
+        
         @st.cache_data(ttl=1800)
-        def get_seoul_live_weather():
+        def get_live_weather(loc):
             try:
-                # wttr.in은 API 키 없이 사용 가능한 경량 기상 서비스
-                resp = requests.get("https://wttr.in/Seoul?format=%t+%C", timeout=3)
+                # %t: 기온, %h: 습도, %C: 상태 / m: 섭씨(Metric) 강제
+                resp = requests.get(f"https://wttr.in/{loc}?format=%t+%h+%C&m", timeout=3)
                 if resp.status_code == 200:
                     return resp.text.strip()
             except: pass
-            return "15°C Clear"
+            return "15°C 50% Clear"
             
-        weather_info = get_seoul_live_weather()
+        weather_info = get_live_weather(loc_id)
+        # 습도 기호(%)가 포함되어 나오므로 그대로 출력
+        
         st.markdown(f"""
-        <div class='glass-card' style='text-align: center; padding: 20px; border: 1px solid #FFD700; border-radius: 15px;'>
-            <h4 style='margin:0; color:#FFD700;'>SEOUL / HQ WEATHER</h4>
-            <span style='font-size: 1.8rem; color: #00FF00; font-weight: 800;'>{weather_info}</span>
+        <div class='glass-card' style='text-align: center; padding: 15px; border: 1px solid #FFD700; border-radius: 15px;'>
+            <h4 style='margin:0; color:#FFD700;'>{sel_region.upper()} / HQ WEATHER</h4>
+            <span style='font-size: 1.6rem; color: #00FF00; font-weight: 800;'>{weather_info}</span>
             <p style='margin:0; color:#888;'>HQ AREA STATUS: OPERATIONAL</p>
         </div>
         """, unsafe_allow_html=True)
+
         
     st.divider()
     
@@ -1390,9 +1418,14 @@ elif page.startswith("6-b."):
     if random.random() < 0.3:
         trigger_ai_chat()
 
-    # 실시간 활동 토스트 알림 (한산함 방지용 시뮬레이션)
-    if random.random() < 0.05:
-        st.toast(f"[ HQ ] {random.choice(['Stella', 'Olive', 'Pure', 'Harmony'])} 요원이 새로운 전술을 분석 중입니다.")
+    # 실시간 활동 토스트 알림 (누가 무엇을 하는지 구체화)
+    if random.random() < 0.1:
+        names = ["minsu", "Olive", "Pure", "Harmony"]
+        tickers = ["NVDA", "TSLA", "005930.KS", "247540.KQ", "PLTR"]
+        acts = ["정밀 스캐닝", "매수 타점 포착", "수급 분석", "데이터 동기화"]
+        raw_tick = random.choice(tickers)
+        disp_tick = TICKER_NAME_MAP.get(raw_tick, raw_tick)
+        st.toast(f"📡 [ ACTION ] [ AI ] {random.choice(names)} 요원이 {disp_tick} {random.choice(acts)} 중입니다!", icon="⚔️")
 
     # 1. 메시지 입력 구역
     with st.container():
@@ -2732,8 +2765,9 @@ elif page.startswith("7-a."):
                         }
                         trades["mock"].append(new_trade)
                         save_trades(trades)
-                        price_display = f"{curr_p_raw:,.0f}원" if is_kr_stock else f"{curr_p_raw:,.2f}$"
-                        st.success(f"[ SUCCESS ] {ticker} 종목 {amount}주를 {price_display}에 매수 완료했습니다! (총 {total_cost_krw:,.0f} KRW 차감)")
+                        price_display = f"{int(curr_p_raw):,} 원" if is_kr_stock else f"{curr_p_raw:,.2f}$"
+                        disp_name = TICKER_NAME_MAP.get(ticker, ticker)
+                        st.success(f"[ SUCCESS ] {disp_name} 종목 {amount}주를 {price_display}에 매수 완료했습니다! (총 {total_cost_krw:,.0f} KRW 차감)")
                         st.balloons()
                         time.sleep(1)
                         st.rerun()
@@ -3282,7 +3316,7 @@ elif page.startswith("7-f."):
             
             # [ AI ] 요원의 실시간 필드 리포트
             st.markdown("---")
-            top_ai = list(AI_OPERATIVES.keys())[0]
+            top_ai = f"[ AI ] {list(AI_OPERATIVES.keys())[0]}"
             sentiment_score, _ = get_market_sentiment_score()
             st.markdown(f"""
             <div class='glass-card' style='border-top: 3px solid #00FFFF; background: rgba(0,255,255,0.02);'>
