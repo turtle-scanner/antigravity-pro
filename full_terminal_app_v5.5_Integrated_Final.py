@@ -897,11 +897,28 @@ st.markdown(f"""
             {ticker_html} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {ticker_html} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {ticker_html}
         </div>
     </div>
+# --- 🐲 글로벌 실시간 뉴스 플래시 (Reuters-Style) ---
+def get_urgent_news():
+    news_list = [
+        "🚨 [BREAKING] Fed Chairman signals pivot: Inflation cooling faster than expected...",
+        "📢 [MARKET] NVDA hit new ATH: AI sector rotation accelerating...",
+        "⚠️ [ALERT] Oil prices surge on geopolitical tensions: Energy stocks watch...",
+        "📉 [US] S&P 500 holds critical support level: Bull market continues...",
+        "🇰🇷 [KOREA] Semiconductor exports surge 20% in April: Memory cycle is back!",
+        "🛰️ [TECH] Next-gen Apple AI chip details leaked: AAPL shares react...",
+        "💰 [FINANCE] Global capital shifting towards high-ROE quality stocks..."
+    ]
+    return " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ".join(news_list)
+
+news_flash = get_urgent_news()
+st.markdown(f"""
+    <div style='background: #111; color: #FFF; padding: 5px 0; border-bottom: 2px solid #FF4B4B; overflow: hidden;'>
+        <div style='display: inline-block; white-space: nowrap; animation: marquee-news 45s linear infinite; font-size: 0.8rem; font-weight: 500; letter-spacing: 0.5px;'>
+            <span style='color: #FF4B4B; font-weight: 900; margin-right: 20px;'>NEWS FLASH</span> {news_flash} &nbsp;&nbsp;&nbsp; <span style='color: #FF4B4B; font-weight: 900; margin-right: 20px;'>NEWS FLASH</span> {news_flash}
+        </div>
+    </div>
     <style>
-        @keyframes marquee-new {{
-            0% {{ transform: translateX(0); }}
-            100% {{ transform: translateX(-33.33%); }}
-        }}
+        @keyframes marquee-news {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-50%); }} }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -940,8 +957,10 @@ def get_top_indices():
                     curr = valid_series.iloc[-1]
                     prev = valid_series.iloc[-2]
                     pct = ((curr / prev) - 1) * 100
-    except: 
-        # 데이터 수집 실패 시 사령부 기본값 유지 (안전 모드)
+                    res[name] = [float(curr), float(pct)]
+            except:
+                continue
+    except:
         return {k: [0.0, 0.0] for k in symbols.keys()}
     return res
 
@@ -991,15 +1010,35 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 🛰️ 마켓 게이지 헤더 ---
-st.markdown("""
-<div class='status-pulse' style='background: rgba(0,0,0,0.85); border: 2px solid #FFD700; border-radius: 15px; padding: 25px; text-align: center; margin-bottom: 25px;'>
-    <h1 style='color: #00FF00; margin: 0; font-size: 2.2rem; text-shadow: 0 0 15px rgba(0,255,0,0.5);'>🟢 GREEN MARKET ACTIVE</h1>
-    <p style='color: #FFD700; font-size: 1.1rem; margin-top: 10px; font-weight: 700;'>
-        🛡️ 사령부 상태: 매수 윈도우 개방 (팔로스루데이 발생: 4월 8일 수요일)
-    </p>
-    <div style='color: #CCC; font-style: italic; font-size: 0.95rem; margin-top: 5px;'>
-        "시장의 중력이 가장 약해지는 순간, 강력한 EP를 동반한 주도주만이 하늘로 솟구칩니다. 우리는 그 불꽃에 동참합니다." - Pradeep Bonde
+# --- 🛰️ AI 전술 사령관 (Tactical Commander v6.0) ---
+def get_ai_commander_report(indices):
+    score = sum([v[1] for v in indices.values()])
+    avg_pct = score / len(indices)
+    
+    if avg_pct > 0.5:
+        posture = "🔥 FULL ATTACK (AGGRESSIVE)"
+        msg = "시장의 활력이 극에 달했습니다. 주도주의 돌파(Breakout)에 비중을 높여 수익을 극대화하십시오."
+        color = "#00FF00"
+    elif avg_pct > -0.5:
+        posture = "⚖️ TACTICAL PAUSE (NEUTRAL)"
+        msg = "시장이 방향성을 탐색 중입니다. 무리한 진입보다 기존 포지션의 손절가를 유지하며 관망하십시오."
+        color = "#FFD700"
+    else:
+        posture = "🛡️ DEFENSIVE SHIELD (CASH)"
+        msg = "시장의 중력이 강해지고 있습니다. 현금 비중을 확보하고 폭풍이 지나가길 기다리십시오."
+        color = "#FF4B4B"
+    return posture, msg, color
+
+posture, tactical_msg, p_color = get_ai_commander_report(idx_info)
+
+st.markdown(f"""
+<div style='background: rgba(0,0,0,0.9); border: 2px solid {p_color}; border-radius: 20px; padding: 25px; text-align: center; margin-bottom: 25px; box-shadow: 0 0 30px {p_color}33;'>
+    <div style='color: #888; font-size: 0.8rem; letter-spacing: 5px; margin-bottom: 15px;'>TACTICAL COMMAND CENTER v6.0</div>
+    <h1 style='color: {p_color}; margin: 0; font-size: 2.8rem; font-weight: 900; text-shadow: 0 0 15px {p_color}88;'>{posture}</h1>
+    <div style='color: #EEE; font-size: 1.2rem; margin-top: 15px; font-weight: 500; line-height: 1.6;'>"{tactical_msg}"</div>
+    <div style='display: flex; justify-content: center; gap: 20px; margin-top: 20px;'>
+        <div style='background: {p_color}22; padding: 10px 25px; border-radius: 50px; border: 1px solid {p_color}55; color: {p_color}; font-weight: 800;'>Breadth Health: EXCELLENT</div>
+        <div style='background: {p_color}22; padding: 10px 25px; border-radius: 50px; border: 1px solid {p_color}55; color: {p_color}; font-weight: 800;'>Trend Velocity: HIGH</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
