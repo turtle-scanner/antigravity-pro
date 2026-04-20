@@ -59,8 +59,17 @@ def get_footer_quote():
     ]
     return random.choice(quotes)
 
+@st.cache_resource
+def get_ai_chat_cooldown():
+    """AI 채팅 범람 방지를 위한 전역 타이머 관리"""
+    return {"last_time": 0}
+
 def trigger_ai_chat():
     """AI 대원들이 랜덤하게 소통방에 메시지를 남기는 엔진 (6인 체제)"""
+    # [ OPTIMIZE ] 전역 코울다운 체크 (15초 내 중복 발송 차단)
+    cd = get_ai_chat_cooldown()
+    if time.time() - cd["last_time"] < 15: return False
+    
     ai_users = [
         {"name": "[ AI ] minsu", "grade": "AI_대원 (코스피)"},
         {"name": "[ AI ] Olive", "grade": "AI_대원 (코스닥)"},
@@ -88,6 +97,7 @@ def trigger_ai_chat():
         # 로컬 저장
         new_msg = pd.DataFrame([[now_kst, ai["name"], ms, ai["grade"]]], columns=["시간", "유저", "내용", "등급"])
         safe_write_csv(new_msg, CHAT_FILE, mode='a', header=not os.path.exists(CHAT_FILE))
+        cd["last_time"] = time.time() # 시간 갱신
         return True
     except: return False
 
@@ -192,7 +202,8 @@ TICKER_NAME_MAP = {
     "000660.KS": "SK하이닉스", "196170.KQ": "알테오젠", "042700.KS": "한미반도체", "105560.KS": "KB금융", "055550.KS": "신한지주",
     "005490.KS": "POSCO홀딩스", "000270.KS": "기아", "066570.KS": "LG전자", "035720.KS": "카카오", "035420.KS": "NAVER",
     "005380.KS": "현대차", "000810.KS": "삼성화재", "NFLX": "넷플릭스", "MSTR": "마이크로스트래티지", "COIN": "코인베이스", 
-    "MARA": "마라톤디지털", "PANW": "팔로알토", "SNOW": "스노우플레이크", "STX": "씨게이트", "WDC": "웨스턴디지털"
+    "MARA": "마라톤디지털", "PANW": "팔로알토", "SNOW": "스노우플레이크", "STX": "씨게이트", "WDC": "웨스턴디지털",
+    "247540.KQ": "에코프로비엠", "277810.KQ": "에코프로", "091990.KQ": "셀트리온헬스케어", "293490.KQ": "카카오게임즈", "086520.KQ": "에코프로"
 }
 
 REVERSE_TICKER_MAP = {v: k for k, v in TICKER_NAME_MAP.items()}
@@ -253,7 +264,10 @@ def get_macro_indicators():
 AI_OPERATIVES = {
     "minsu": {"strategy": "KOSPI Specialist", "risk": "Aggressive", "win_rate": 0.65},
     "Olive": {"strategy": "KOSDAQ Specialist", "risk": "Balanced", "win_rate": 0.70},
-    "Pure": {"strategy": "NASDAQ Specialist", "risk": "Conservative", "win_rate": 0.75}
+    "Pure": {"strategy": "NASDAQ Specialist", "risk": "Conservative", "win_rate": 0.75},
+    "Harmony": {"strategy": "Sector Rotation", "risk": "Balanced", "win_rate": 0.58},
+    "Mint Soft": {"strategy": "Contrarian", "risk": "Conservative", "win_rate": 0.62},
+    "Calm Blue12": {"strategy": "Macro Trend", "risk": "Aggressive", "win_rate": 0.60}
 }
 
 @st.cache_data(ttl=300)
@@ -449,6 +463,22 @@ st.markdown("""
             border-color: rgba(255, 215, 0, 0.4) !important;
             box-shadow: 0 15px 45px rgba(0,0,0,0.7);
         }
+
+        /* [ ACTION ] 택티컬 플래시 (매수 성공 시 반짝임 효과) */
+        @keyframes tactical-flash {
+            0% { opacity: 0; }
+            30% { opacity: 0.8; box-shadow: inset 0 0 150px rgba(0, 255, 0, 0.4); }
+            100% { opacity: 0; }
+        }
+        .flash-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            pointer-events: none;
+            border: 25px solid #00FF00;
+            z-index: 999999;
+            animation: tactical-flash 1.2s ease-out forwards;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -488,6 +518,11 @@ def gsheet_sync(sheet_name, headers, values):
 def gsheet_sync_bg(sheet_name, headers, values):
     """구글 시트 동기화를 백그라운드 스레드에서 실행하여 UI 멈춤 방지"""
     threading.Thread(target=gsheet_sync, args=(sheet_name, headers, values), daemon=True).start()
+
+# --- [ GLOBAL TRIGGER ] 택티컬 플래시 알림 렌더러 ---
+if st.session_state.get("show_flash"):
+    st.markdown("<div class='flash-overlay'></div>", unsafe_allow_html=True)
+    st.session_state.show_flash = False
 
 st.set_page_config(page_title="StockDragonfly Pro", page_icon="[ TERMINAL ]", layout="wide")
 
@@ -738,6 +773,22 @@ with st.sidebar:
         st.image("StockDragonfly.png")
     st.markdown("<div style='text-align: center;'><p style='color:#00FF00; font-size:1.5rem; font-weight:900; margin-bottom:0;'>[ SYSTEM ] StockDragonfly v9.9</p><small style='color:#666;'>ELITE TRADING TERMINAL</small></div>", unsafe_allow_html=True)
     
+    # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge)
+    sentiment_score, _ = get_market_sentiment_score()
+    s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
+    st.markdown(f"""
+    <div class='glass-card' style='padding: 15px; margin-bottom: 20px; border-top: 3px solid {s_color};'>
+        <p style='color: #888; font-size: 0.75rem; margin-bottom: 5px;'>[ MARKET SENTIMENT ]</p>
+        <div style='display: flex; align-items: center; justify-content: space-between;'>
+            <span style='color: {s_color}; font-weight: 800; font-size: 1.2rem;'>{sentiment_score} pts</span>
+            <span style='font-size: 0.75rem; color: #555;'>{'FEAR' if sentiment_score < 40 else ('NEUTRAL' if sentiment_score < 65 else 'GREED')}</span>
+        </div>
+        <div style='width: 100%; height: 4px; background: #222; border-radius: 2px; margin-top: 10px;'>
+            <div style='width: {sentiment_score}%; height: 100%; background: {s_color}; border-radius: 2px; box-shadow: 0 0 10px {s_color};'></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     # [NEW] 실시간 작전 대원 상태 (AI 6인방)
     st.markdown("<p style='margin-top:20px; font-weight:bold; font-size:0.8rem; color:#888;'>[ LIVE ] AI OPERATIVES STATUS</p>", unsafe_allow_html=True)
     ai_team_sidebar = [
@@ -759,16 +810,19 @@ with st.sidebar:
     # [NEW] 금주의 우수 요원 랭킹 (전술 지표 포함)
     with st.expander("[ TOP ] COMMANDER RANKING (WEEKLY)", expanded=True):
         ranking_data = [
-            {"name": "[ AI ] minsu", "pts": 1250, "win": 78, "pick": "005930.KS", "entry": 71800, "roi": "+4.2%", "exit": "04/20 14:30"},
-            {"name": "[ AI ] Olive", "pts": 980, "win": 72, "pick": "247540.KQ", "entry": 285000, "roi": "+6.8%", "exit": "04/20 15:15"},
-            {"name": "[ AI ] Pure", "pts": 1120, "win": 65, "pick": "NVDA", "entry": 128.5, "roi": "+12.4%", "exit": "04/19 23:50"}
+            {"name": "[ AI ] minsu", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"},
+            {"name": "[ AI ] Olive", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"},
+            {"name": "[ AI ] Pure", "pts": 1120, "win": 65, "balance": 11450000, "pick": "NVDA", "entry": 128.5, "exit_p": 144.5, "roi": "+12.4%", "exit": "04/19 23:50"}
         ]
         for r_item in ranking_data:
             roi_color = "#00FF00" if "+" in r_item['roi'] else "#FF4B4B"
-            # [ ACTION ] 한국 주식명 매핑 및 가격 포맷팅 (원 표시)
+            # [ ACTION ] 한국 주식명 매팅 및 가격 포맷팅 (원 표시)
             disp_ticker = TICKER_NAME_MAP.get(r_item['pick'], r_item['pick'])
             is_kr = ".KS" in r_item['pick'] or ".KQ" in r_item['pick']
-            price_fmt = f"{int(r_item['entry']):,} 원" if is_kr else f"${r_item['entry']:,.2f}"
+            
+            # 진입가/판매가 포맷
+            in_p = f"{int(r_item['entry']):,} 원" if is_kr else f"${r_item['entry']:,.1f}"
+            out_p = f"{int(r_item['exit_p']):,} 원" if is_kr else f"${r_item['exit_p']:,.1f}"
             
             st.markdown(f"""
             <div style='margin-bottom: 15px; padding: 15px; background: rgba(255,215,0,0.03); border-radius: 12px; border: 1px solid rgba(255,215,0,0.1); border-left: 4px solid #FFD700;'>
@@ -776,14 +830,16 @@ with st.sidebar:
                     <b style='color: #FFD700; font-size: 1rem;'>{r_item['name']}</b>
                     <span style='color: #888; font-size: 0.8rem;'>{r_item['pts']:,} pts</span>
                 </div>
-                <div style='margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.85rem;'>
-                    <span style='color: #555;'>Target: <b style='color: #EEE;'>{disp_ticker}</b></span>
-                    <span style='color: #555;'>Entry: <b style='color: #DDD;'>{price_fmt}</b></span>
-                    <span style='color: #555;'>Return: <b style='color: {roi_color};'>{r_item['roi']}</b></span>
-                    <span style='color: #555;'>Sold: <b style='color: #888;'>{r_item['exit']}</b></span>
+                <div style='margin-top: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;'>
+                    <span style='color: #00FF00; font-size: 0.9rem; font-weight: 800;'>보유자산: {r_item['balance']:,} 원</span>
                 </div>
-                <div style='margin-top: 8px; text-align: right;'>
-                    <span style='color: #00FFFF; font-size: 0.75rem;'>Win Rate: {r_item['win']}%</span>
+                <div style='margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem;'>
+                    <span style='color: #555; white-space: nowrap;'>대상: <b style='color: #EEE;'>{disp_ticker}</b></span>
+                    <span style='color: #555; white-space: nowrap;'>승률: <b style='color: #00FFFF;'>{r_item['win']}%</b></span>
+                    <span style='color: #555; white-space: nowrap;'>진입가: <b style='color: #DDD;'>{in_p}</b></span>
+                    <span style='color: #555; white-space: nowrap;'>판매가: <b style='color: #DDD;'>{out_p}</b></span>
+                    <span style='color: #555; white-space: nowrap;'>수익률: <b style='color: {roi_color};'>{r_item['roi']}</b></span>
+                    <span style='color: #555; white-space: nowrap;'>판매시점: <b style='color: #888;'>{r_item['exit']}</b></span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -840,6 +896,16 @@ with st.sidebar:
                     audio.volume = {vol_v9};
                 </script>
             """, height=0)
+
+    # --- [ GLOBAL ] 실시간 AI 요원 매매 상황 중계 (전역 팝업 알림) ---
+    if st.session_state.get("password_correct") and random.random() < 0.05:
+        names = ["minsu", "Olive", "Pure", "Harmony"]
+        tickers = ["NVDA", "TSLA", "005930.KS", "247540.KQ", "PLTR", "AAPL", "MSTR"]
+        op = random.choice(names)
+        ti = random.choice(tickers)
+        d_name = TICKER_NAME_MAP.get(ti, ti)
+        st.session_state.show_flash = True
+        st.toast(f"📡 [ AI LIVE ] [ AI ] {op} 요원이 {d_name} 종목 실시간 돌파 매수 지점 포착 및 집행!", icon="⚔️")
 
 # --- 유저 등급 판독 ---
 users = load_users()
@@ -961,11 +1027,27 @@ if "gs_error" in st.session_state and st.session_state["gs_error"]:
 st.markdown(f"""
 <div style='background: linear-gradient(90deg, rgba(255,215,0,0.05), rgba(0,0,0,0.9)); border-left: 5px solid #FFD700; padding: 10px 20px; margin-bottom: 15px; border-top-right-radius: 15px;'>
     <div style='display: flex; align-items: center; gap: 15px;'>
-        <div style='width: 10px; height: 10px; background: #00FF00; border-radius: 50%; animation: pulse-glow 1.5s infinite;'></div>
-        <b style='color: #FFD700; letter-spacing: 2px; font-size: 0.9rem;'>TACTICAL OPS CENTER ACTIVE</b>
+# [ ACTION ] 하트비트 애니메이션 및 마키 고도화
+macro_str = get_macro_indicators() # 환율/금리 포함
+st.markdown(f"""
+<style>
+@keyframes pulse-heart {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.2); opacity: 0.7; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.ops-active-dot {{
+    width: 10px; height: 10px; background: #00FF00; border-radius: 50%;
+    animation: pulse-heart 1.2s infinite; box-shadow: 0 0 10px #00FF00;
+}}
+</style>
+<div style='background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05);'>
+    <div style='display: flex; align-items: center; gap: 15px;'>
+        <div class='ops-active-dot'></div>
+        <b style='color: #FFD700; letter-spacing: 2px; font-size: 0.9rem; white-space: nowrap;'>TACTICAL OPS CENTER ACTIVE</b>
         <span style='color: #555;'>|</span>
-        <marquee scrollamount='4' style='color: #00FF00; font-size: 0.85rem; font-family: monospace;'>
-            [BREAKING] NVDA VCP Phase 3 Detection complete... [MARKET] KOSPI Relative Strength Improving... [ALERT] Watch Episode Pivot on high-volume symbols... 
+        <marquee scrollamount='5' style='color: #00FF00; font-size: 0.85rem; font-family: monospace;'>
+            {macro_str} &nbsp;&nbsp;&nbsp; [BREAKING] NVDA VCP Phase 3 Detection... &nbsp;&nbsp; [HQ] minsu 요원 코스피 주도 수급 분석 중... &nbsp;&nbsp; [ALERT] RS 상위 10% 종목 실시간 응축 확인...
         </marquee>
     </div>
 </div>
@@ -977,22 +1059,27 @@ now_us = datetime.now(pytz.timezone('America/New_York'))
 
 @st.cache_data(ttl=600)
 def get_top_indices():
-    res = {"DOW": [0.0, 0.0], "S&P500": [0.0, 0.0], "NASDAQ": [0.0, 0.0], "KOSPI": [0.0, 0.0], "KOSDAQ": [0.0, 0.0]}
+    # [ PRO ] 고가/저가 정보를 포함한 정밀 데이터 페칭
+    res = {"DOW": [0.0, 0.0, 0.0, 0.0], "S&P500": [0.0, 0.0, 0.0, 0.0], "NASDAQ": [0.0, 0.0, 0.0, 0.0], "KOSPI": [0.0, 0.0, 0.0, 0.0], "KOSDAQ": [0.0, 0.0, 0.0, 0.0]}
     symbols = {"DOW": "^DJI", "S&P500": "^GSPC", "NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
     try:
-        data = yf.download(list(symbols.values()), period="7d", progress=False)['Close']
+        data = yf.download(list(symbols.values()), period="5d", progress=False)
+        close_data = data['Close']
+        high_data = data['High']
+        low_data = data['Low']
+        
         for name, ticker in symbols.items():
             try:
-                valid_series = data[ticker].dropna()
-                if len(valid_series) >= 2:
-                    curr = valid_series.iloc[-1]
-                    prev = valid_series.iloc[-2]
+                c_series = close_data[ticker].dropna()
+                if len(c_series) >= 2:
+                    curr = c_series.iloc[-1]
+                    prev = c_series.iloc[-2]
                     pct = ((curr / prev) - 1) * 100
-                    res[name] = [float(curr), float(pct)]
-            except:
-                continue
-    except:
-        return {k: [0.0, 0.0] for k in symbols.keys()}
+                    h_val = float(high_data[ticker].dropna().iloc[-1])
+                    l_val = float(low_data[ticker].dropna().iloc[-1])
+                    res[name] = [float(curr), float(pct), h_val, l_val]
+            except: continue
+    except: pass
     return res
 
 idx_info = get_top_indices()
@@ -1007,9 +1094,9 @@ with st.container():
     cols = st.columns(5)
     
     for i, name in enumerate(indices_list):
-        val, pct = idx_info.get(name, [0.0, 0.0])
+        # [ PRO ] 확장된 매크로 데이터 추출
+        val, pct, high, low = idx_info.get(name, [0.0, 0.0, 0.0, 0.0])
         with cols[i]:
-            # [ ACTION ] 시간 레이블 출력 (DOW와 KOSPI 기준)
             if name == "DOW":
                 st.markdown(f"<p style='font-size: 0.7rem; color: #888; margin-bottom: 5px;'>[ USA ] {now_us.strftime('%m/%d %H:%M')}</p>", unsafe_allow_html=True)
             elif name == "KOSPI":
@@ -1017,25 +1104,20 @@ with st.container():
             else:
                 st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
                 
-            # [ ACTION ] 모든 지수 스타일 통일
             is_kr = name in ["KOSPI", "KOSDAQ"]
             theme_color = "#FF4B4B" if is_kr else "#00FF00"
-            border_alpha = "44" if is_kr else "11"
-            bg_alpha = "0.05" if is_kr else "0.02"
+            stat_color = theme_color if pct >= 0 else ("#0088FF" if is_kr else "#FF4B4B")
+            arrow = ("▲" if is_kr else "↑") if pct >= 0 else ("▼" if is_kr else "↓")
             
-            # 상승/하락 색상 결정
-            if is_kr:
-                stat_color = "#FF4B4B" if pct >= 0 else "#0088FF"
-                arrow = "▲" if pct >= 0 else "▼"
-            else:
-                stat_color = "#00FF00" if pct >= 0 else "#FF4B4B"
-                arrow = "↑" if pct >= 0 else "↓"
-                
             st.markdown(f"""
-                <div style='background: rgba({ "255,75,75" if is_kr else "255,255,255" },{bg_alpha}); padding: 12px; border-radius: 12px; border: 1px solid {theme_color}{border_alpha}; text-align: center; height: 120px; transition: all 0.3s;'>
-                    <div style='color: {theme_color}; font-weight: 800; font-size: 0.8rem; margin-bottom: 8px; opacity: 0.8;'>{name}</div>
-                    <div style='color: #FFF; font-size: 1.4rem; font-weight: 700; letter-spacing: -0.5px;'>{val:,.1f}</div>
-                    <div style='color: {stat_color}; font-size: 0.9rem; font-weight: 800; margin-top: 5px;'>{arrow} {pct:+.2f}%</div>
+                <div style='background: rgba(15,15,25,0.8); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); border-top: 2px solid {theme_color}; text-align: left; height: 140px;'>
+                    <div style='color: {theme_color}; font-weight: 800; font-size: 0.75rem; margin-bottom: 5px; opacity: 0.6;'>{name}</div>
+                    <div style='color: #FFF; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.5px;'>{val:,.1f}</div>
+                    <div style='color: {stat_color}; font-size: 0.85rem; font-weight: 800; margin-top: 2px;'>{arrow} {pct:+.2f}%</div>
+                    <div style='margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 5px; display: flex; justify-content: space-between; font-size: 0.65rem; color: #666;'>
+                        <span>H: <b style='color:#999;'>{high:,.1f}</b></span>
+                        <span>L: <b style='color:#999;'>{low:,.1f}</b></span>
+                    </div>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -1148,18 +1230,30 @@ if page.startswith("6-a."):
                 # %t: 기온, %h: 습도, %C: 상태 / m: 섭씨(Metric) 강제
                 resp = requests.get(f"https://wttr.in/{loc}?format=%t+%h+%C&m", timeout=3)
                 if resp.status_code == 200:
-                    return resp.text.strip()
+                    # [ SECURE ] 인코딩 깨짐 방지를 위한 명시적 디코딩 및 정제
+                    raw_text = resp.content.decode('utf-8').strip()
+                    # 깨진 문자(Â)가 포함될 경우 제거
+                    clean_text = raw_text.replace('Â', '')
+                    return clean_text
             except: pass
             return "15°C 50% Clear"
             
         weather_info = get_live_weather(loc_id)
-        # 습도 기호(%)가 포함되어 나오므로 그대로 출력
+        # 데이터 정밀 파싱 (공백 기준 분리: 기온, 습도, 날씨상태 순)
+        w_parts = weather_info.split()
+        temp_val = w_parts[0] if len(w_parts) > 0 else "N/A"
+        hum_val = w_parts[1] if len(w_parts) > 1 else "0%"
+        cond_val = " ".join(w_parts[2:]) if len(w_parts) > 2 else ""
         
         st.markdown(f"""
         <div class='glass-card' style='text-align: center; padding: 15px; border: 1px solid #FFD700; border-radius: 15px;'>
             <h4 style='margin:0; color:#FFD700;'>{sel_region.upper()} / HQ WEATHER</h4>
-            <span style='font-size: 1.6rem; color: #00FF00; font-weight: 800;'>{weather_info}</span>
-            <p style='margin:0; color:#888;'>HQ AREA STATUS: OPERATIONAL</p>
+            <div style='margin-top:10px;'>
+                <span style='font-size: 1.4rem; color: #00FF00; font-weight: 800;'>온도: {temp_val}</span>
+                <span style='font-size: 1.2rem; color: #888; margin: 0 10px;'>|</span>
+                <span style='font-size: 1.4rem; color: #00FFFF; font-weight: 800;'>습도: {hum_val}</span>
+            </div>
+            <p style='margin:5px 0 0 0; color:#AAA; font-size: 0.85rem;'>[ {cond_val} ] HQ AREA OPERATIONAL</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -2767,6 +2861,9 @@ elif page.startswith("7-a."):
                         save_trades(trades)
                         price_display = f"{int(curr_p_raw):,} 원" if is_kr_stock else f"{curr_p_raw:,.2f}$"
                         disp_name = TICKER_NAME_MAP.get(ticker, ticker)
+                        # [ ALERT ] 실시간 매매 팝업 알림 (인간 유저)
+                        st.session_state.show_flash = True
+                        st.toast(f"📢 [ TRADE ] {st.session_state.current_user} 요원이 {disp_name} 종목을 {price_display}에 매수 집행했습니다!", icon="💰")
                         st.success(f"[ SUCCESS ] {disp_name} 종목 {amount}주를 {price_display}에 매수 완료했습니다! (총 {total_cost_krw:,.0f} KRW 차감)")
                         st.balloons()
                         time.sleep(1)
