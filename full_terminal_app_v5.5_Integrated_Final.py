@@ -97,26 +97,22 @@ def get_db_path(f): return os.path.join(BASE_DIR, f)
 
 BACKUP_DIR = get_db_path("backups")
 
-def auto_backup(file_path, force=False):
+def auto_backup(file_path, force=True):
     if not os.path.exists(file_path): return
     try:
-        # 파일이 너무 자주 백업되는 것을 방지 (1시간당 1회 정도로 제한하거나 수동 강제시에만 실행)
         fname = os.path.basename(file_path)
         os.makedirs(BACKUP_DIR, exist_ok=True)
         
-        # 고빈도 로그 파일은 강제(force) 옵션이 없으면 백업 건너뜀 (성능 최적화)
-        if not force and fname in ["attendance.csv", "chat_log.csv", "shared_comments.csv"]:
-            return
-
+        # 🛡️ 전문가님 요청: 중요 파일들은 항상 백업 생성 (강제성 부여)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_path = os.path.join(BACKUP_DIR, f"{fname}_{timestamp}.bak")
         shutil.copy2(file_path, backup_path)
         
-        # ⚠️ 성능 최적화: 파일 목록 조회를 매번 하지 않고 확률적으로 수행 (10% 확률)
-        if random.random() < 0.1:
+        # 백업 파일 개수 관리 (최근 50개 유지로 확장)
+        if random.random() < 0.2:
             all_backups = sorted([os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.startswith(fname)], key=os.path.getmtime)
-            if len(all_backups) > 30:
-                for old_f in all_backups[:-30]: os.remove(old_f)
+            if len(all_backups) > 50:
+                for old_f in all_backups[:-50]: os.remove(old_f)
     except: pass
 
 USER_DB_FILE = get_db_path("users_db.json")
@@ -148,27 +144,25 @@ def safe_read_csv(file_path, columns=None):
         st.warning(f"⚠️ 데이터 파일([.csv]) 읽기 시도 중 지연이 발생하고 있습니다. 잠시 후 자동 복구됩니다. ({os.path.basename(file_path)})")
         return pd.DataFrame(columns=columns) if columns else pd.DataFrame()
 
-def safe_write_csv(df, file_path, mode='w', header=True, backup=False):
+def safe_write_csv(df, file_path, mode='w', header=True, backup=True):
     try:
-        if backup and os.path.exists(file_path): auto_backup(file_path)
+        if backup and os.path.exists(file_path): auto_backup(file_path, force=True)
         os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
         
+        # 영구 보존을 위한 원자적 쓰기 강화
+        temp_path = file_path + ".tmp"
         if mode == 'a' and os.path.exists(file_path):
-            header = False
-            df.to_csv(file_path, index=False, encoding='utf-8-sig', mode=mode, header=header)
+            df.to_csv(file_path, index=False, encoding='utf-8-sig', mode=mode, header=False)
         else:
-            # 원자적 쓰기 (Atomic Write): 임시 파일에 쓰고 교체
-            temp_path = file_path + ".tmp"
-            df.to_csv(temp_path, index=False, encoding='utf-8-sig', mode=mode, header=header)
+            df.to_csv(temp_path, index=False, encoding='utf-8-sig', mode='w', header=header)
             os.replace(temp_path, file_path)
         return True
     except: return False
 
-def safe_save_json(data, file_path):
+def safe_save_json(data, file_path, backup=True):
     try:
-        if os.path.exists(file_path): auto_backup(file_path)
+        if backup and os.path.exists(file_path): auto_backup(file_path, force=True)
         os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
-        # 원자적 쓰기 (Atomic Write)
         temp_path = file_path + ".tmp"
         with open(temp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
@@ -1554,11 +1548,10 @@ elif page.startswith("4-b."):
 elif page.startswith("2-a."):
     st.header("📈 데일리 마켓 트렌드 브리핑 (Daily Briefing)")
     st.divider()
-    # 브리핑 전용 데이터 로드 (전역 BRIEF_FILE 사용)
+    
     if not os.path.exists(BRIEF_FILE):
         pd.DataFrame(columns=["날짜", "작성자", "내용"]).to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
     
-    # 관리자 입력창 (더욱 직관적으로 변경)
     if is_admin:
         st.markdown(f"<div style='background: rgba(255,215,0,0.1); padding: 15px; border-radius: 12px; border: 1px solid #FFD700; margin-bottom: 20px;'><b>👑 {curr_grade} 전용 - 데일리 마켓 브리핑 센터</b></div>", unsafe_allow_html=True)
         with st.form("brief_form", clear_on_submit=True):
@@ -1574,12 +1567,11 @@ elif page.startswith("2-a."):
 
     st.divider()
 
-    # 브리핑 목록 표시 (페이지네이션 적용)
     try:
         df_b = pd.read_csv(BRIEF_FILE, encoding="utf-8-sig")
         if not df_b.empty:
-            df_b = df_b.iloc[::-1] # 최신순
-            ppp = 5 # Posts Per Page
+            df_b = df_b.iloc[::-1]
+            ppp = 5
             total_p = (len(df_b) - 1) // ppp + 1
             
             c1, c2 = st.columns([8, 2])
@@ -1590,53 +1582,37 @@ elif page.startswith("2-a."):
             end_idx = start_idx + ppp
             
             for idx, row in df_b.iloc[start_idx:end_idx].iterrows():
-                # 수정 모드 체크
                 is_editing = (st.session_state.get("edit_brief_id") == idx)
-                
                 if is_editing:
                     st.markdown(f"<div class='glass-card' style='border-color: #FFD700;'>", unsafe_allow_html=True)
-                    st.markdown(f"**📝 브리핑 수정 중 (ID: {idx})**")
                     edited_content = st.text_area("내용 편집", value=row['내용'], key=f"edit_text_{idx}", height=250)
                     c_s1, c_s2 = st.columns(2)
-                    if c_s1.button("💾 변경사항 저장", key=f"save_brief_{idx}", use_container_width=True):
+                    if c_s1.button("💾 저장", key=f"save_brief_{idx}"):
                         temp_df = pd.read_csv(BRIEF_FILE, encoding="utf-8-sig")
                         temp_df.at[idx, '내용'] = edited_content
                         temp_df.to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
-                        st.success("✅ 브리핑이 성공적으로 수정되었습니다.")
-                        del st.session_state["edit_brief_id"]
-                        st.rerun()
-                    if c_s2.button("❌ 수정 취소", key=f"cancel_brief_{idx}", use_container_width=True):
-                        del st.session_state["edit_brief_id"]
-                        st.rerun()
+                        del st.session_state["edit_brief_id"]; st.rerun()
+                    if c_s2.button("❌ 취소", key=f"cancel_brief_{idx}"):
+                        del st.session_state["edit_brief_id"]; st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div class='glass-card' style='padding: 20px; border-left: 5px solid #FFD700; margin-bottom: 10px;'>
+                    <div class='glass-card' style='padding: 20px; border-left: 5px solid #FFD700;'>
                         <span style='color: #FFD700; font-size: 0.8rem;'>📅 {row['날짜']} | 작성자: {row['작성자']}</span><br>
                         <div style='margin-top: 10px; font-size: 1.1rem; white-space: pre-wrap;'>{row['내용']}</div>
                     </div>
                     """, unsafe_allow_html=True)
                     if is_admin:
-                        bc1, bc2, bc3 = st.columns([1, 1, 2])
-                        with bc1:
-                            if st.button(f"📝 수정", key=f"edit_btn_{idx}", use_container_width=True):
-                                st.session_state.edit_brief_id = idx
-                                st.rerun()
-                        with bc2:
-                            if st.button(f"🗑️ 삭제", key=f"del_brief_{idx}", use_container_width=True):
-                                temp_df = pd.read_csv(BRIEF_FILE, encoding="utf-8-sig")
-                                temp_df = temp_df.drop(idx)
-                                temp_df.to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
-                                st.warning("내용이 삭제되었습니다.")
-                                st.rerun()
+                        bc1, bc2 = st.columns([1, 8])
+                        if bc1.button(f"📝", key=f"edit_btn_{idx}"):
+                            st.session_state.edit_brief_id = idx; st.rerun()
         else:
             st.info("아직 등록된 브리핑이 없습니다.")
     except Exception as e:
-        st.info("브리핑 데이터 연동 중...")
-            
+        st.error(f"⚠️ 데이터 로드 실패: {e}")
+
     st.divider()
     st.subheader("🗓️ 글로벌 캘린더 (Global Economic Calendar)")
-    st.markdown("<div class='glass-card'>주요 경제 지표 발표 일정을 실시간으로 모니터링하여 '지뢰'를 피하세요.</div>", unsafe_allow_html=True)
     st.components.v1.html("""
         <div class="tradingview-widget-container">
           <iframe src="https://www.tradingview-widget.com/embed-widget/events/?locale=ko#%7B%22width%22%3A%22100%22%2C%22height%22%3A%22600%22%2C%22colorTheme%22%3A%22dark%22%2C%22isTransparent%22%3Afalse%2C%22importanceFilter%22%3A%22-1%2C0%2C1%22%2C%22currencyFilter%22%3A%22USD%2CKRW%22%7D" width="100%" height="600" frameborder="0"></iframe>
@@ -3255,12 +3231,32 @@ elif page.startswith("7-f."):
         with c2: st.metric("💎 에너지 응축", f"{len(df_q[df_q['Tight'] == '💎 Tight'])}건")
         with c3: st.metric("⚡ 실시간 돌파(ORB)", f"{len(buys)}건")
 
+        st.divider()
+        st.subheader("🕯️ 개별 종목 나노 정밀 차트 분석")
+        sel_tic = st.selectbox("분석 대상 선택", ["-"] + df_q['Ticker'].tolist())
+        if sel_tic != "-":
+            tic_data = df_q[df_q['Ticker'] == sel_tic].iloc[0]
+            cc1, cc2 = st.columns([3, 1])
+            with cc1:
+                st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={sel_tic}&interval=D&theme=dark' width='100%' height='450'></iframe>", height=460)
+            with cc2:
+                st.markdown(f"""
+                <div class='glass-card' style='border-top: 3px solid #00FFFF;'>
+                    <h4 style='text-align:center;'>{sel_tic} 판독</h4>
+                    <hr>
+                    <small>1M 변동:</small> <b style='color:#00FF00;'>{tic_data['1M_Ret']:+.1f}%</b><br>
+                    <small>5D 변동성:</small> <b>{tic_data['Vol_5D']:.2f}%</b><br>
+                    <small>10일선 이격:</small> <b>{tic_data['SMA10_Dist']:.2f}%</b><br>
+                    <small>15분 ORB 고점:</small> <b>{tic_data['ORB_15M']:.2f}</b>
+                </div>
+                """, unsafe_allow_html=True)
                 if st.button(f"🚀 {sel_tic} 가상 매수 집행", key=f"q_buy_{sel_tic}"):
                     st.toast(f"{sel_tic} 종목을 전략 엔진에 따라 가상 포트폴리오에 추가합니다.")
             
             # --- 🤖 AI 요원의 실시간 필드 리포트 ---
             st.markdown("---")
             top_ai = list(AI_OPERATIVES.keys())[0]
+            sentiment_score, _ = get_market_sentiment_score()
             st.markdown(f"""
             <div class='glass-card' style='border-top: 3px solid #00FFFF; background: rgba(0,255,255,0.02);'>
                 <p style='color: #00FFFF; margin: 0; font-weight: 700;'>🛰️ AI FIELD REPORT: {top_ai}</p>
