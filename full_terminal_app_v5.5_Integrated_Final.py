@@ -1148,6 +1148,20 @@ with st.container():
 st.divider()
 
 # --- [ COMMANDER ] Tactical Command & Sentiment Gauge (v6.5) ---
+def get_ai_commander_report(indices):
+    try:
+        score = sum([v[1] for v in indices.values()])
+        avg_pct = score / len(indices)
+    except:
+        avg_pct = 0.0
+    
+    if avg_pct > 0.4: p_color = "green"
+    elif avg_pct > -0.4: p_color = "orange"
+    else: p_color = "red"
+    return p_color, avg_pct
+
+p_color, avg_pct = get_ai_commander_report(idx_info)
+
 def get_commander_style(p_color):
     styles = {
         "green": ("#00FF00", "rgba(0,255,0,0.1)", "GREED/AGGRESSIVE", "수익 좀 났다고 네가 천재가 된 줄 아나? 시장이 좋은 것뿐이다. 자만심(Ego)이 고개를 드는 순간, 시장은 네 계좌를 갈기갈기 찢어놓을 거다. 익절 라인 올려 잡고 닥치고 프로세스나 지켜라."),
