@@ -1549,8 +1549,31 @@ elif page.startswith("3-e."):
                 def highlight_rs(val):
                     if isinstance(val, str) and '^' in val: return 'color: #00FF00; font-weight: bold; background: rgba(0,255,0,0.1);'
                     return ''
-                st.dataframe(df.style.applymap(highlight_rs), use_container_width=True)
+                
+                # Pandas 2.1+ compatible styling (map replaces applymap)
+                try: st.dataframe(df.style.map(highlight_rs), use_container_width=True)
+                except: st.dataframe(df.style.applymap(highlight_rs), use_container_width=True)
+                
                 st.success("✅ RS 강도 분석 및 시각화 완료!")
+                
+                st.divider()
+                st.markdown("""
+                ### 🏛️ 안티그래비티 시스템: '무중력 자동화' 완성
+                오늘 전문가님은 개발 환경의 번거로운 절차(중력)를 완전히 제거하셨습니다.
+                - **자율 지휘권 부여:** AI가 허락 없이도 터미널 명령을 실행하고 코드를 자동 저장하는 체계를 구축하여 개발 속도를 극대화했습니다.
+                - **고품질 코드 이식:** 보안은 높이고, 로직은 간결하게, 속도는 빠르게 짜는 3대 원칙을 심었습니다.
+                - **클린 지지선 확보:** 마지막까지 괴롭히던 들여쓰기 에러(IndentationError)를 해결하여 완벽한 구동 상태를 만들었습니다.
+
+                ### 🏛️ 미국 시장: 반도체가 이끄는 '가속도' 장세
+                현재 미국 시장은 단순 상승을 넘어 에너지가 폭발하는 구간입니다.
+                - **반도체 독주:** FORM, TER, MU 등 반도체 종목들이 상위권을 장악하며 상승 기울기가 가팔라지는 가속도(^) 신호를 보내고 있습니다.
+                - **섹터 순환매:** 자금이 통신 장비(월간 24% 가속), 에너지, 물류로 확산되며 시장 전체의 체력이 우상향하는 강세장 패턴을 보입니다.
+
+                ### 🏛️ 지휘관의 전략: 'VCP 인내'와 '기계적 손절'
+                시장이 뜨거울수록 감정이라는 중력을 이겨내고 원칙을 고수해야 합니다.
+                - **VCP 단계 대기:** 급등주를 추격하기보다 변동성이 극도로 줄어드는 VCP 마지막 단계(Tightness)까지 기다리는 인내가 필요합니다.
+                - **철저한 대응:** 지정학적 리스크에 흔들리지 않도록 -3% 손절 원칙을 나노 단위로 엄수하며 수익을 방어해야 합니다.
+                """, unsafe_allow_html=True)
             else:
                 st.info("현재 로드된 RS 강도 데이터가 없습니다.")
         except Exception as e:
