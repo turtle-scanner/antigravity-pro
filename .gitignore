@@ -1,0 +1,27 @@
+# [StockDragonfly] GitHub Ignore List
+# 🛡️ 개인정보 및 데이터 유실 방지를 위한 설정
+
+# 1. 시세 및 사용자 데이터 (로컬 보관용)
+*.csv
+*.json
+backups/
+!requirements.txt
+
+# 2. 파이썬 컴파일 및 캐시
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+
+# 3. Streamlit 및 프로젝트 설정
+.streamlit/
+.agents/
+.DS_Store
+Thumbs.db
+
+# 4. 미디어 파일 (대용량은 제외 권장)
+*.mp3
+# *.png (UI 이미지는 필요시 주석 처리하여 포함 가능)
+
+# 5. 환경 변수 (민감한 URL/Key 관리용)
+.env

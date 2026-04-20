@@ -12,10 +12,31 @@ import plotly.express as px
 import requests
 import base64
 import time
+import io
+import random
+import shutil
+import hashlib
 
 # --- 💾 데이터베이스 및 영구 보존 설정 ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 def get_db_path(f): return os.path.join(BASE_DIR, f)
+
+BACKUP_DIR = get_db_path("backups")
+
+def auto_backup(file_path):
+    if not os.path.exists(file_path): return
+    try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        fname = os.path.basename(file_path)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = os.path.join(BACKUP_DIR, f"{fname}_{timestamp}.bak")
+        shutil.copy2(file_path, backup_path)
+        
+        # 주 단위로 너무 쌓이지 않게 관리 (최신 30개 유지)
+        all_backups = sorted([os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.startswith(fname)], key=os.path.getmtime)
+        if len(all_backups) > 30:
+            for old_f in all_backups[:-30]: os.remove(old_f)
+    except: pass
 
 USER_DB_FILE = get_db_path("users_db.json")
 TRADES_DB = get_db_path("trades_db.json")
@@ -26,16 +47,60 @@ ATTENDANCE_FILE = get_db_path("attendance.csv")
 PROFIT_FILE = get_db_path("profit_brags.csv")
 LOSS_FILE = get_db_path("loss_reviews.csv")
 COMMENTS_FILE = get_db_path("shared_comments.csv")
-MASTER_GAS_URL = "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec"
+MASTER_GAS_URL = st.secrets.get("MASTER_GAS_URL", "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec")
 
-# 🛡️ 영구 백업용 구글 시트 URL (CSV 내보내기 주소)
-USERS_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1180564490" 
-ATTENDANCE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=0"
-CHAT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=2147147361"
-VISITOR_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=621380834"
-WITHDRAWN_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1873947039"
-# 🌍 전역 공지 및 UI 레이아웃 설정 (신설 - gid=1619623253 등 새 탭 권장)
-NOTICE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1619623253"
+
+
+
+def safe_read_csv(file_path, columns=None):
+    if not os.path.exists(file_path):
+        return pd.DataFrame(columns=columns) if columns else pd.DataFrame()
+    try:
+        df = pd.read_csv(file_path, encoding='utf-8-sig', on_bad_lines='skip')
+        if columns:
+            for col in columns:
+                if col not in df.columns: df[col] = "nan"
+            return df[columns]
+        return df
+    except Exception as e:
+        # 파일이 실제 존재하는데 읽기에 실패한 경우 경고 출력
+        st.warning(f"⚠️ 데이터 파일([.csv]) 읽기 시도 중 지연이 발생하고 있습니다. 잠시 후 자동 복구됩니다. ({os.path.basename(file_path)})")
+        return pd.DataFrame(columns=columns) if columns else pd.DataFrame()
+
+def safe_write_csv(df, file_path, mode='w', header=True):
+    try:
+        if os.path.exists(file_path): auto_backup(file_path) # 저장 전 기존 파일 백업
+        os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+        if mode == 'a' and os.path.exists(file_path):
+            header = False
+        df.to_csv(file_path, index=False, encoding='utf-8-sig', mode=mode, header=header)
+        return True
+    except: return False
+
+def safe_save_json(data, file_path):
+    try:
+        if os.path.exists(file_path): auto_backup(file_path) # 저장 전 기존 파일 백업
+        os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
+    except: return False
+
+def safe_load_json(file_path, default=None):
+    if not os.path.exists(file_path): return default if default is not None else {}
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except: return default if default is not None else {}
+
+# 🛡️ 영구 백업용 구글 시트 URL (CSV 내보내기 주소) - 보안을 위해 st.secrets 사용
+USERS_SHEET_URL = st.secrets.get("USERS_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1180564490")
+ATTENDANCE_SHEET_URL = st.secrets.get("ATTENDANCE_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=0")
+CHAT_SHEET_URL = st.secrets.get("CHAT_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=2147147361")
+VISITOR_SHEET_URL = st.secrets.get("VISITOR_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=621380834")
+WITHDRAWN_SHEET_URL = st.secrets.get("WITHDRAWN_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1873947039")
+# 🌍 전역 공지 및 UI 레이아웃 설정
+NOTICE_SHEET_URL = st.secrets.get("NOTICE_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1619623253")
 
 TICKER_NAME_MAP = {
     "NVDA": "엔비디아", "TSLA": "테슬라", "AAPL": "애플", "MSFT": "마이크로소프트", "PLTR": "팔란티어", "SMCI": "슈퍼마이크로", 
@@ -60,14 +125,17 @@ def resolve_ticker(query):
 
 # --- 🛰️ 거시지표 매크로 바 ---
 @st.cache_data(ttl=600)
-def get_macro_indicators():
+def get_macro_data():
     try:
-        # 환율(USDKRW=X), 미 국채 10년물(^TNX)
         m_data = yf.download(["USDKRW=X", "^TNX"], period="2d", progress=False)['Close']
-        rate = m_data["USDKRW=X"].iloc[-1]
-        yield10y = m_data["^TNX"].iloc[-1]
-        return f"💵 USD/KRW: {rate:,.1f}원 | 🏦 US 10Y Yield: {yield10y:.2f}%"
-    except: return "📡 거시 데이터 연결 지연..."
+        rate = float(m_data["USDKRW=X"].iloc[-1])
+        yield10y = float(m_data["^TNX"].iloc[-1])
+        return rate, yield10y
+    except: return 1400.0, 4.5
+
+def get_macro_indicators():
+    rate, yield10y = get_macro_data()
+    return f"💵 USD/KRW: {rate:,.1f}원 | 🏦 US 10Y Yield: {yield10y:.2f}%"
 
 @st.cache_data(ttl=300)
 def load_users():
@@ -127,9 +195,22 @@ def load_users():
     
     return users
 
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def migrate_user_passwords(users):
+    # 기존 평문 비밀번호를 해시로 점진적 변환
+    changed = False
+    for uid, udata in users.items():
+        pw = udata.get("password", "")
+        if len(pw) < 64: # 해시가 아닌 경우 (SHA-256은 64자)
+            users[uid]["password"] = hash_password(pw)
+            changed = True
+    if changed: save_users(users)
+    return users
+
 def save_users(users):
-    with open(USER_DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False, indent=4)
+    safe_save_json(users, USER_DB_FILE)
     # 캐시를 즉시 업데이트하거나 초기화하여 다음 호출 시 최신 데이터를 읽게 함
     load_users.clear()
 
@@ -174,8 +255,18 @@ def fetch_gs_visitors():
         if response.status_code == 200:
             import io
             return pd.read_csv(io.StringIO(response.text))
-    except: pass
+    except Exception as e:
+        print(f"DEBUG: Visitor Fetch Error: {e}")
     return pd.DataFrame()
+
+# --- 🚀 [NEW v9.9] Optimized Data Helpers ---
+@st.cache_data(ttl=86400) # ROE는 하루 한 번 정도로 충분
+def get_ticker_roe(tic):
+    try:
+        tk = yf.Ticker(tic)
+        return tk.info.get('returnOnEquity', 0) * 100
+    except:
+        return 0
 
 @st.cache_data(ttl=900)
 def fetch_gs_notices():
@@ -187,7 +278,8 @@ def fetch_gs_notices():
             if not df.empty:
                 last_notice = df.iloc[-1]
                 return {"title": str(last_notice.get("제목", "📢 사령부 보안 업데이트 안내")), "content": str(last_notice.get("내용", "쾌적한 서비스 제공을 위해 엔진을 전면 개편하였습니다. 모든 회원 임시 비밀번호는 1234입니다."))}
-    except: pass
+    except Exception as e:
+        print(f"DEBUG: Notice Fetch Error: {e}")
     return {
         "title": "🛡️ 사령부 고정 공지", 
         "content": """더욱 쾌적하고 안전한 시스템 환경을 구축하기 위한 서버 업데이트 과정에서, 부득이하게 전체 회원의 비밀번호가 초기화되었습니다. 이용에 불편을 드려 대단히 죄송합니다.<br>
@@ -210,18 +302,12 @@ ZONE_CONFIG = {
 }
 
 def load_trades():
-    if os.path.exists(TRADES_DB):
-        try:
-            with open(TRADES_DB, "r", encoding="utf-8") as f: 
-                data = json.load(f)
-                if "wallets" not in data: data["wallets"] = {}
-                return data
-        except: return {"mock": [], "auto": [], "history": [], "wallets": {}}
-    return {"mock": [], "auto": [], "history": [], "wallets": {}}
+    data = safe_load_json(TRADES_DB, {"mock": [], "auto": [], "history": [], "wallets": {}})
+    if "wallets" not in data: data["wallets"] = {}
+    return data
 
 def save_trades(trades):
-    with open(TRADES_DB, "w", encoding="utf-8") as f:
-        json.dump(trades, f, ensure_ascii=False, indent=4)
+    safe_save_json(trades, TRADES_DB)
 
 def gsheet_sync(sheet_name, headers, values):
     payload = {"sheetName": sheet_name, "headers": headers, "values": values}
@@ -231,7 +317,7 @@ def gsheet_sync(sheet_name, headers, values):
             print(f"DEBUG: GSheet Sync Error {resp.status_code} - {resp.text}")
         return resp
     except Exception as e:
-        print(f"DEBUG: GSheet Sync Connection Failed: {e}")
+        st.error(f"📡 구글 시트 동기화 실패: {e}")
         return None
 
 st.set_page_config(page_title="StockDragonfly Pro", page_icon="🔴", layout="wide")
@@ -371,7 +457,11 @@ if not st.session_state["password_correct"]:
                     u_data = users[login_id]
                     if u_data.get("status", "approved") != "approved":
                         st.error(f"⚠️ 현재 계정 상태가 '{u_data.get('status')}'입니다. 사령부의 승인이나 상태 복구가 필요합니다.")
-                    elif u_data["password"] == login_pw:
+                    elif u_data.get("password") == login_pw or u_data.get("password") == hash_password(login_pw):
+                        # 로그인 시 해시로 자동 변환 (v7.0 보안 강화)
+                        if len(u_data.get("password", "")) < 64:
+                            users[login_id]["password"] = hash_password(login_pw)
+                            save_users(users)
                         st.session_state["password_correct"] = True
                         st.session_state.current_user = login_id
                         st.rerun()
@@ -478,6 +568,11 @@ with st.sidebar:
     # 거시지표 표시
     macro_info = get_macro_indicators()
     st.markdown(f"<div style='background: rgba(255,255,255,0.05); padding: 5px; border-radius: 5px; border: 1px solid #333; text-align: center; font-size: 0.75rem; color: #AAA; margin-bottom: 10px;'>{macro_info}</div>", unsafe_allow_html=True)
+
+    # --- 📱 v7.0 모바일 최적화 토글 ---
+    mobile_on = st.checkbox("📱 모바일 최적화 모드", key="mobile_mode")
+    if mobile_on:
+        st.markdown("<style>.main .block-container { padding: 5px !important; } .stMetric { padding: 5px !important; } h1 { font-size: 1.6rem !important; } h2 { font-size: 1.3rem !important; }</style>", unsafe_allow_html=True)
     
     st.divider()
     bgms = {
@@ -499,7 +594,6 @@ with st.sidebar:
     # 랜덤 믹스 처리
     if target_bgm == "shuffle":
         if "shuffled_bgm" not in st.session_state:
-            import random
             valid_files = [f for f in list(bgms.values()) if f and f != "shuffle" and os.path.exists(f)]
             st.session_state.shuffled_bgm = random.choice(valid_files) if valid_files else None
         target_bgm = st.session_state.shuffled_bgm
@@ -598,28 +692,46 @@ def get_ticker_tape():
     return "".join(items)
 
 ticker_html = get_ticker_tape()
-st.markdown(f"<div class='ticker-wrap'><div class='ticker-content'>{ticker_html * 10 if ticker_html else ''}</div></div>", unsafe_allow_html=True)
+st.markdown(f"<div class='ticker-wrap' style='border-top: 1px solid #FFD70033; border-bottom: 2px solid #FFD70066;'><div class='ticker-content'>{ticker_html * 10 if ticker_html else ''}</div></div>", unsafe_allow_html=True)
+
+# --- 🛰️ 시스템 전역 장애/상태 알림 ---
+if "gs_error" in st.session_state and st.session_state["gs_error"]:
+    st.error(st.session_state["gs_error"])
+
+# --- 🚀 LIVE OPS CENTER (NEW v6.0) ---
+st.markdown(f"""
+<div style='background: linear-gradient(90deg, rgba(255,215,0,0.05), rgba(0,0,0,0.9)); border-left: 5px solid #FFD700; padding: 10px 20px; margin-bottom: 15px; border-top-right-radius: 15px;'>
+    <div style='display: flex; align-items: center; gap: 15px;'>
+        <div style='width: 10px; height: 10px; background: #00FF00; border-radius: 50%; animation: pulse-glow 1.5s infinite;'></div>
+        <b style='color: #FFD700; letter-spacing: 2px; font-size: 0.9rem;'>TACTICAL OPS CENTER ACTIVE</b>
+        <span style='color: #555;'>|</span>
+        <marquee scrollamount='4' style='color: #00FF00; font-size: 0.85rem; font-family: monospace;'>
+            [BREAKING] NVDA VCP Phase 3 Detection complete... [MARKET] KOSPI Relative Strength Improving... [ALERT] Watch Episode Pivot on high-volume symbols... 
+        </marquee>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # --- 🛰️ 상단 실시간 정보 바 ---
 now_kr = datetime.now(pytz.timezone('Asia/Seoul'))
 now_us = datetime.now(pytz.timezone('America/New_York'))
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=600)
 def get_top_indices():
     res = {"NASDAQ": [0.0, 0.0], "KOSPI": [0.0, 0.0], "KOSDAQ": [0.0, 0.0]}
-    for n, t in {"NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}.items():
-        try:
-            h = yf.download(t, period="5d", progress=False)
-            close_data = h['Close']
-            if isinstance(close_data, pd.DataFrame):
-                close_data = close_data.iloc[:, 0]
-            close_data = close_data.dropna()
-            if len(close_data) >= 2:
-                curr = close_data.iloc[-1]
-                prev = close_data.iloc[-2]
-                pct = ((curr / prev) - 1) * 100
-                res[n] = [float(curr), float(pct)]
-        except: pass
+    symbols = {"NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
+    try:
+        data = yf.download(list(symbols.values()), period="5d", progress=False)['Close']
+        for name, ticker in symbols.items():
+            if ticker in data.columns:
+                close_data = data[ticker].dropna()
+                if len(close_data) >= 2:
+                    curr = close_data.iloc[-1]
+                    prev = close_data.iloc[-2]
+                    pct = ((curr / prev) - 1) * 100
+                    res[name] = [float(curr), float(pct)]
+    except Exception as e:
+        print(f"DEBUG: Index Download Error: {e}")
     return res
 
 idx_info = get_top_indices()
@@ -709,7 +821,6 @@ def get_daily_wisdom():
 
 def get_footer_quote():
     # 날짜를 시드로 사용하여 매일 같은 랜덤 어록 선택
-    import random
     random.seed(datetime.now().strftime("%Y%m%d"))
     return random.choice(BONDE_FOOTER_QUOTES)
 
@@ -768,6 +879,26 @@ if page.startswith("6-a."):
             else:
                 st.error("❌ 한 줄 인사를 입력해 주세요.")
 
+    st.subheader("📡 사령부 실시간 전술 분석 (AI Advisor)")
+    # --- 🤖 Rule-based Tactical Advisor (Platinum Engine) ---
+    def get_tactical_advice(tic, rs, roe):
+        advice = []
+        if rs > 80: advice.append("🚀 강력한 Relative Strength 포착. 시장을 압도하는 주도주입니다.")
+        elif rs > 50: advice.append("📈 양호한 추세 유지 중. 섹터 순환매 수급을 확인하십시오.")
+        else: advice.append("⚠️ 추세가 다소 정체됨. 지지선 이탈 여부를 엄격히 감시하십시오.")
+        
+        if roe > 20: advice.append("💎 압도적 ROE. 기관이 가장 선호하는 우량 성장주 셋업입니다.")
+        elif roe > 10: advice.append("✅ 견고한 펀더멘털. 실적 발표 전후 돌파 타점을 노리십시오.")
+        
+        # 보너스 스타일 조언
+        quotes = [
+            "시장이 혼란스러울수록 기본에 충실하십시오. VCP의 끝자락은 항상 조용합니다.",
+            "손절은 패배가 아닌, 다음 승리를 위한 보험료입니다.",
+            "거래량이 마를 때를 기다리십시오. 폭발은 고요함 속에서 시작됩니다."
+        ]
+        advice.append(f"\n💡 **Bonde's Insight:** {random.choice(quotes)}")
+        return "\n".join(advice)
+
     st.subheader("📡 실시간 출석 현황")
     # 구글 시트 데이터와 로컬 데이터 병합
     gs_att = fetch_gs_attendance()
@@ -807,13 +938,33 @@ elif page.startswith("3-a."):
         
         try:
             # 일괄 다운로드로 속도 및 안정성 확보
-            data = yf.download(full_list, period="1y", interval="1d", progress=False)['Close']
+            data_full = yf.download(full_list, period="1y", interval="1d", progress=False)
+            data = data_full['Close']
+            data_high = data_full['High']
+            data_low = data_full['Low']
             
             for tic in full_list:
                 try:
                     if tic not in data.columns: continue
                     h = data[tic].dropna()
                     if len(h) < 200: continue
+
+                    # --- 🐍 v7.0 VCP(변동성 축소) 정밀 분석 ---
+                    h_high = data_high[tic].dropna()
+                    h_low = data_low[tic].dropna()
+                    vcp_score = 0
+                    tight_label = "Loose"
+                    if len(h_high) > 20:
+                        ranges = (h_high - h_low) / h * 100
+                        w1 = ranges.iloc[-5:].mean() # 최근 1주
+                        w2 = ranges.iloc[-10:-5].mean() # 2주 전
+                        w3 = ranges.iloc[-20:-10].mean() # 한달 전
+                        if w1 < w2 < w3: 
+                            vcp_score = 25 # 점진적 수축 포착
+                            tight_label = "Excellent"
+                        elif w1 < w2: 
+                            vcp_score = 15
+                            tight_label = "Good"
                     
                     cp = h.iloc[-1]
                     pp = h.iloc[-2]
@@ -822,20 +973,16 @@ elif page.startswith("3-a."):
                     ch = (cp/pp - 1) * 100
                     rs = ((cp / y_ago) - 1) * 100
                     
-                    # ROE는 실패할 가능성이 높으므로 별도 처리 및 캐싱/기본값 활용
-                    try:
-                        tk = yf.Ticker(tic)
-                        roe = tk.info.get('returnOnEquity', 0) * 100
-                    except:
-                        roe = 0 # ROE 정보 부재 시 0으로 처리하여 전체 로직 보호
+                    # ROE는 캐싱된 함수 사용 (성능 최적화)
+                    roe = get_ticker_roe(tic)
                     
-                    score = rs + (roe * 1.2)
+                    score = rs + (roe * 1.2) + vcp_score # VCP 가산점 합산
                     is_us = (".KS" not in tic and ".KQ" not in tic)
                     display_name = TICKER_NAME_MAP.get(tic, tic) if not is_us else tic
                     
                     all_res.append({
                         "T": display_name, "TIC": tic, "P": f"${cp:.2f}" if is_us else f"{int(cp):,}원",
-                        "CH": f"{ch:+.1f}%", "ROE": roe, "RS": rs, "SCORE": score,
+                        "CH": f"{ch:+.1f}%", "ROE": roe, "RS": rs, "VCP": tight_label, "SCORE": score,
                         "MARKET": "USA 🇺🇸" if is_us else "KOREA 🇰🇷"
                     })
                 except: continue
@@ -848,7 +995,14 @@ elif page.startswith("3-a."):
         if all_res:
             df = pd.DataFrame(all_res)
             st.session_state.scan_results = df
-            st.success("✅ 스캔 완료! 아래 리스트에서 종목을 선택하여 차트 분석을 계속하십시오.")
+            st.success("✅ 스캔 완료! 주도주 분석 결과가 데이터베이스에 등재되었습니다.")
+            
+            # --- AI Advisor Preview Area ---
+            with st.expander("🤖 사령부 AI 전술 판독 보고서 (Summary)", expanded=True):
+                top_stock = df.sort_values("SCORE", ascending=False).iloc[0]
+                advice_text = get_tactical_advice(top_stock['T'], top_stock['RS'], top_stock['ROE'])
+                st.markdown(f"**현재 최고의 전술 타겟: {top_stock['T']} ({top_stock['TIC']})**")
+                st.info(advice_text)
         else:
             st.warning("분석 가능한 종목 데이터가 부족합니다. 잠시 후 다시 시도해 주세요.")
 
@@ -872,7 +1026,9 @@ elif page.startswith("3-a."):
                 <div style='margin-top: 8px; font-size: 0.95rem; color: #AAA;'>
                     현가: {row["P"]} | 
                     <span style='color: #FFD700;'>ROE: <b>{row["ROE"]:.1f}%</b></span> | 
-                    <span style='color: #55AAFF;'>RS (1yr): <b>{row["RS"]:.1f}%</b></span>
+                    <span style='color: #55AAFF;'>RS: <b>{row["RS"]:.1f}%</b></span> | 
+                    <span style='color: #00FF00;'>VCP: <b>{row["VCP"]}</b></span> | 
+                    <span style='color: #FF4B4B;'>Score: <b>{int(row["SCORE"])}</b></span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -1012,8 +1168,8 @@ elif page.startswith("4-a."):
 
 elif page.startswith("3-b."):
     st.header("🚀 주도주 실시간 랭킹 (Daily Live Ranking)")
-    # 유저가 새로 제공한 시트 링크 적용 (CSV 변환 완료)
-    RANK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
+    # 유저가 새로 제공한 시트 링크 적용 (보안 적용)
+    RANK_SHEET_URL = st.secrets.get("RANK_SHEET_URL", "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020")
     
     @st.cache_data(ttl=300)
     def fetch_rank_data(url):
@@ -1203,11 +1359,11 @@ elif page.startswith("2-a."):
         else:
             st.info("아직 등록된 브리핑이 없습니다.")
     except Exception as e:
-        st.info("브리팅 데이터 연동 중...")
+        st.info("브리핑 데이터 연동 중...")
 
 elif page.startswith("3-c."):
     st.header("🎯 사령부 최핵심 감시 리스트 (Top 3 Focus)")
-    SHEET_URL = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
+    SHEET_URL = st.secrets.get("MARKET_FOCUS_URL", "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020")
     now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
     
     with st.spinner("📡 데이터 센터 리더보드 정밀 분석 중..."):
@@ -1531,7 +1687,7 @@ elif page.startswith("5-e."):
                     t_now = now_k.strftime("%Y-%m-%d %H:%M")
                     d_str, t_str = t_now.split(" ")
                     u = st.session_state.current_user
-                    pid = f"P_{int(time.time())}_{u}"
+                    pid = f"P_{int(time.time())}_{random.randint(100,999)}_{u}"
                     new_p = pd.DataFrame([[pid, t_now, u, tic, roi, p_val, msg]], columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
                     # 💾 로컬 저장 (파일 잠금 대비 리트라이 로직 포함)
                     save_success = safe_write_csv(new_p, PROFIT_FILE, mode='a', header=False)
@@ -1557,21 +1713,6 @@ elif page.startswith("5-e."):
                     time.sleep(1) # 저장을 위한 짧은 지연
                     st.rerun()
                 else: st.error("종목, 수익률, 수익금은 필수 항목입니다.")
-
-    # --- 실시간 익절 첩보 디스플레이 ---
-    st.subheader("📡 사령부 실시간 익절 첩보")
-    
-    # 데이터 읽기 함수 (파일 잠금 등 예외 대응)
-    def safe_read_csv(path, default_cols):
-        if not os.path.exists(path):
-            return pd.DataFrame(columns=default_cols)
-        try:
-            # utf-8-sig로 읽어서 BOM 문제 방지 및 엔진 최적화
-            df = pd.read_csv(path, encoding="utf-8-sig", on_bad_lines='skip')
-            return df
-        except Exception as e:
-            st.error(f"⚠️ 파일 읽기 오류 ({os.path.basename(path)}): {e}")
-            return pd.DataFrame(columns=default_cols)
 
     pdf = safe_read_csv(PROFIT_FILE, ["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
     cdf = safe_read_csv(COMMENTS_FILE, ["PostID", "시간", "작성자", "내용"])
@@ -1631,7 +1772,7 @@ elif page.startswith("5-e."):
                             st.session_state[edit_key] = True
                             st.rerun()
                         if o_col2.button("🗑️ 삭제", key=f"del_btn_{pid}", use_container_width=True):
-                            temp_df = safe_read_csv(PROFIT_FILE)
+                            temp_df = safe_read_csv(PROFIT_FILE, ["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
                             temp_df = temp_df[temp_df['ID'] != pid]
                             safe_write_csv(temp_df, PROFIT_FILE)
                             st.warning("항목이 삭제되었습니다.")
@@ -1693,7 +1834,7 @@ elif page.startswith("5-f."):
                     t_now = now_k.strftime("%Y-%m-%d %H:%M")
                     d_str, t_str = t_now.split(" ")
                     u = st.session_state.current_user
-                    lid = f"L_{int(time.time())}_{u}"
+                    lid = f"L_{int(time.time())}_{random.randint(100,999)}_{u}"
                     new_l = pd.DataFrame([[lid, t_now, u, l_tic, l_roi, l_reason, l_msg]], columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
                     # 💾 로컬 저장 (파일 잠금 대비 리트라이 로직 포함)
                     save_l_success = safe_write_csv(new_l, LOSS_FILE, mode='a', header=False)
@@ -1744,7 +1885,7 @@ elif page.startswith("5-f."):
                         e_lmsg = st.text_area("복기 수정", value=row['다짐'])
                         cl_edit1, cl_edit2 = st.columns(2)
                         if cl_edit1.form_submit_button("💾 저장"):
-                            temp_df = safe_read_csv(LOSS_FILE)
+                            temp_df = safe_read_csv(LOSS_FILE, ["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
                             temp_df.loc[temp_df['ID'] == pid, ['손실률', '원인', '다짐']] = [e_lroi, e_lreason, e_lmsg]
                             safe_write_csv(temp_df, LOSS_FILE)
                             del st.session_state[edit_key]
@@ -1774,7 +1915,7 @@ elif page.startswith("5-f."):
                             st.session_state[edit_key] = True
                             st.rerun()
                         if ol_col2.button("🗑️ 삭제", key=f"ldel_btn_{pid}", use_container_width=True):
-                            temp_df = safe_read_csv(LOSS_FILE)
+                            temp_df = safe_read_csv(LOSS_FILE, ["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
                             temp_df = temp_df[temp_df['ID'] != pid]
                             safe_write_csv(temp_df, LOSS_FILE)
                             st.warning("복기 내역이 삭제되었습니다.")
@@ -2240,7 +2381,7 @@ elif page.startswith("7-a."):
         save_trades(trades)
     
     curr_balance = trades["wallets"][uid]
-    EX_RATE = 1400 # KRW/USD 고정 환율 적용 (모의투자용)
+    EX_RATE, _ = get_macro_data() # 실시간 환율 반영
     
     st.markdown(f"""
     <div class='glass-card' style='border-left: 5px solid #FFD700;'>
@@ -2301,7 +2442,7 @@ elif page.startswith("7-b."):
     trades = load_trades()
     uid = st.session_state.current_user
     user_trades = [t for t in trades["mock"] if t["user"] == uid]
-    EX_RATE = 1400 # 고정 환율
+    EX_RATE, _ = get_macro_data() # 실시간 환율 반영
 
     if uid not in trades["wallets"]:
         trades["wallets"][uid] = 10000000.0
@@ -2344,6 +2485,19 @@ elif page.startswith("7-b."):
                         profit_krw = curr_val_krw - cost_krw
                         roi = ((curr_p_raw / t['buy_price']) - 1) * 100
                         ticker_total_value += curr_val_krw
+
+                        # --- 🎯 v7.0 매매 타점 시각화 (Alpha Analyzer) ---
+                        with st.expander(f"🔍 {tic} 전술 분석 (타점 및 추세)", expanded=False):
+                            t_hist = yf.download(tic, period="3mo", progress=False)['Close']
+                            if not t_hist.empty:
+                                fig_p = px.line(t_hist, title=f"{tic} 3개월 추세 및 내 진입가")
+                                # 내 진입가 수평선 표시
+                                fig_p.add_hline(y=t['buy_price'], line_dash="dash", line_color="yellow", annotation_text="나의 매수가")
+                                # 매수 시점 표시 (날짜가 매칭될 경우)
+                                t_date = t['date'].split(" ")[0]
+                                if t_date in t_hist.index.strftime("%Y-%m-%d"):
+                                    fig_p.add_annotation(x=t_date, y=t['buy_price'], text="▲ BUY", showarrow=True, arrowhead=1, font=dict(color="lime"))
+                                st.plotly_chart(fig_p, use_container_width=True)
 
                         c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1])
                         c1.write(f"**{tic}**")
