@@ -1744,43 +1744,6 @@ elif page.startswith("5-e."):
                         now_ct = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m/%d %H:%M")
                         safe_write_csv(pd.DataFrame([[pid, now_ct, st.session_state.current_user, new_c]], columns=["PostID", "시간", "작성자", "내용"]), COMMENTS_FILE, mode='a', header=False)
                         st.rerun()
- gs_vis.empty:
-        try:
-            for idx, row in gs_vis.iloc[::-1].iterrows():
-                user_id = str(row.get("아이디", "Unknown")).strip()
-                if users.get(user_id, {}).get("grade") == "정규직": continue
-                with st.expander(f"📥 [승격요청] {user_id} 대원의 신청서 ({row.get('시간','-')})", expanded=False):
-                    st.markdown(f"**1. 첫인사:** {row.get('첫인사', '-')}")
-                    st.markdown(f"**2. 자기소개:** {row.get('자기소개', '-')}")
-                    st.markdown(f"**3. 포부:** {row.get('포부', '-')}")
-                    if st.button(f"[ PROMOTION ] {user_id} 정규직 승격 발령", key=f"promo_gs_{idx}"):
-                        if user_id in users:
-                            users[user_id]["grade"] = "정규직"
-                            save_users(users)
-                            st.success(f"[ SUCCESS ] {user_id} 대원이 '정규직'으로 승격되었습니다!")
-                            st.rerun()
-        except: st.info("신청서 데이터 판독 중...")
-    else: 
-        st.info("현재 접수된 실시간 승격 신청서가 없습니다.")
-
-    st.divider()
-
-    # [C] 사령부 전체 대원 명부 (Staff Directory)
-    st.subheader("[ LIST ] 사령부 전체 대원 명부")
-    all_rows = []
-    for uid, udata in users.items():
-        info = udata.get("info", {})
-        all_rows.append({
-            "아이디": uid,
-            "등급": udata.get("grade", "회원"),
-            "지역": info.get("region", "-"),
-            "경력": info.get("exp", "-"),
-            "연령": info.get("age", "-"),
-            "매매 동기": info.get("motivation", "-"),
-            "합류일": info.get("joined_at", "-")
-        })
-    df_users = pd.DataFrame(all_rows)
-    st.dataframe(df_users, use_container_width=True, hide_index=True)
 
 elif page.startswith("5-a."):
     st.markdown("<h1 style='text-align: center; color: #FFD700;'>[ MENTOR ] 월가의 멘토, 프라딥 본데(Pradeep Bonde)</h1>", unsafe_allow_html=True)
