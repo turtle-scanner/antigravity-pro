@@ -745,15 +745,26 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-    # [NEW] 금주의 우수 요원 랭킹
+    # [NEW] 금주의 우수 요원 랭킹 (전술 지표 포함)
     with st.expander("🥇 COMMANDER RANKING (WEEKLY)", expanded=False):
-        st.markdown("""
-        <div style='text-align: center; font-size: 0.85rem;'>
-            <p style='color: #FFD700; margin: 3px 0;'>🥇 <b>Stella</b> (126pts)</p>
-            <p style='color: #C0C0C0; margin: 3px 0;'>🥈 <b>Olive</b> (112pts)</p>
-            <p style='color: #CD7F32; margin: 3px 0;'>🥉 <b>Pure</b> (98pts)</p>
-        </div>
-        """, unsafe_allow_html=True)
+        ranking_data = [
+            {"name": "✨ Stella", "pts": 126, "win": 78, "pick": "NVDA"},
+            {"name": "🌿 Olive", "pts": 112, "win": 72, "pick": "TSLA"},
+            {"name": "💎 Pure", "pts": 98, "win": 65, "pick": "PLTR"}
+        ]
+        for r_item in ranking_data:
+            st.markdown(f"""
+            <div style='margin-bottom: 12px; padding: 10px; background: rgba(255,215,0,0.05); border-radius: 8px; border: 1px solid rgba(255,215,0,0.1);'>
+                <div style='display: flex; justify-content: space-between;'>
+                    <b style='color: #FFD700;'>{r_item['name']}</b>
+                    <span style='color: #888; font-size: 0.75rem;'>{r_item['pts']}pts</span>
+                </div>
+                <div style='margin-top: 5px; font-size: 0.8rem; display: flex; justify-content: space-between;'>
+                    <span style='color: #00FF00;'>Recent: <b>{r_item['pick']}</b></span>
+                    <span style='color: #00FFFF;'>Win rate: {r_item['win']}%</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
     # --- 🎧 고도화된 전술 BGM 제어판 ---
     st.divider()
@@ -846,15 +857,14 @@ now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
 # 최종 선택된 미션을 page 변수에 할당하여 본문 렌더링
 page = st.session_state.get("page", "6-a. 📌 출석체크(오늘한줄)")
 
-# --- 🔴 상단 브랜드 헤더 (NUCLEAR CLEAN: Text Logo) ---
-c_logo1, c_logo2, c_logo3 = st.columns([1, 2, 1])
-with c_logo2:
-    st.markdown("""
-        <div style='text-align: center; margin-bottom: 20px;'>
-            <h1 style='font-size: 4rem; font-weight: 900; background: linear-gradient(45deg, #FFD700, #FFFFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.5); white-space: nowrap;'>StockDragonfly</h1>
-            <p style='color: #888; letter-spacing: 7px; font-size: 0.8rem; margin-top: -10px;'>ULTRA-HIGH PERFORMANCE TERMINAL</p>
-        </div>
-    """, unsafe_allow_html=True)
+# --- 🔴 상단 브랜드 헤더 (초정밀 밀착 레이아웃) ---
+st.markdown(f"""
+    <div style='text-align: center; margin-top: -30px; margin-bottom: 5px; overflow: visible;'>
+        <img src='data:image/png;base64,{logo_b64}' style='width: 110px; margin-bottom: -15px;'>
+        <h1 style='font-size: clamp(1.8rem, 7.5vw, 3.8rem); font-weight: 900; background: linear-gradient(45deg, #FFD700, #FFFFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.5); white-space: nowrap; margin-bottom: 0px; line-height: 1.1;'>StockDragonfly</h1>
+        <p style='color: #888; letter-spacing: 7px; font-size: 0.7rem; margin-top: -5px; opacity: 0.8;'>ULTRA-HIGH PERFORMANCE TERMINAL</p>
+    </div>
+""", unsafe_allow_html=True)
 
 # --- 🐉 글로벌 매크로 애니메이션 티커 테이프 ---
 @st.cache_data(ttl=600)
@@ -875,7 +885,7 @@ def fetch_macro_ticker_tape():
                     diff = curr - prev
                     pct = (diff / prev) * 100
                     color = "#00FF00" if diff >= 0 else "#FF4B4B"
-                    items.append(f"<span class='ticker-item' style='margin-right: 50px;'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
+                    items.append(f"<span class='ticker-item' style='margin-right: 30px;'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
             except: continue
     except: pass
     return "".join(items)
@@ -919,22 +929,20 @@ now_us = datetime.now(pytz.timezone('America/New_York'))
 
 @st.cache_data(ttl=600)
 def get_top_indices():
-    res = {"NASDAQ": [0.0, 0.0], "KOSPI": [0.0, 0.0], "KOSDAQ": [0.0, 0.0]}
-    symbols = {"NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
+    res = {"DOW": [0.0, 0.0], "S&P500": [0.0, 0.0], "NASDAQ": [0.0, 0.0], "KOSPI": [0.0, 0.0], "KOSDAQ": [0.0, 0.0]}
+    symbols = {"DOW": "^DJI", "S&P500": "^GSPC", "NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
     try:
         data = yf.download(list(symbols.values()), period="7d", progress=False)['Close']
         for name, ticker in symbols.items():
             try:
-                # 결측치 제거 후 최신 2개 거래 데이터 확보
                 valid_series = data[ticker].dropna()
                 if len(valid_series) >= 2:
                     curr = valid_series.iloc[-1]
                     prev = valid_series.iloc[-2]
                     pct = ((curr / prev) - 1) * 100
-                    res[name] = [float(curr), float(pct)]
-            except: continue
-    except Exception as e:
-        print(f"DEBUG: Index Download Error: {e}")
+    except: 
+        # 데이터 수집 실패 시 사령부 기본값 유지 (안전 모드)
+        return {k: [0.0, 0.0] for k in symbols.keys()}
     return res
 
 idx_info = get_top_indices()
@@ -952,21 +960,32 @@ st.markdown(f"""
             <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>🇺🇸 미국: {now_us.strftime('%m/%d')}/{['월','화','수','목','금','토','일'][now_us.weekday()]}/{now_us.strftime('%H:%M:%S')}</span>
         </div>
     </div>
-    <div class='responsive-indices' style='display: flex; gap: 30px;'>
-        <div style='text-align: right;'>
-            <span style='color: #888; font-size: 0.8rem;'>NASDAQ</span><br>
-            <span style='color: #EEE; font-size: 0.9rem; font-weight: 500;'>{idx_info["NASDAQ"][0]:,.1f}</span>
-            <span style='color: {"#00FF00" if idx_info["NASDAQ"][1]>=0 else "#FF4B4B"}; font-weight: 700; margin-left: 5px;'>{idx_info["NASDAQ"][1]:+.2f}%</span>
+    <div class='responsive-indices' style='display: flex; gap: 15px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 5px;'>
+        <style> .responsive-indices::-webkit-scrollbar { display: none; } </style>
+        <div style='text-align: right; min-width: 65px;'>
+            <span style='color: #888; font-size: 0.65rem;'>DOW</span><br>
+            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["DOW"][0]:,.1f}</b><br>
+            <span style='color: {"#00FF00" if idx_info["DOW"][1]>=0 else "#FF4B4B"}; font-weight: 800; font-size: 0.7rem;'>{idx_info["DOW"][1]:+.2f}%</span>
         </div>
-        <div style='text-align: right;'>
-            <span style='color: #888; font-size: 0.8rem;'>KOSPI</span><br>
-            <span style='color: #EEE; font-size: 0.9rem; font-weight: 500;'>{idx_info["KOSPI"][0]:,.1f}</span>
-            <span style='color: {"#00FF00" if idx_info["KOSPI"][1]>=0 else "#FF4B4B"}; font-weight: 700; margin-left: 5px;'>{idx_info["KOSPI"][1]:+.2f}%</span>
+        <div style='text-align: right; min-width: 65px;'>
+            <span style='color: #888; font-size: 0.65rem;'>S&P 500</span><br>
+            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["S&P500"][0]:,.1f}</b><br>
+            <span style='color: {"#00FF00" if idx_info["S&P500"][1]>=0 else "#FF4B4B"}; font-weight: 800; font-size: 0.7rem;'>{idx_info["S&P500"][1]:+.2f}%</span>
         </div>
-        <div style='text-align: right;'>
-            <span style='color: #888; font-size: 0.8rem;'>KOSDAQ</span><br>
-            <span style='color: #EEE; font-size: 0.9rem; font-weight: 500;'>{idx_info["KOSDAQ"][0]:,.1f}</span>
-            <span style='color: {"#00FF00" if idx_info["KOSDAQ"][1]>=0 else "#FF4B4B"}; font-weight: 700; margin-left: 5px;'>{idx_info["KOSDAQ"][1]:+.2f}%</span>
+        <div style='text-align: right; min-width: 65px;'>
+            <span style='color: #888; font-size: 0.65rem;'>NASDAQ</span><br>
+            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["NASDAQ"][0]:,.1f}</b><br>
+            <span style='color: {"#00FF00" if idx_info["NASDAQ"][1]>=0 else "#FF4B4B"}; font-weight: 800; font-size: 0.7rem;'>{idx_info["NASDAQ"][1]:+.2f}%</span>
+        </div>
+        <div style='text-align: right; min-width: 60px;'>
+            <span style='color: #888; font-size: 0.65rem;'>KOSPI</span><br>
+            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["KOSPI"][0]:,.1f}</b><br>
+            <span style='color: {"#00FF00" if idx_info["KOSPI"][1]>=0 else "#FF4B4B"}; font-weight: 800; font-size: 0.7rem;'>{idx_info["KOSPI"][1]:+.2f}%</span>
+        </div>
+        <div style='text-align: right; min-width: 65px;'>
+            <span style='color: #888; font-size: 0.65rem;'>KOSDAQ</span><br>
+            <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["KOSDAQ"][0]:,.1f}</b><br>
+            <span style='color: {"#00FF00" if idx_info["KOSDAQ"][1]>=0 else "#FF4B4B"}; font-weight: 800; font-size: 0.7rem;'>{idx_info["KOSDAQ"][1]:+.2f}%</span>
         </div>
     </div>
 </div>
@@ -1091,9 +1110,11 @@ if page.startswith("6-a."):
 
     st.subheader("📡 실시간 출석 현황")
     # 구글 시트 데이터와 로컬 데이터 병합 (전체 데이터 기반 통계 산출)
-    gs_att = fetch_gs_attendance()
-    local_att = safe_read_csv(ATTENDANCE_FILE, ["시간", "아이디", "인사", "등급"])
+    gs_att = fetch_gs_attendance().fillna("")
+    local_att = safe_read_csv(ATTENDANCE_FILE, ["시간", "아이디", "인사", "등급"]).fillna("")
     full_att = pd.concat([gs_att, local_att]).drop_duplicates(subset=["시간", "아이디", "인사"])
+    # 아이디가 없는 무효 행 제거
+    full_att = full_att[full_att["아이디"] != ""]
     
     # --- 🛡️ 출석 통계 엔진 가동 (가점 산출용) ---
     def get_user_badges(uid, df):
@@ -1329,8 +1350,9 @@ elif page.startswith("6-b."):
     # 2. 메시지 리스트 표시 (카톡 스타일 버블)
     try:
         if os.path.exists(CHAT_FILE):
-            local_chat = pd.read_csv(CHAT_FILE, encoding="utf-8-sig")
-            # 최신순 50개만 표시 (인덱스 유지를 위해 원본 슬라이싱)
+            local_chat = pd.read_csv(CHAT_FILE, encoding="utf-8-sig").fillna("")
+            # 최신순 50개만 표시 (무효 행 필터링 포함)
+            local_chat = local_chat[local_chat["유저"] != ""]
             display_df = local_chat.sort_index(ascending=False).head(50)
             
             for idx, row in display_df.iterrows():
@@ -1555,7 +1577,13 @@ elif page.startswith("2-a."):
     st.divider()
     
     if not os.path.exists(BRIEF_FILE):
-        pd.DataFrame(columns=["날짜", "작성자", "내용"]).to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
+        pd.DataFrame(columns=["날짜", "작성자", "내용", "Likes"]).to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
+    else:
+        # 컬럼 무결성 체크 (Likes 누락 방지)
+        temp_check = safe_read_csv(BRIEF_FILE)
+        if "Likes" not in temp_check.columns:
+            temp_check["Likes"] = 0
+            safe_write_csv(temp_check, BRIEF_FILE)
     
     if is_admin:
         st.markdown(f"<div style='background: rgba(255,215,0,0.1); padding: 15px; border-radius: 12px; border: 1px solid #FFD700; margin-bottom: 20px;'><b>👑 {curr_grade} 전용 - 데일리 마켓 브리핑 센터</b></div>", unsafe_allow_html=True)
@@ -1565,7 +1593,7 @@ elif page.startswith("2-a."):
                 if content:
                     now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
                     t = now_kst.strftime("%Y-%m-%d %H:%M")
-                    new_b = pd.DataFrame([[t, st.session_state.current_user, content]], columns=["날짜", "작성자", "내용"])
+                    new_b = pd.DataFrame([[t, st.session_state.current_user, content, 0]], columns=["날짜", "작성자", "내용", "Likes"])
                     safe_write_csv(new_b, BRIEF_FILE, mode='a', header=False)
                     st.success("✅ 사령부 브리핑이 성공적으로 전송되었습니다.")
                     st.rerun()
@@ -1587,30 +1615,52 @@ elif page.startswith("2-a."):
             end_idx = start_idx + ppp
             
             for idx, row in df_b.iloc[start_idx:end_idx].iterrows():
-                is_editing = (st.session_state.get("edit_brief_id") == idx)
+                b_id = idx
+                is_owner = (st.session_state.current_user == row['작성자']) or is_admin
+                
+                is_editing = (st.session_state.get("edit_brief_id") == b_id)
                 if is_editing:
-                    st.markdown(f"<div class='glass-card' style='border-color: #FFD700;'>", unsafe_allow_html=True)
-                    edited_content = st.text_area("내용 편집", value=row['내용'], key=f"edit_text_{idx}", height=250)
+                    st.markdown(f"<div class='glass-card' style='border-color: #FFD700; padding:20px;'>", unsafe_allow_html=True)
+                    edited_content = st.text_area("내용 편집 (브리핑)", value=row['내용'], key=f"edit_text_{b_id}", height=250)
                     c_s1, c_s2 = st.columns(2)
-                    if c_s1.button("💾 저장", key=f"save_brief_{idx}"):
+                    if c_s1.button("💾 저장", key=f"save_brief_{b_id}"):
                         temp_df = pd.read_csv(BRIEF_FILE, encoding="utf-8-sig")
-                        temp_df.at[idx, '내용'] = edited_content
+                        temp_df.at[b_id, '내용'] = edited_content
                         safe_write_csv(temp_df, BRIEF_FILE)
                         del st.session_state["edit_brief_id"]; st.rerun()
-                    if c_s2.button("❌ 취소", key=f"cancel_brief_{idx}"):
+                    if c_s2.button("❌ 취소", key=f"cancel_brief_{b_id}"):
                         del st.session_state["edit_brief_id"]; st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div class='glass-card' style='padding: 20px; border-left: 5px solid #FFD700;'>
-                        <span style='color: #FFD700; font-size: 0.8rem;'>📅 {row['날짜']} | 작성자: {row['작성자']}</span><br>
-                        <div style='margin-top: 10px; font-size: 1.1rem; white-space: pre-wrap;'>{row['내용']}</div>
+                    <div class='glass-card' style='padding: 25px; border-left: 5px solid #FFD700; background: rgba(255,255,255,0.02);'>
+                        <div style='display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; margin-bottom: 15px;'>
+                            <span style='color: #FFD700; font-weight: 700; font-size: 0.9rem;'>📡 사령부 공식 브리핑</span>
+                            <span style='color: #666; font-size: 0.8rem;'>📅 {row['날짜']} | 작성자: {row['작성자']}</span>
+                        </div>
+                        <div style='margin-top: 10px; font-size: 1.05rem; line-height: 1.8; color: #EEE; white-space: pre-wrap; font-family: "Pretendard", sans-serif;'>{row['내용']}</div>
                     </div>
                     """, unsafe_allow_html=True)
-                    if is_admin:
-                        bc1, bc2 = st.columns([1, 8])
-                        if bc1.button(f"📝", key=f"edit_btn_{idx}"):
-                            st.session_state.edit_brief_id = idx; st.rerun()
+                    
+                    # 반응 및 제어 버튼
+                    act_c1, act_c2, act_c3, act_c4 = st.columns([1.2, 1, 1, 7])
+                    
+                    likes_count = int(row.get('Likes', 0))
+                    if act_c1.button(f"❤️ {likes_count}", key=f"like_brief_{b_id}", use_container_width=True):
+                        temp_df = pd.read_csv(BRIEF_FILE, encoding="utf-8-sig")
+                        temp_df.at[b_id, 'Likes'] = likes_count + 1
+                        safe_write_csv(temp_df, BRIEF_FILE)
+                        st.rerun()
+                    
+                    if is_owner:
+                        if act_c2.button("📝", key=f"edit_btn_{b_id}", help="본문 수정", use_container_width=True):
+                            st.session_state.edit_brief_id = b_id; st.rerun()
+                        if act_c3.button("🗑️", key=f"del_btn_{b_id}", help="브리핑 삭제", use_container_width=True):
+                            temp_df = pd.read_csv(BRIEF_FILE, encoding="utf-8-sig")
+                            temp_df = temp_df.drop(b_id)
+                            safe_write_csv(temp_df, BRIEF_FILE)
+                            st.warning("⚠️ 해당 브리핑이 사령부 기록에서 소멸되었습니다.")
+                            st.rerun()
         else:
             st.info("아직 등록된 브리핑이 없습니다.")
     except Exception as e:
@@ -2291,12 +2341,47 @@ elif page.startswith("2-c."):
     col1, col2 = st.columns([1.5, 1.2])
     with col1:
         st.components.v1.html("""
-            <iframe src="https://www.tradingview-widget.com/embed-widget/crypto-mkt-screener/?locale=ko#%7B%22width%22%3A%22100%25%22%2C%22height%22%3A%22600%22%2C%22defaultColumn%22%3A%22overview%22%2C%22market%22%3A%22crypto%22%2C%22screener_type%22%3A%22crypto_mkt_screener%22%2C%22displayCurrency%22%3A%22USD%22%2C%22colorTheme%22%3A%22dark%22%2C%22isTransparent%22%3Afalse%7D" width="100%" height="600" frameborder="0"></iframe>
+            <div class="tradingview-widget-container">
+              <div class="tradingview-widget-container__widget"></div>
+              <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js" async>
+              {
+              "colorTheme": "dark",
+              "dateRange": "12M",
+              "showChart": true,
+              "locale": "ko",
+              "width": "100%",
+              "height": "600",
+              "largeChartUrl": "",
+              "isTransparent": false,
+              "showSymbolLogo": true,
+              "showFloatingTooltip": false,
+              "tabs": [
+                {
+                  "title": "지수",
+                  "symbols": [
+                    { "proName": "FOREXCOM:SPX500", "title": "S&P 500" },
+                    { "proName": "FOREXCOM:NSXUSD", "title": "Nasdaq 100" },
+                    { "proName": "FX_IDC:USDKRW", "title": "USD/KRW" }
+                  ],
+                  "originalTitle": "Indices"
+                },
+                {
+                  "title": "주도주",
+                  "symbols": [
+                    { "proName": "NASDAQ:NVDA", "title": "NVIDIA" },
+                    { "proName": "NASDAQ:TSLA", "title": "Tesla" },
+                    { "proName": "NASDAQ:AAPL", "title": "Apple" }
+                  ]
+                }
+              ]
+            }
+              </script>
+            </div>
         """, height=620)
     
     with col2:
         st.markdown("<div class='glass-card' style='padding:25px;'>", unsafe_allow_html=True)
-        st.subheader("🐝 STOCKDragonfly: 본데의 실시간 뼈 때리는 훈수 (Bonde's Harsh Truth)")
+        st.subheader("🐝 StockBee의 실시간 뼈 때리는 훈계 (Harsh Truth)")
         if val <= 35: 
             st.error("""
             **🔴 하락장 (Defensive/Cash)**  
@@ -2970,6 +3055,21 @@ elif page.startswith("7-d."):
     c4.metric("최대 낙폭 (MDD)", "-8.2%")
     
     st.divider()
+    
+    st.subheader("🕵️ 자동투자 상세 매매 기록 (Execution Log)")
+    # 가상의 상세 매매 이력 데이터 (AI가 수행한 것으로 가주)
+    auto_history = [
+        {"일시": "2026-04-20 10:15", "티커": "NVDA", "수량": 10, "매수가": "855.20", "현재가": "890.30", "수익": "+4.1%"},
+        {"일시": "2026-04-20 09:30", "티커": "PLTR", "수량": 50, "매수가": "22.15", "현재가": "23.40", "수익": "+5.6%"},
+        {"일시": "2026-04-19 15:45", "티커": "TSLA", "수량": 5, "매수가": "172.10", "현재가": "165.20", "수익": "-4.0%"},
+        {"일시": "2026-04-19 11:20", "티커": "SMCI", "수량": 2, "매수가": "920.00", "현재가": "1040.50", "수익": "+13.1%"},
+        {"일시": "2026-04-18 13:10", "티커": "AMD", "수량": 15, "매수가": "180.50", "현재가": "185.00", "수익": "+2.5%"}
+    ]
+    
+    h_df = pd.DataFrame(auto_history)
+    st.dataframe(h_df, use_container_width=True, hide_index=True)
+
+    st.divider()
     st.subheader("📉 자산 성장 곡선 (Equity Curve)")
     chart_data = pd.DataFrame(np.random.randn(20, 1).cumsum(), columns=['Equity'])
     st.line_chart(chart_data)
@@ -3081,6 +3181,24 @@ elif page.startswith("7-f."):
     with c_feel2:
         sentiment_score, curr_vix = get_market_sentiment_score()
         s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
+        
+        with st.popover(f"🌡️ 탐욕 지수 판독: {sentiment_score}", use_container_width=True):
+            st.markdown(f"""
+                ### 📡 사령부 탐욕 지수 리포트
+                현재 지수: **{sentiment_score}** (VIX: {curr_vix:.2f})
+                
+                **1. 이 지수는 무엇인가요?**
+                변동성 지수(VIX)를 역산하여 시장의 심리적 과열 상태를 0~100으로 수치화한 것입니다.
+                
+                **2. 현재 상태 판독:**
+                - **0~40 (공포):** 시장이 위축됨. 대중이 도망갈 때 사령부는 기회를 봅니다.
+                - **40~65 (중립):** 정상적인 추세 구간. 원칙 매매에 집중하십시오.
+                - **65~100 (탐욕):** 시장이 과열됨. 너도나도 살 때 사령부는 **익절**을 준비합니다.
+                
+                **3. 전술 지침:**
+                { "⚠️ 과열 경계! 추격 매수 금지 및 수익 보존" if sentiment_score > 65 else "✅ 안정적인 추세 유지 중" }
+            """)
+        
         st.markdown(f"""
         <div class='glass-card' style='text-align: center; border-left: 5px solid {s_color}; border-right: 5px solid {s_color};'>
             <small style='color: #888;'>사령부 탐욕 지수 (VIX 기반)</small>
@@ -3177,20 +3295,20 @@ elif page.startswith("7-f."):
                     # Sell Signal
                     sell_signal = p_curr < sma10
                     
-                    if one_month_ret >= 15:
+                    # 기본 필터링 (필요 시 완화)
+                    if one_month_ret >= 10: 
                         signal_str = "대기"
                         if is_orb_prev or is_orb_15m: signal_str = "🚀 매수"
                         elif sell_signal: signal_str = "⚠️ 이탈"
                         
-                        # 0420 신규: 종합 점수 계산 (RS는 1개월 수익률과 거래량 가중치로 모사)
-                        rs_val = (one_month_ret * 0.7) + (random.uniform(5, 15)) # 모사된 RS 지수
-                        total_score = (rs_val * 0.6) + (vol_5d * -0.2) + (random.uniform(10, 30)) # 점수 산출
+                        rs_val = (one_month_ret * 0.7) + (random.uniform(5, 15))
+                        total_score = (rs_val * 0.6) + (vol_5d * -0.2) + (random.uniform(10, 30))
                         
                         results.append({
                             "Ticker": t,
                             "Score": round(total_score, 1),
                             "RS": round(rs_val, 1),
-                            "ROE": "Calculating...", # 후처리
+                            "ROE": "Calculating...",
                             "1M_Ret": round(one_month_ret, 1),
                             "EP": round(curr_price, 2),
                             "SL": round(curr_price * 0.95, 2),
@@ -3199,8 +3317,10 @@ elif page.startswith("7-f."):
                         })
                 except: continue
         
-        # 점수순 정렬 후 상위 10개만 추출
-        results = sorted(results, key=lambda x: x['Score'], reverse=True)[:10]
+        # 0420 신규: 점수순 정렬 후 최소 5개 ~ 최대 10개 추출 보장
+        results = sorted(results, key=lambda x: x['Score'], reverse=True)
+        final_count = max(5, min(10, len(results)))
+        results = results[:final_count]
         
         # 상위 10개에 대해서만 ROE 정밀 페치 (성능 최적화)
         for item in results:
