@@ -1567,16 +1567,16 @@ elif page.startswith("4-b."):
     col1, col2 = st.columns(2)
     with col1:
         total_balance = st.number_input("💵 총 운용 자산 (USD)", value=10000, step=1000)
-        risk_per_trade_pct = st.slider("⚖️ 매매당 허용 리스크 (%)", 0.1, 2.0, 0.5, step=0.1)
+        risk_per_trade_pct = st.slider("LEVEL: 매매당 허용 리스크 (%)", 0.1, 2.0, 0.5, step=0.1)
     with col2:
-        entry_price = st.number_input("🎯 진입 가액 ($)", value=250.0, step=0.1)
-        stop_loss_price = st.number_input("🛡️ 손절 가액 ($)", value=242.5, step=0.1) # 기본 -3% 수준 설정
+        entry_price = st.number_input("PRICE: 진입 가액 ($)", value=250.0, step=0.1)
+        stop_loss_price = st.number_input("STOP: 손절 가액 ($)", value=242.5, step=0.1) # 기본 -3% 수준 설정
 
     st.divider()
     
     risk_per_share = entry_price - stop_loss_price
     if risk_per_share <= 0:
-        st.error("⚠️ 손절가는 반드시 진입가보다 낮아야 합니다. 전술적 오류입니다.")
+        st.error("ERROR: 손절가는 반드시 진입가보다 낮아야 합니다. 전술적 오류입니다.")
     else:
         total_risk_amount = total_balance * (risk_per_trade_pct / 100)
         shares_to_buy = int(total_risk_amount / risk_per_share)
@@ -1587,14 +1587,20 @@ elif page.startswith("4-b."):
         c2.metric("최적 매수 수량", f"{shares_to_buy:,} 주")
         c3.metric("총 투입 금액", f"${total_investment:,.2f}")
         
-        portfolio_weight = (total_investment / total_balance) * 100 if total_balance > 0 else 0
+        # 구문 오류 방지를 위한 선행 가공
+        bal_str = f"{total_balance:,.0f}"
+        risk_str = f"{total_risk_amount:,.1f}"
+        shares_str = f"{shares_to_buy:,}"
+        weight_val = (total_investment / total_balance) * 100 if total_balance > 0 else 0
+        weight_str = f"{weight_val:.1f}"
+        
         st.info(f"""
-        💡 **전략 보고:** {total_balance:,.0f}불의 자산에서 이 종목을 **{shares_to_buy:,}주** 매수하십시오.  
-        이 경우 손절 시 정확히 {total_risk_amount:,.1f}불({risk_per_trade_pct}%)만 잃게 되며, 현재 이 종목은 전체 포트폴리오의 **{portfolio_weight:.1f}%** 비중을 차지하게 됩니다.
+        [ TACTICAL REPORT ] {bal_str}불의 자산에서 이 종목을 {shares_str}주 매수하십시오.  
+        이 경우 손절 시 정확히 {risk_str}불({risk_per_trade_pct}%)만 잃게 되며, 현재 이 종목은 전체 포트폴리오의 {weight_str}% 비중을 차지하게 됩니다.
         """)
 
 elif page.startswith("2-a."):
-    st.header("📈 데일리 마켓 트렌드 브리핑 (Daily Briefing)")
+    st.header("Daily Market Trend Briefing")
     st.divider()
     
     if not os.path.exists(BRIEF_FILE):
@@ -1607,7 +1613,7 @@ elif page.startswith("2-a."):
             safe_write_csv(temp_check, BRIEF_FILE)
     
     if is_admin:
-        st.markdown(f"<div style='background: rgba(255,215,0,0.1); padding: 15px; border-radius: 12px; border: 1px solid #FFD700; margin-bottom: 20px;'><b>👑 {curr_grade} 전용 - 데일리 마켓 브리핑 센터</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background: rgba(255,215,0,0.1); padding: 15px; border-radius: 12px; border: 1px solid #FFD700; margin-bottom: 20px;'><b>[ ADMIN OPS ] {curr_grade} 전용 - 데일리 마켓 브리핑 센터</b></div>", unsafe_allow_html=True)
         with st.form("brief_form", clear_on_submit=True):
             content = st.text_area("오늘의 시장 요약 및 트렌드 분석을 작성하세요", height=150, placeholder="여기에 내용을 입력하시면 사령부 전역에 브리핑이 전파됩니다.")
             if st.form_submit_button("📢 브리핑 전파하기"):
