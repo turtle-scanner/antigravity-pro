@@ -1524,7 +1524,7 @@ elif page.startswith("3-c."):
 elif page.startswith("3-d."):
     st.header("📉 산업동향 (Industry Trends TOP 10)")
     st.markdown("<div class='glass-card'>사령부 지정 데이터 피트를 통한 현재 주도 산업군을 노출합니다.</div>", unsafe_allow_html=True)
-    SHEET_URL = st.secrets.get("INDUSTRY_SHEET_URL", "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1156221191")
+    SHEET_URL = st.secrets.get("INDUSTRY_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=716298288")
     
     with st.spinner("⏳ 산업동향 리더보드 수집 중.."):
         try:
@@ -1540,7 +1540,7 @@ elif page.startswith("3-d."):
 elif page.startswith("3-e."):
     st.header("📊 RS 강도 분석 (Relative Strength Strength)")
     st.markdown("<div class='glass-card'>개별 종목의 지수 대비 상대강도(RS)를 분석하여 '^' 기호를 강조합니다.</div>", unsafe_allow_html=True)
-    SHEET_URL = st.secrets.get("RS_SHEET_URL", "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1220465228")
+    SHEET_URL = st.secrets.get("RS_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=2082735174")
     
     with st.spinner("⏳ RS 강도 데이터 로드 중.."):
         try:
