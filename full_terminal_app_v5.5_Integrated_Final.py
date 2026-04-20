@@ -326,18 +326,38 @@ def get_cached_bg_b64():
         with open("StockDragonfly.png", "rb") as imm: return base64.b64encode(imm.read()).decode()
     return ""
 
-# --- 🛸 [CORE UI] CSS & Background (Performance Optimized) ---
-bg_b64 = get_cached_bg_b64()
-st.markdown(f"""
+# --- 🛸 [CORE UI] CSS & Background (Lightweight High-Performance) ---
+st.markdown("""
     <style>
-        .stApp {{
-            background-color: #0E1117;
-            background-image: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url("data:image/png;base64,{bg_b64}");
+        /* 메인 배경: 6MB 이미지를 제거하고 고성능 그라데이션 적용 (타이핑 렉 방지) */
+        .stApp {
+            background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f12 100%);
             background-attachment: fixed;
-            background-size: cover;
-        }}
+        }
+        
+        /* 글래스모피즘 효과 강화 */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03) !important;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        
+        .main-title {
+            background: linear-gradient(to right, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
+            text-align: center;
+        }
     </style>
 """, unsafe_allow_html=True)
+
+# 로고는 바이너리 전송(efficient)을 위해 st.image 사용
+# bg_b64 호출 제거 (성능 저하 원인)
 
 # --- 🛰️ [BANNER SHIELD] 메뉴 UI 구조 고정 (v9.9 Platinum) ---
 ZONE_CONFIG = {
@@ -719,10 +739,12 @@ page = st.session_state.get("page", "6-a. 📌 출석체크(오늘한줄)")
 # --- 🔴 상단 브랜드 헤더 ---
 c_logo1, c_logo2, c_logo3 = st.columns([1, 2, 1])
 with c_logo2:
-    if logo_b64:
-        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:15px; margin-bottom:10px;">', unsafe_allow_html=True)
-    elif os.path.exists("StockDragonfly.png"): 
+    # 로고는 st.image로 효율적으로 렌더링
+    if os.path.exists("StockDragonfly2.png"): 
+        st.image("StockDragonfly2.png", use_container_width=True)
+    elif os.path.exists("StockDragonfly.png"):
         st.image("StockDragonfly.png", use_container_width=True)
+    
     st.markdown("<div class='main-title' style='font-size: 3rem;'>StockDragonfly</div>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #888; letter-spacing: 5px; margin-top: -10px;'>INSTITUTIONAL GRADE TRADING TERMINAL</p>", unsafe_allow_html=True)
 
