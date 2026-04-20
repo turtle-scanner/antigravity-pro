@@ -1024,18 +1024,14 @@ if "gs_error" in st.session_state and st.session_state["gs_error"]:
     st.error(st.session_state["gs_error"])
 
 # --- [ LIVE ] LIVE OPS CENTER (NEW v6.0) ---
-st.markdown(f"""
-<div style='background: linear-gradient(90deg, rgba(255,215,0,0.05), rgba(0,0,0,0.9)); border-left: 5px solid #FFD700; padding: 10px 20px; margin-bottom: 15px; border-top-right-radius: 15px;'>
-    <div style='display: flex; align-items: center; gap: 15px;'>
-# [ ACTION ] 하트비트 애니메이션 및 마키 고도화
 macro_str = get_macro_indicators() # 환율/금리 포함
 st.markdown(f"""
 <style>
-@keyframes pulse-heart {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.2); opacity: 0.7; }
-    100% { transform: scale(1); opacity: 1; }
-}
+@keyframes pulse-heart {{
+    0% {{ transform: scale(1); opacity: 1; }}
+    50% {{ transform: scale(1.1); opacity: 0.7; }}
+    100% {{ transform: scale(1); opacity: 1; }}
+}}
 .ops-active-dot {{
     width: 10px; height: 10px; background: #00FF00; border-radius: 50%;
     animation: pulse-heart 1.2s infinite; box-shadow: 0 0 10px #00FF00;
