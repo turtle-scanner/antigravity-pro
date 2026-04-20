@@ -1277,18 +1277,25 @@ elif page.startswith("3-a."):
         
         st.subheader("🔥 사령부 한/미 통합 주도주 TOP 10")
         for i, row in combined_top.iterrows():
+            # 구문 오류 방지를 위해 미리 포맷팅 수행
+            roe_val = f"{row['ROE']:.1f}"
+            rs_val = f"{row['RS']:.1f}"
+            score_val = str(int(row["SCORE"]))
+            border_col = "#00FF00" if "USA" in row["MARKET"] else "#FFD700"
+            change_col = "#00FF00" if "+" in row["CH"] else "#FF4B4B"
+            
             st.markdown(f"""
-            <div class='glass-card' style='padding: 15px; border-left: 5px solid {"#00FF00" if "USA" in row["MARKET"] else "#FFD700"}; margin-bottom: 10px;'>
+            <div class='glass-card' style='padding: 15px; border-left: 5px solid {border_col}; margin-bottom: 10px;'>
                 <div style='display: flex; justify-content: space-between;'>
                     <b style='font-size: 1.1rem;'>{row["MARKET"]} | {row["T"]} ({row["TIC"]})</b>
-                    <b style='color: {"#00FF00" if "+" in row["CH"] else "#FF4B4B"}; font-size: 1.1rem;'>{row["CH"]}</b>
+                    <b style='color: {change_col}; font-size: 1.1rem;'>{row["CH"]}</b>
                 </div>
                 <div style='margin-top: 8px; font-size: 0.95rem; color: #AAA;'>
                     현가: {row["P"]} | 
-                    <span style='color: #FFD700;'>ROE: <b>{row["ROE"]:.1f}%</b></span> | 
-                    <span style='color: #55AAFF;'>RS: <b>{row["RS"]:.1f}%</b></span> | 
+                    <span style='color: #FFD700;'>ROE: <b>{roe_val}%</b></span> | 
+                    <span style='color: #55AAFF;'>RS: <b>{rs_val}%</b></span> | 
                     <span style='color: #00FF00;'>VCP: <b>{row["VCP"]}</b></span> | 
-                    <span style='color: #FF4B4B;'>Score: <b>{int(row["SCORE"])}</b></span>
+                    <span style='color: #FF4B4B;'>Score: <b>{score_val}</b></span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
