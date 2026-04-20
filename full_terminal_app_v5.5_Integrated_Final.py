@@ -549,9 +549,13 @@ st.markdown(f"""
     .status-pulse {{ border: 1px solid #00FF0044; animation: pulse-glow 2s infinite; }}
     
     @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
+    @keyframes marquee-new {{ 
+        0% {{ transform: translateX(0); }} 
+        100% {{ transform: translateX(-33.33%); }} 
+    }}
     .ticker-wrap {{ overflow: hidden; background: rgba(0,0,0,0.6); white-space: nowrap; padding: 12px 0; border-bottom: 2px solid rgba(255,215,0,0.2); margin-bottom: 20px; backdrop-filter: blur(15px); }}
-    .ticker-content {{ display: inline-block; animation: ticker 250s linear infinite; color: #FFD700; font-size: 0.95rem; font-weight: 600; font-family: 'Outfit'; animation-delay: 1s; }}
-    .ticker-wrap:hover .ticker-content {{ animation-play-state: paused; }}
+    .ticker-content {{ display: inline-block; animation: marquee-new 40s linear infinite; color: #FFD700; font-size: 0.95rem; font-weight: 600; font-family: 'Outfit'; }}
+    .ticker-wrap:hover div {{ animation-play-state: paused !important; }}
     .ticker-item {{ margin: 0 40px; display: inline-block; }}
     /* 💎 사이드바 가독성 최적화 (줄바꿈 방지) */
     [data-testid="stSidebarNav"] {{ display: none; }}
@@ -3163,6 +3167,7 @@ elif page.startswith("7-f."):
                         
                         results.append({
                             "Ticker": t,
+                            "Price": round(p_curr, 2),
                             "Score": round(total_score, 1),
                             "RS": round(rs_val, 1),
                             "ROE": "Calculating...",
@@ -3216,8 +3221,8 @@ elif page.startswith("7-f."):
             return ''
 
         # 컬럼 순서 재조정 및 표시
-        display_df = df_q[["Ticker", "Score", "Signal", "EP", "SL", "TP", "ROE", "RS", "1M_Ret"]]
-        display_df.columns = ["티커", "종합점수", "신호", "매출시점(EP)", "손절가(SL)", "목표가(TP)", "ROE", "RS", "1M수익"]
+        display_df = df_q[["Ticker", "Price", "Score", "Signal", "EP", "SL", "TP", "ROE", "RS", "1M_Ret"]]
+        display_df.columns = ["티커", "현재가", "종합점수", "신호", "매출시점(EP)", "손절가(SL)", "목표가(TP)", "ROE", "RS", "1M수익"]
         
         st.dataframe(display_df.style.map(style_q_df).format(precision=2), use_container_width=True, hide_index=True)
         
