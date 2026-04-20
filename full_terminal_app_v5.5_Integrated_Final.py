@@ -238,9 +238,29 @@ def get_market_sentiment_score():
     except:
         return 50, 20.0
 
+# --- 🛰️ 거시지표 매크로 바 ---
+@st.cache_data(ttl=600)
+def get_macro_data():
+    try:
+        m_data = yf.download(["USDKRW=X", "^TNX"], period="5d", progress=False)['Close']
+        rate_series = m_data["USDKRW=X"].dropna()
+        rate = float(rate_series.iloc[-1]) if not rate_series.empty else 1400.0
+        yield_series = m_data["^TNX"].dropna()
+        yield10y = float(yield_series.iloc[-1]) if not yield_series.empty else 4.3
+        return rate, yield10y
+    except: 
+        return 1400.0, 4.3
+
 def get_macro_indicators():
     rate, yield10y = get_macro_data()
     return f"💵 USD/KRW: {rate:,.1f}원 | 🏦 US 10Y Yield: {yield10y:.2f}%"
+
+# --- 🤖 사령부 AI 정예 요원 (NPC Operatives) 설정 ---
+AI_OPERATIVES = {
+    "DeepDragon-01": {"strategy": "VCP Breakthrough", "risk": "Aggressive", "win_rate": 0.68},
+    "CyberTurtle-Alpha": {"strategy": "Trend Following", "risk": "Balanced", "win_rate": 0.55},
+    "QuantWolf-S": {"strategy": "Mean Reversion", "risk": "Conservative", "win_rate": 0.62}
+}
 
 @st.cache_data(ttl=300)
 def load_users():
@@ -1611,6 +1631,8 @@ elif page.startswith("2-a."):
                                 st.rerun()
         else:
             st.info("아직 등록된 브리핑이 없습니다.")
+    except Exception as e:
+        st.info("브리핑 데이터 연동 중...")
             
     st.divider()
     st.subheader("🗓️ 글로벌 캘린더 (Global Economic Calendar)")
@@ -1620,8 +1642,6 @@ elif page.startswith("2-a."):
           <iframe src="https://www.tradingview-widget.com/embed-widget/events/?locale=ko#%7B%22width%22%3A%22100%22%2C%22height%22%3A%22600%22%2C%22colorTheme%22%3A%22dark%22%2C%22isTransparent%22%3Afalse%2C%22importanceFilter%22%3A%22-1%2C0%2C1%22%2C%22currencyFilter%22%3A%22USD%2CKRW%22%7D" width="100%" height="600" frameborder="0"></iframe>
         </div>
     """, height=600)
-    except Exception as e:
-        st.info("브리핑 데이터 연동 중...")
 
 elif page.startswith("3-c."):
     st.header("🎯 사령부 최핵심 감시 리스트 (Top 3 Focus)")
@@ -3018,22 +3038,51 @@ elif page.startswith("7-e."):
         # 랭킹 정렬
         sorted_rank = sorted(user_stats.items(), key=lambda x: x[1]['total_profit'], reverse=True)
         
-        # UI 출력
-        c1, c2, c3 = st.columns([1, 2, 1])
-        with c2:
-            st.markdown("### 🥇 COMMANDER RANKING")
-            for i, (uid, stats) in enumerate(sorted_rank[:10]):
+        # --- 🤖 AI 요원들의 자율 실적 시뮬레이션 및 병합 ---
+        st.markdown("---")
+        st.markdown("### 📡 사령부 통합 실시간 랭킹 (HUMAN vs AI)")
+        
+        # AI 요원 실적 생성 (VIX 및 시장 심리에 따라 변동)
+        sentiment_score, _ = get_market_sentiment_score()
+        market_multiplier = (sentiment_score / 50.0) # 시장이 좋을수록 AI도 잘 벌음
+        
+        ai_stats = []
+        for name, info in AI_OPERATIVES.items():
+            # 가상의 누적 수익 생성 (AI 요원 레벨에 따른 퍼포먼스)
+            rand_perf = (info['win_rate'] * 15000000 * market_multiplier) + (random.randint(-500000, 1000000))
+            ai_stats.append((name, {"total_profit": rand_perf, "trade_count": random.randint(50, 200), "is_ai": True}))
+        
+        # Human + AI 통합 정렬
+        human_stats = [(uid, stats) for uid, stats in sorted_rank]
+        combined_ranking = sorted(human_stats + ai_stats, key=lambda x: x[1]['total_profit'], reverse=True)
+
+        with st.container():
+            for i, (uid, stats) in enumerate(combined_ranking[:10]):
+                is_ai = stats.get("is_ai", False)
                 medal = "🥇" if i == 0 else ("🥈" if i == 1 else ("🥉" if i == 2 else "🎖️"))
-                color = "#FFD700" if i == 0 else "#FFFFFF"
+                border_color = "#00FFFF" if is_ai else "#FFD700" if i < 3 else "rgba(255,255,255,0.1)"
+                bg_color = "rgba(0, 255, 255, 0.05)" if is_ai else "rgba(255, 255, 255, 0.02)"
+                
+                label = " [AI Operative]" if is_ai else " [Commander]"
+                
                 st.markdown(f"""
-                <div style='background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 5px solid {color};'>
-                    <span style='font-size: 1.2rem;'>{medal} <b>{uid}</b> 요원</span>
-                    <span style='float: right; color: #00FF00; font-weight: bold;'>$ {stats['total_profit']:,.2f}</span>
-                    <br><small style='color: #888;'>누적 매매: {stats['trade_count']}회</small>
+                <div class='glass-card' style='border-left: 5px solid {border_color}; background: {bg_color}; margin-bottom: 10px; padding: 15px;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <div>
+                            <span style='font-size: 1.1rem; font-weight: bold;'>{medal} {uid}</span>
+                            <span style='font-size: 0.75rem; color: #888;'>{label}</span>
+                        </div>
+                        <div style='text-align: right;'>
+                            <b class='{"neon-glow" if stats["total_profit"] > 0 else "neon-glow-red"}' style='font-size: 1.2rem;'>
+                                ₩ {stats['total_profit']:,.0f}
+                            </b>
+                            <br><small style='color: #555;'>Trades: {stats['trade_count']}회</small>
+                        </div>
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
             
-            if len(sorted_rank) > 0:
+            if len(combined_ranking) > 0 and combined_ranking[0][0] == st.session_state.get("current_user"):
                 st.balloons()
 
 elif page.startswith("7-f."):
@@ -3206,27 +3255,21 @@ elif page.startswith("7-f."):
         with c2: st.metric("💎 에너지 응축", f"{len(df_q[df_q['Tight'] == '💎 Tight'])}건")
         with c3: st.metric("⚡ 실시간 돌파(ORB)", f"{len(buys)}건")
 
-        st.divider()
-        st.subheader("🕯️ 개별 종목 나노 정밀 차트 분석")
-        sel_tic = st.selectbox("분석 대상 선택", ["-"] + df_q['Ticker'].tolist())
-        if sel_tic != "-":
-            tic_data = df_q[df_q['Ticker'] == sel_tic].iloc[0]
-            cc1, cc2 = st.columns([3, 1])
-            with cc1:
-                st.components.v1.html(f"<iframe src='https://s.tradingview.com/widgetembed/?symbol={sel_tic}&interval=D&theme=dark' width='100%' height='450'></iframe>", height=460)
-            with cc2:
-                st.markdown(f"""
-                <div class='glass-card' style='border-top: 3px solid #00FFFF;'>
-                    <h4 style='text-align:center;'>{sel_tic} 판독</h4>
-                    <hr>
-                    <small>1M 변동:</small> <b style='color:#00FF00;'>{tic_data['1M_Ret']:+.1f}%</b><br>
-                    <small>5D 변동성:</small> <b>{tic_data['Vol_5D']:.2f}%</b><br>
-                    <small>10일선 이격:</small> <b>{tic_data['SMA10_Dist']:.2f}%</b><br>
-                    <small>15분 ORB 고점:</small> <b>{tic_data['ORB_15M']:.2f}</b>
-                </div>
-                """, unsafe_allow_html=True)
                 if st.button(f"🚀 {sel_tic} 가상 매수 집행", key=f"q_buy_{sel_tic}"):
                     st.toast(f"{sel_tic} 종목을 전략 엔진에 따라 가상 포트폴리오에 추가합니다.")
+            
+            # --- 🤖 AI 요원의 실시간 필드 리포트 ---
+            st.markdown("---")
+            top_ai = list(AI_OPERATIVES.keys())[0]
+            st.markdown(f"""
+            <div class='glass-card' style='border-top: 3px solid #00FFFF; background: rgba(0,255,255,0.02);'>
+                <p style='color: #00FFFF; margin: 0; font-weight: 700;'>🛰️ AI FIELD REPORT: {top_ai}</p>
+                <p style='color: #CCC; font-size: 0.9rem; font-style: italic; margin-top: 10px;'>
+                    "현재 {sel_tic if sel_tic != '-' else '시장 주도주'}의 응축도가 전술적 임계치에 도달했습니다. 
+                    10일선 지지 여부가 확인되는 즉시 2차 유닛 배치를 권고합니다. 현재 {sentiment_score}%의 탐욕 지수는 공격적 진입에 우호적입니다."
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
     else:
         st.info("엔진을 가동하여 현재 시장의 최정예 주도주 셋업을 추출하십시오.")
 
