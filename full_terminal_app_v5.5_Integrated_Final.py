@@ -974,9 +974,9 @@ st.markdown(f"""
             <span style='color: #888; font-size: 0.85rem; letter-spacing: 1px;'>LIVE OPS CENTER</span>
         </div>
         <div style='margin-top: 5px;'>
-            <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>🇰🇷 한국: {now_kr.strftime('%m/%d')}/{['월','화','수','목','금','토','일'][now_kr.weekday()]}/{now_kr.strftime('%H:%M:%S')}</span>
+            <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>[KOR] 한국: {now_kr.strftime('%m/%d')}/{['월','화','수','목','금','토','일'][now_kr.weekday()]}/{now_kr.strftime('%H:%M:%S')}</span>
             <span style='color: #444; margin: 0 10px;'>|</span>
-            <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>🇺🇸 미국: {now_us.strftime('%m/%d')}/{['월','화','수','목','금','토','일'][now_us.weekday()]}/{now_us.strftime('%H:%M:%S')}</span>
+            <span style='color: #EEE; font-size: 0.95rem; font-weight: 700;'>[USA] 미국: {now_us.strftime('%m/%d')}/{['월','화','수','목','금','토','일'][now_us.weekday()]}/{now_us.strftime('%H:%M:%S')}</span>
         </div>
     </div>
     <div class='responsive-indices' style='display: flex; gap: 15px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 5px;'>
