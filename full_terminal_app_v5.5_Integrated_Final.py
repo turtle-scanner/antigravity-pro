@@ -1530,7 +1530,7 @@ elif page.startswith("3-d."):
         try:
             df = pd.read_csv(SHEET_URL)
             if not df.empty:
-                st.dataframe(df.head(10), use_container_width=True)
+                st.dataframe(df.style.format(precision=1), use_container_width=True)
                 st.success("✅ 상위 10개 산업군 분석 및 산출 완료!")
             else:
                 st.info("현재 로드된 산업동향 데이터가 없습니다.")
@@ -1551,8 +1551,10 @@ elif page.startswith("3-e."):
                     return ''
                 
                 # Pandas 2.1+ compatible styling (map replaces applymap)
-                try: st.dataframe(df.style.map(highlight_rs), use_container_width=True)
-                except: st.dataframe(df.style.applymap(highlight_rs), use_container_width=True)
+                try: 
+                    st.dataframe(df.style.map(highlight_rs).format(precision=1), use_container_width=True)
+                except: 
+                    st.dataframe(df.style.applymap(highlight_rs).format(precision=1), use_container_width=True)
                 
                 st.success("✅ RS 강도 분석 및 시각화 완료!")
                 
