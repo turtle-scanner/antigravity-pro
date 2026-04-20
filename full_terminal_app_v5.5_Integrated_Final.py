@@ -1078,7 +1078,7 @@ if page.startswith("6-a."):
     with c1:
         st.markdown(f"""
         <div class='glass-card' style='text-align: center; padding: 20px;'>
-            <h4 style='margin:0; color:#FFD700;'>🛸 누적 사령부 방문</h4>
+            <h4 style='margin:0; color:#FFD700;'>📡 누적 사령부 방문</h4>
             <span style='font-size: 2.5rem; font-weight: 900; color: #00FF00;'>{total_visits:,}</span>
             <p style='margin:0; color:#888;'>Operatives Engaged</p>
         </div>
