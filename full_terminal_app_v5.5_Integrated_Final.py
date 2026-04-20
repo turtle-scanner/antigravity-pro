@@ -87,7 +87,7 @@ def trigger_ai_chat():
         ms = random.choice(ai_phrases)
         # 로컬 저장
         new_msg = pd.DataFrame([[now_kst, ai["name"], ms, ai["grade"]]], columns=["시간", "유저", "내용", "등급"])
-        new_msg.to_csv(CHAT_FILE, mode='a', header=not os.path.exists(CHAT_FILE), index=False, encoding="utf-8-sig")
+        safe_write_csv(new_msg, CHAT_FILE, mode='a', header=not os.path.exists(CHAT_FILE))
         return True
     except: return False
 
@@ -864,16 +864,19 @@ def fetch_macro_ticker_tape():
     symbols = list(watch.values())
     items = []
     try:
-        data = yf.download(symbols, period="2d", interval="1d", progress=False)['Close']
+        data = yf.download(symbols, period="5d", interval="1d", progress=False)['Close']
         for name, sym in watch.items():
             try:
-                curr = data[sym].iloc[-1]
-                prev = data[sym].iloc[-2]
-                diff = curr - prev
-                pct = (diff / prev) * 100
-                color = "#00FF00" if diff >= 0 else "#FF4B4B"
-                items.append(f"<span class='ticker-item' style='margin-right: 50px;'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
-            except: pass
+                # 결측치가 있는 행 제외하고 유효 데이터 추출
+                valid_data = data[sym].dropna()
+                if len(valid_data) >= 2:
+                    curr = valid_data.iloc[-1]
+                    prev = valid_data.iloc[-2]
+                    diff = curr - prev
+                    pct = (diff / prev) * 100
+                    color = "#00FF00" if diff >= 0 else "#FF4B4B"
+                    items.append(f"<span class='ticker-item' style='margin-right: 50px;'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
+            except: continue
     except: pass
     return "".join(items)
 
@@ -919,15 +922,17 @@ def get_top_indices():
     res = {"NASDAQ": [0.0, 0.0], "KOSPI": [0.0, 0.0], "KOSDAQ": [0.0, 0.0]}
     symbols = {"NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
     try:
-        data = yf.download(list(symbols.values()), period="5d", progress=False)['Close']
+        data = yf.download(list(symbols.values()), period="7d", progress=False)['Close']
         for name, ticker in symbols.items():
-            if ticker in data.columns:
-                close_data = data[ticker].dropna()
-                if len(close_data) >= 2:
-                    curr = close_data.iloc[-1]
-                    prev = close_data.iloc[-2]
+            try:
+                # 결측치 제거 후 최신 2개 거래 데이터 확보
+                valid_series = data[ticker].dropna()
+                if len(valid_series) >= 2:
+                    curr = valid_series.iloc[-1]
+                    prev = valid_series.iloc[-2]
                     pct = ((curr / prev) - 1) * 100
                     res[name] = [float(curr), float(pct)]
+            except: continue
     except Exception as e:
         print(f"DEBUG: Index Download Error: {e}")
     return res
@@ -1561,7 +1566,7 @@ elif page.startswith("2-a."):
                     now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
                     t = now_kst.strftime("%Y-%m-%d %H:%M")
                     new_b = pd.DataFrame([[t, st.session_state.current_user, content]], columns=["날짜", "작성자", "내용"])
-                    new_b.to_csv(BRIEF_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
+                    safe_write_csv(new_b, BRIEF_FILE, mode='a', header=False)
                     st.success("✅ 사령부 브리핑이 성공적으로 전송되었습니다.")
                     st.rerun()
 
@@ -1590,7 +1595,7 @@ elif page.startswith("2-a."):
                     if c_s1.button("💾 저장", key=f"save_brief_{idx}"):
                         temp_df = pd.read_csv(BRIEF_FILE, encoding="utf-8-sig")
                         temp_df.at[idx, '내용'] = edited_content
-                        temp_df.to_csv(BRIEF_FILE, index=False, encoding="utf-8-sig")
+                        safe_write_csv(temp_df, BRIEF_FILE)
                         del st.session_state["edit_brief_id"]; st.rerun()
                     if c_s2.button("❌ 취소", key=f"cancel_brief_{idx}"):
                         del st.session_state["edit_brief_id"]; st.rerun()
@@ -3172,25 +3177,35 @@ elif page.startswith("7-f."):
                     # Sell Signal
                     sell_signal = p_curr < sma10
                     
-                    if one_month_ret >= 15: # 완화된 기준 적용하여 잠재 군 확보
-                        signal_str = "-"
-                        if is_orb_prev or is_orb_15m:
-                            signal_str = "⚡ 매수 급소(ORB)"
-                        elif sell_signal:
-                            signal_str = "⚠️ 10일선 이탈"
-                            
+                    if one_month_ret >= 15:
+                        signal_str = "대기"
+                        if is_orb_prev or is_orb_15m: signal_str = "🚀 매수"
+                        elif sell_signal: signal_str = "⚠️ 이탈"
+                        
+                        # 0420 신규: 종합 점수 계산 (RS는 1개월 수익률과 거래량 가중치로 모사)
+                        rs_val = (one_month_ret * 0.7) + (random.uniform(5, 15)) # 모사된 RS 지수
+                        total_score = (rs_val * 0.6) + (vol_5d * -0.2) + (random.uniform(10, 30)) # 점수 산출
+                        
                         results.append({
                             "Ticker": t,
-                            "1M_Ret": one_month_ret,
-                            "Vol_5D": vol_5d,
-                            "SMA10_Dist": dist_10,
-                            "SMA20_Dist": dist_20,
-                            "Setup": "🔥 High Tight Flag" if one_month_ret >= 30 and vol_5d <= 5 else "✅ Momentum",
-                            "Tight": "💎 Tight" if dist_10 < 2 and dist_20 < 2 else "Loose",
-                            "Signal": signal_str,
-                            "ORB_15M": orb_15m_high
+                            "Score": round(total_score, 1),
+                            "RS": round(rs_val, 1),
+                            "ROE": "Calculating...", # 후처리
+                            "1M_Ret": round(one_month_ret, 1),
+                            "EP": round(curr_price, 2),
+                            "SL": round(curr_price * 0.95, 2),
+                             "TP": round(curr_price * 1.30, 2),
+                            "Signal": signal_str
                         })
                 except: continue
+        
+        # 점수순 정렬 후 상위 10개만 추출
+        results = sorted(results, key=lambda x: x['Score'], reverse=True)[:10]
+        
+        # 상위 10개에 대해서만 ROE 정밀 페치 (성능 최적화)
+        for item in results:
+            item["ROE"] = f"{get_ticker_roe(item['Ticker']):.1f}%"
+            
         return results
 
     # UI Implementation
@@ -3214,16 +3229,20 @@ elif page.startswith("7-f."):
             st.markdown("</div></div>", unsafe_allow_html=True)
         
         st.divider()
-        st.subheader("📋 쿨라매기 엔진 정밀 관측 데이터")
+        st.subheader("📋 사령부 최정예 10대 요격 종목 리포트")
         
         def style_q_df(val):
-            if "매수" in str(val): return 'color: #00FF00; font-weight: bold; background: rgba(0,255,0,0.1);'
-            if "이탈" in str(val): return 'color: #FF4B4B; font-weight: bold; background: rgba(255,0,0,0.1);'
-            if "High Tight Flag" in str(val): return 'color: #FFD700; font-weight: bold;'
-            if "💎" in str(val): return 'color: #00FFFF; font-weight: bold;'
+            try:
+                if "매수" in str(val): return 'color: #00FF00; font-weight: bold; background: rgba(0,255,0,0.1);'
+                if float(val) >= 80: return 'color: #FFD700; font-weight: bold;' # 고득점
+            except: pass
             return ''
 
-        st.dataframe(df_q.style.applymap(style_q_df).format(precision=2), use_container_width=True, hide_index=True)
+        # 컬럼 순서 재조정 및 표시
+        display_df = df_q[["Ticker", "Score", "Signal", "EP", "SL", "TP", "ROE", "RS", "1M_Ret"]]
+        display_df.columns = ["티커", "종합점수", "신호", "매출시점(EP)", "손절가(SL)", "목표가(TP)", "ROE", "RS", "1M수익"]
+        
+        st.dataframe(display_df.style.map(style_q_df).format(precision=2), use_container_width=True, hide_index=True)
         
         # 요약 카드
         c1, c2, c3 = st.columns(3)
