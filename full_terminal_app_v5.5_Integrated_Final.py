@@ -789,6 +789,29 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
+    # [ PRO ] 글로벌 마켓 세션 클락 (Sidebar Clock System)
+    now_utc = datetime.utcnow()
+    sessions = {
+        "SEOUL": {"tz": pytz.timezone('Asia/Seoul'), "open": 9, "close": 15.5},
+        "NEW YORK": {"tz": pytz.timezone('America/New_York'), "open": 9.5, "close": 16},
+        "LONDON": {"tz": pytz.timezone('Europe/London'), "open": 8, "close": 16.5}
+    }
+    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#888; margin-top:20px;'>[ WORLD MARKET SESSIONS ]</p>", unsafe_allow_html=True)
+    for city, info in sessions.items():
+        city_now = datetime.now(info['tz'])
+        h_dec = city_now.hour + city_now.minute / 60
+        is_open = info['open'] <= h_dec < info['close']
+        s_color = "#00FF00" if is_open else "#FF4B4B"
+        st.markdown(f"""
+        <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 8px; border-left: 3px solid {s_color};'>
+            <span style='font-size: 0.75rem; color: #BBB;'>{city}</span>
+            <div style='text-align: right;'>
+                <b style='font-size: 0.85rem; color: #FFF;'>{city_now.strftime('%H:%M')}</b>
+                <span style='font-size: 0.6rem; color: {s_color}; margin-left: 5px;'>● {"OPEN" if is_open else "CLOSED"}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
     # [NEW] 실시간 작전 대원 상태 (AI 6인방)
     st.markdown("<p style='margin-top:20px; font-weight:bold; font-size:0.8rem; color:#888;'>[ LIVE ] AI OPERATIVES STATUS</p>", unsafe_allow_html=True)
     ai_team_sidebar = [
@@ -905,6 +928,12 @@ with st.sidebar:
         ti = random.choice(tickers)
         d_name = TICKER_NAME_MAP.get(ti, ti)
         st.session_state.show_flash = True
+        # [ ACTION ] AI 돌파 매수 알림음 (사운드 연동)
+        st.markdown("""
+        <audio autoplay>
+            <source src="https://www.soundjay.com/buttons/beep-07a.mp3" type="audio/mpeg">
+        </audio>
+        """, unsafe_allow_html=True)
         st.toast(f"📡 [ AI LIVE ] [ AI ] {op} 요원이 {d_name} 종목 실시간 돌파 매수 지점 포착 및 집행!", icon="⚔️")
 
 # --- 유저 등급 판독 ---
@@ -1090,27 +1119,26 @@ with st.container():
     cols = st.columns(5)
     
     for i, name in enumerate(indices_list):
-        # [ PRO ] 확장된 매크로 데이터 추출
         val, pct, high, low = idx_info.get(name, [0.0, 0.0, 0.0, 0.0])
         with cols[i]:
-            if name == "DOW":
-                st.markdown(f"<p style='font-size: 0.7rem; color: #888; margin-bottom: 5px;'>[ USA ] {now_us.strftime('%m/%d %H:%M')}</p>", unsafe_allow_html=True)
-            elif name == "KOSPI":
-                st.markdown(f"<p style='font-size: 0.7rem; color: #888; margin-bottom: 5px;'>[ KOREA ] {now_kr.strftime('%m/%d %H:%M')}</p>", unsafe_allow_html=True)
-            else:
-                st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
-                
             is_kr = name in ["KOSPI", "KOSDAQ"]
             theme_color = "#FF4B4B" if is_kr else "#00FF00"
             stat_color = theme_color if pct >= 0 else ("#0088FF" if is_kr else "#FF4B4B")
             arrow = ("▲" if is_kr else "↑") if pct >= 0 else ("▼" if is_kr else "↓")
             
+            # 시간 표시 결정
+            time_str = now_us.strftime('%H:%M') if not is_kr else now_kr.strftime('%H:%M')
+            region_tag = "[USA]" if not is_kr else "[KOR]"
+
             st.markdown(f"""
-                <div style='background: rgba(15,15,25,0.8); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); border-top: 2px solid {theme_color}; text-align: left; height: 140px;'>
-                    <div style='color: {theme_color}; font-weight: 800; font-size: 0.75rem; margin-bottom: 5px; opacity: 0.6;'>{name}</div>
-                    <div style='color: #FFF; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.5px;'>{val:,.1f}</div>
-                    <div style='color: {stat_color}; font-size: 0.85rem; font-weight: 800; margin-top: 2px;'>{arrow} {pct:+.2f}%</div>
-                    <div style='margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 5px; display: flex; justify-content: space-between; font-size: 0.65rem; color: #666;'>
+                <div style='background: rgba(15,15,25,0.8); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); border-top: 2px solid {theme_color}; text-align: left; height: 150px; position: relative;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;'>
+                        <span style='color: {theme_color}; font-weight: 800; font-size: 0.75rem; opacity: 0.8;'>{name}</span>
+                        <span style='color: #555; font-size: 0.6rem;'>{region_tag} {time_str}</span>
+                    </div>
+                    <div style='color: #FFF; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px; margin: 5px 0;'>{val:,.1f}</div>
+                    <div style='color: {stat_color}; font-size: 0.9rem; font-weight: 800;'>{arrow} {pct:+.2f}%</div>
+                    <div style='position: absolute; bottom: 12px; left: 12px; right: 12px; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 8px; display: flex; justify-content: space-between; font-size: 0.65rem; color: #666;'>
                         <span>H: <b style='color:#999;'>{high:,.1f}</b></span>
                         <span>L: <b style='color:#999;'>{low:,.1f}</b></span>
                     </div>
@@ -1343,123 +1371,157 @@ elif page.startswith("3-a."):
     st.header("[ SCAN ] 주도주 VCP & EP 마스터 스캐너")
     st.markdown("<div class='glass-card'>미너비니의 VCP(변동성 축소)와 본데의 EP(에피소딕 피벗) 4단계 통합 검색 엔진입니다.</div>", unsafe_allow_html=True)
     
-    def run_4stage_sc():
-        US_RADAR = ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "AVGO", "CRWD", "PLTR", "SMCI", "AMD", "NFLX", "STX", "WDC", "MSTR", "COIN", "MARA", "PANW", "SNOW"]
-        KR_RADAR = ["005930.KS", "000660.KS", "196170.KQ", "042700.KS", "105560.KS", "055550.KS", "005490.KS", "000270.KS", "066570.KS", "035720.KS", "005380.KS", "000810.KS"]
-        full_list = US_RADAR + KR_RADAR
-        
-        all_res = []
-        st_txt = st.empty()
-        st_txt.info("[ WAIT ] 글로벌 실시간 데이터 일괄 수집 중... 잠시만 기다려 주십시오.")
-        
+    def get_sheet_tickers():
         try:
-            # 일괄 다운로드로 속도 및 안정성 확보
-            data_full = yf.download(full_list, period="1y", interval="1d", progress=False)
-            data = data_full['Close']
-            data_high = data_full['High']
-            data_low = data_full['Low']
-            
-            # --- [ ACTION ] [Parallel ROE Fetching] ---
-            # 모든 티커의 ROE를 병렬로 미리 수집 (캐시가 있으면 즉시 반환됨)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                roe_map = {tic: res for tic, res in zip(full_list, executor.map(get_ticker_roe, full_list))}
+            # 구글 시트 CSV 내보내기 URL (Gid 반영)
+            sheet_url = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
+            df_sheet = pd.read_csv(sheet_url)
+            # 첫 번째 열(A열)에서 티커 추출 (불필요 공백 제거 및 대문자화)
+            tickers = df_sheet.iloc[:, 0].dropna().astype(str).str.strip().str.upper().tolist()
+            # 중복 제거 및 유효 티커 필터링
+            return list(set([t for t in tickers if len(t) >= 1 and t != "NAN"]))
+        except Exception as e:
+            st.error(f"⚠️ 구글 시트 티커 로드 실패: {e}")
+            return ["NVDA", "TSLA", "005930.KS"] # Fallback
 
+    def run_antigravity_screener():
+        st_txt = st.empty()
+        st_txt.info("[ WAIT ] 구글 시트 실감시 리스트 수집 및 안티그래비티 3단계 정밀 스캔 중...")
+        
+        full_list = get_sheet_tickers()
+        if not full_list:
+            st.warning("스캔할 종목 리스트가 비어 있습니다.")
+            return
+
+        try:
+            # 1년치 일봉 데이터 일괄 수집
+            data_full = yf.download(full_list, period="1y", interval="1d", progress=False)
+            
+            final_results = {"Burst": [], "EP": [], "Anticipation": []}
+            
             for tic in full_list:
                 try:
-                    if tic not in data.columns: continue
-                    h = data[tic].dropna()
-                    if len(h) < 200: continue
+                    # 멀티인덱스 대응 및 데이터 추출
+                    if isinstance(data_full.columns, pd.MultiIndex):
+                        df = data_full.xs(tic, axis=1, level=1).dropna()
+                    else:
+                        df = data_full.copy().dropna() # 단일 종목 케이스
+                    
+                    if len(df) < 105: continue # 지표 계산을 위한 최소 봉수
 
-                    # --- [ VCP ] v7.0 VCP(변동성 축소) 정밀 분석 ---
-                    h_high = data_high[tic].dropna()
-                    h_low = data_low[tic].dropna()
-                    vcp_score = 0
-                    tight_label = "Loose"
-                    if len(h_high) > 20:
-                        ranges = (h_high - h_low) / h * 100
-                        w1 = ranges.iloc[-5:].mean() 
-                        w2 = ranges.iloc[-10:-5].mean() 
-                        w3 = ranges.iloc[-20:-10].mean() 
-                        if w1 < w2 < w3: 
-                            vcp_score = 25 
-                            tight_label = "Excellent"
-                        elif w1 < w2: 
-                            vcp_score = 15
-                            tight_label = "Good"
+                    # --- [ 안티그래비티 검색식 로직 적용 ] ---
+                    df['c_prev'] = df['Close'].shift(1)
+                    df['v_prev'] = df['Volume'].shift(1)
+                    df['sma7'] = df['Close'].rolling(window=7).mean()
+                    df['sma50_v'] = df['Volume'].rolling(window=50).mean()
+                    df['sma65'] = df['Close'].rolling(window=65).mean()
+                    df['sma100_v'] = df['Volume'].rolling(window=100).mean()
+
+                    curr = df.iloc[-1]
+                    prev = df.iloc[-2]
                     
-                    cp = h.iloc[-1]
-                    pp = h.iloc[-2]
-                    y_ago = h.iloc[0]
+                    # 1. 4% 모멘텀 버스트 파트
+                    cond_1 = (curr['Close'] >= curr['c_prev'] * 1.04) & \
+                             (curr['Volume'] > curr['v_prev']) & \
+                             (curr['Volume'] >= 100000) & \
+                             (curr['sma7'] >= curr['sma65'] * 1.05) & \
+                             (curr['Close'] - curr['c_prev'] >= 0.25)
                     
-                    ch = (cp/pp - 1) * 100
-                    rs = ((cp / y_ago) - 1) * 100
+                    # 2. 에피소딕 피벗 (EP) 파트
+                    ep_large = (curr['Close'] - curr['c_prev'] >= 5) & (curr['Close'] >= 62.50) & (curr['Volume'] >= 1000000)
+                    ep_small = (curr['Close'] >= 1) & (curr['Close'] >= curr['c_prev'] * 1.08) & (curr['Volume'] >= curr['sma100_v'] * 3)
+                    ep_9m = (curr['Volume'] >= 9000000)
+                    cond_2 = ep_large | ep_small | ep_9m
+
+                    # 3. 예측 매매 (Anticipation) 파트
+                    max_h10 = df['High'].rolling(window=10).max().iloc[-1]
+                    min_l10 = df['Low'].rolling(window=10).min().iloc[-1]
+                    min_v3 = df['Volume'].rolling(window=3).min().iloc[-1]
                     
-                    # 미리 수집된 ROE 맵에서 가져옴
-                    roe = roe_map.get(tic, 0)
+                    cond_3 = ((max_h10 - min_l10) / curr['Close'] <= 0.10) & \
+                             (curr['Volume'] < curr['sma50_v']) & \
+                             (abs(curr['Close'] / curr['c_prev'] - 1) <= 0.01) & \
+                             (curr['sma7'] >= curr['sma65'] * 1.05) & \
+                             (min_v3 >= 100000)
+
+                    # 결과 분류
+                    res_entry = {
+                        "T": TICKER_NAME_MAP.get(tic, tic), "TIC": tic, 
+                        "P": curr['Close'], "CH": (curr['Close']/curr['c_prev']-1)*100,
+                        "V": curr['Volume']
+                    }
                     
-                    score = rs + (roe * 1.2) + vcp_score 
-                    is_us = (".KS" not in tic and ".KQ" not in tic)
-                    display_name = TICKER_NAME_MAP.get(tic, tic) if not is_us else tic
+                    if cond_1: final_results["Burst"].append(res_entry)
+                    if cond_2: final_results["EP"].append(res_entry)
+                    if cond_3: final_results["Anticipation"].append(res_entry)
                     
-                    all_res.append({
-                        "T": display_name, "TIC": tic, "P": f"${cp:.2f}" if is_us else f"{int(cp):,}원",
-                        "CH": f"{ch:+.1f}%", "ROE": roe, "RS": rs, "VCP": tight_label, "SCORE": score,
-                        "MARKET": "USA" if is_us else "KOREA"
-                    })
                 except: continue
+
+            st.session_state.antigravity_scan = final_results
+            st_txt.empty()
+            st.success(f"[ SUCCESS ] {len(full_list)}개 종목 분석 완료 및 전략 데이터 등재 완료!")
+
         except Exception as e:
-            st.error(f"⚠️ 데이터 통신 중 오류가 발생했습니다: {e}")
-            return
-            
-        st_txt.empty()
+            st.error(f"⚠️ 스캔 도중 치명적 오류 발생: {e}")
+
+    if st.button("[ EXEC ] 안티그래비티 3단계 정밀 스캔 시작"):
+        run_antigravity_screener()
+
+    if "antigravity_scan" in st.session_state:
+        res = st.session_state.antigravity_scan
         
-        if all_res:
-            df = pd.DataFrame(all_res)
-            st.session_state.scan_results = df
-            st.success("[ SUCCESS ] 스캔 완료! 주도주 분석 결과가 데이터베이스에 등재되었습니다.")
-            
-            # --- AI Advisor Preview Area ---
-            with st.expander("[ ADVISOR ] 사령부 AI 전술 판독 보고서 (Summary)", expanded=True):
-                top_stock = df.sort_values("SCORE", ascending=False).iloc[0]
-                advice_text = get_tactical_advice(top_stock['T'], top_stock['RS'], top_stock['ROE'])
-                st.markdown(f"**현재 최고의 전술 타겟: {top_stock['T']} ({top_stock['TIC']})**")
-                st.info(advice_text)
+        # --- PART 1. MOMENTUM BURST ---
+        st.subheader("🚀 PART 1. 모멘텀 버스트 (Momentum Burst)")
+        if not res["Burst"]:
+            st.info("현재 버스트 조건을 충족하는 종목이 없습니다.")
         else:
-            st.warning("분석 가능한 종목 데이터가 부족합니다. 잠시 후 다시 시도해 주세요.")
+            cols = st.columns(3)
+            for i, stock in enumerate(res["Burst"][:9]):
+                with cols[i % 3]:
+                    st.markdown(f"""
+                    <div class='glass-card' style='border-left: 5px solid #00FF00; margin-bottom: 15px; padding: 15px;'>
+                        <div style='font-size: 0.8rem; color: #888;'>HIT: MOMENTUM BURST</div>
+                        <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
+                        <span style='color: #00FF00; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
+                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-    if st.button("[ EXEC ] 한/미 주도주 10선 정밀 스캔 시작"):
-        run_4stage_sc()
+        # --- PART 2. EPISODIC PIVOT ---
+        st.divider()
+        st.subheader("💥 PART 2. 에피소딕 피벗 (EP)")
+        if not res["EP"]:
+            st.info("현재 EP 조건을 충족하는 종목이 없습니다.")
+        else:
+            cols = st.columns(3)
+            for i, stock in enumerate(res["EP"][:9]):
+                with cols[i % 3]:
+                    st.markdown(f"""
+                    <div class='glass-card' style='border-left: 5px solid #FFD700; margin-bottom: 15px; padding: 15px;'>
+                        <div style='font-size: 0.8rem; color: #888;'>HIT: EPISODIC PIVOT</div>
+                        <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
+                        <span style='color: #FFD700; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
+                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-    if "scan_results" in st.session_state and st.session_state.scan_results is not None:
-        df = st.session_state.scan_results
-        us_top = df[df['MARKET'].str.contains("USA")].sort_values("SCORE", ascending=False).head(5)
-        kr_top = df[df['MARKET'].str.contains("KOREA")].sort_values("SCORE", ascending=False).head(5)
-        combined_top = pd.concat([us_top, kr_top])
-        
-        st.subheader("[ HOT ] 사령부 한/미 통합 주도주 TOP 10")
-        for i, row in combined_top.iterrows():
-            # 구문 오류 방지를 위해 미리 포맷팅 수행
-            roe_val = f"{row['ROE']:.1f}"
-            rs_val = f"{row['RS']:.1f}"
-            score_val = str(int(row["SCORE"]))
-            border_col = "#00FF00" if "USA" in row["MARKET"] else "#FFD700"
-            change_col = "#00FF00" if "+" in row["CH"] else "#FF4B4B"
-            
-            st.markdown(f"""
-            <div class='glass-card' style='padding: 15px; border-left: 5px solid {border_col}; margin-bottom: 10px;'>
-                <div style='display: flex; justify-content: space-between;'>
-                    <b style='font-size: 1.1rem;'>{row["MARKET"]} | {row["T"]} ({row["TIC"]})</b>
-                    <b style='color: {change_col}; font-size: 1.1rem;'>{row["CH"]}</b>
-                </div>
-                <div style='margin-top: 8px; font-size: 0.95rem; color: #AAA;'>
-                    현가: {row["P"]} | 
-                    <span style='color: #FFD700;'>ROE: <b>{roe_val}%</b></span> | 
-                    <span style='color: #55AAFF;'>RS: <b>{rs_val}%</b></span> | 
-                    <span style='color: #00FF00;'>VCP: <b>{row["VCP"]}</b></span> | 
-                    <span style='color: #FF4B4B;'>Score: <b>{score_val}</b></span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+        # --- PART 3. ANTICIPATION ---
+        st.divider()
+        st.subheader("🎯 PART 3. 예측 매매 (Anticipation & Coiling)")
+        if not res["Anticipation"]:
+            st.info("현재 변동성 축소(Coiling) 조건을 충족하는 종목이 없습니다.")
+        else:
+            cols = st.columns(3)
+            for i, stock in enumerate(res["Anticipation"][:9]):
+                with cols[i % 3]:
+                    st.markdown(f"""
+                    <div class='glass-card' style='border-left: 5px solid #00FFFF; margin-bottom: 15px; padding: 15px;'>
+                        <div style='font-size: 0.8rem; color: #888;'>HIT: COILING / DRY-UP</div>
+                        <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
+                        <span style='color: #00FFFF; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
+                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
         
         st.divider()
         st.subheader("[ CHART ] 종목별 정밀 차트 분석 (Select Ticker)")
@@ -1566,15 +1628,20 @@ elif page.startswith("6-b."):
                         if ce2.form_submit_button("[ CANCEL ] 취소"):
                             del st.session_state["editing_msg_idx"]
                             st.rerun()
-                else:
-                    # 일반 버블 모드
+                    # 일반 버블 모드 (아바타/배지 포함 프리미엄 UI)
+                    avatar_char = str(row["유저"])[0].upper() if row["유저"] else "?"
                     st.markdown(f"""
-                    <div style='text-align: {align}; margin-bottom: 5px;'>
-                        <div style='display: inline-block; max-width: 85%; text-align: left;'>
-                            <div style='font-size: 0.75rem; color: #888; margin-bottom: 3px; display: flex; justify-content: {"flex-end" if is_me else "flex-start"}; gap: 8px;'>
-                                <b>{row["유저"]}</b> <span style='font-size: 0.65rem;'>({row["등급"]})</span> <span>{row["시간"]}</span>
+                    <div style='display: flex; justify-content: {"flex-end" if is_me else "flex-start"}; margin-bottom: 20px; gap: 10px; flex-direction: {"row-reverse" if is_me else "row"};'>
+                        <div style='width: 40px; height: 40px; background: {bg}; border: {border}; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FFF; font-weight: 900; font-size: 1.1rem; box-shadow: 0 0 10px {border.split()[-1]};'>
+                            {avatar_char}
+                        </div>
+                        <div style='max-width: 75%;'>
+                            <div style='font-size: 0.75rem; color: #888; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; flex-direction: {"row-reverse" if is_me else "row"};'>
+                                <b style='color: #EEE;'>{row["유저"]}</b>
+                                <span style='background: {bg}; border: 1px solid {border.split()[-1]}; padding: 1px 6px; border-radius: 4px; font-size: 0.6rem; color: #FFF;'>{row["등급"]}</span>
+                                <time style='font-size: 0.6rem; opacity: 0.6;'>{row["시간"]}</time>
                             </div>
-                            <div style='background: {bg}; border: {border}; border-radius: {border_radius}; padding: 12px; color: #FFF; line-height: 1.6; box-shadow: 0 4px 10px rgba(0,0,0,0.2);'>
+                            <div style='background: {bg}; border: {border}; border-radius: {border_radius}; padding: 15px; color: #FFF; line-height: 1.6; box-shadow: 0 8px 25px rgba(0,0,0,0.3);'>
                                 {row["내용"]}
                             </div>
                         </div>
@@ -1613,55 +1680,83 @@ elif page.startswith("3-c."):
     SHEET_URL = st.secrets.get("MARKET_FOCUS_URL", "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020")
     now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
     
-    with st.spinner("DATA: 데이터 센터 리더보드 정밀 분석 중..."):
+    with st.spinner("DATA: 리더보드 수익률 및 수급 정밀 추적 중..."):
         try:
             df_raw = pd.read_csv(SHEET_URL)
             latest_col = df_raw.columns[0]
+            # 상위 10개 후보 추출
             top_10_candidates = df_raw[latest_col].dropna().head(10).tolist()
             all_mentions = df_raw.values.flatten().tolist()
             mention_counts = {tic: all_mentions.count(tic) for tic in top_10_candidates}
+            
             final_3 = []
             cand_tics = sorted(mention_counts, key=mention_counts.get, reverse=True)
             
             if cand_tics:
-                prices_data = yf.download(cand_tics, period="1d", progress=False)['Close']
-                if isinstance(prices_data, pd.Series): 
-                    prices_data = pd.DataFrame(prices_data).T
+                # [ ACTION ] 5일치 데이터를 가져와 주간 ROI 계산
+                hist_raw = yf.download(cand_tics, period="5d", progress=False)
+                prices_hist = hist_raw['Close']
+                
+                # 티커가 하나일 경우 DataFrame 형태로 보정
+                if isinstance(prices_hist, pd.Series):
+                    prices_hist = pd.DataFrame({cand_tics[0]: prices_hist})
+
                 for tic in cand_tics:
                     try:
-                        roe = 0.0
-                        price = prices_data[tic].iloc[-1] if tic in prices_data.columns else 0
-                        if price > 0:
-                            final_3.append({
-                                "T": tic, "ROE": "N/A",
-                                "RS": f"{mention_counts[tic]}회 언급",
-                                "EP": f"${price:.2f}", "SL": f"${price*0.95:.2f}", "TP": f"${price*1.15:.2f}"
-                            })
+                        if tic not in prices_hist.columns: continue
+                        h_data = prices_hist[tic].dropna()
+                        if len(h_data) < 2: continue
+                        
+                        start_p = h_data.iloc[0] # 5일 전 가격 (기준가)
+                        curr_p = h_data.iloc[-1]  # 현재가
+                        roi = ((curr_p / start_p) - 1) * 100
+                        
+                        is_us = (".KS" not in tic and ".KQ" not in tic)
+                        cur_symbol = "$" if is_us else ""
+                        cur_unit = "" if is_us else "원"
+                        
+                        final_3.append({
+                            "T": tic, 
+                            "FREQ": f"{mention_counts[tic]}회 언급",
+                            "CURR": f"{cur_symbol}{curr_p:.2f}{cur_unit}" if is_us else f"{int(curr_p):,}원",
+                            "ROI": roi,
+                            "SL": f"{cur_symbol}{curr_p*0.95:.2f}{cur_unit}" if is_us else f"{int(curr_p*0.95):,}원",
+                            "TP": f"{cur_symbol}{curr_p*1.15:.2f}{cur_unit}" if is_us else f"{int(curr_p*1.15):,}원"
+                        })
                         if len(final_3) >= 3: break
                     except: continue
                 
-            st.markdown(f"<div class='glass-card'>DATE: <b>{now_kst.strftime('%Y-%m-%d')} KST</b> | 사령부 최우선 공략 종목 3선</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='glass-card'>DATE: <b>{now_kst.strftime('%Y-%m-%d')} KST</b> | 사령부 전략 자산 ROI 추적 보고서</div>", unsafe_allow_html=True)
             cols = st.columns(3)
             for i, item in enumerate(final_3):
+                roi_color = "#00FF00" if item['ROI'] >= 0 else "#FF4B4B"
+                roi_mark = "+" if item['ROI'] >= 0 else ""
+                
                 with cols[i]:
                     st.markdown(f"""
-                    <div style='background: rgba(255,215,0,0.1); border: 2px solid #FFD700; border-radius: 12px; padding: 15px; text-align: center; height: 320px;'>
+                    <div style='background: rgba(255,215,0,0.08); border: 2px solid #FFD70066; border-radius: 12px; padding: 15px; text-align: center; height: 340px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);'>
                         <h3 style='color: #FFD700; margin: 0;'>{item['T']}</h3>
-                        <p style='color: #888; font-size: 0.8rem;'>Mention Rank {i+1}</p>
-                        <hr style='border: 0.5px solid #444;'>
-                        <div style='text-align: left; font-size: 0.9rem;'>
-                            <b>[ ROE ]:</b> {item['ROE']}<br>
-                            <b>[ RS-FREQ ]:</b> {item['RS']}<br>
-                            <b>[ ENTRY ]:</b> {item['EP']}<br>
-                            <b>[ STOP ]:</b> {item['SL']}<br>
-                            <b>[ TARGET ]:</b> {item['TP']}
+                        <p style='color: #888; font-size: 0.75rem;'>Tactical Mention Rank {i+1}</p>
+                        <hr style='border: 0.5px solid #444; margin: 10px 0;'>
+                        
+                        <div style='background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin-bottom: 15px;'>
+                            <span style='color: #AAA; font-size: 0.8rem;'>CURRENT ROI</span><br>
+                            <span style='color: {roi_color}; font-size: 1.8rem; font-weight: 900;'>{roi_mark}{item['ROI']:.2f}%</span>
+                        </div>
+
+                        <div style='text-align: left; font-size: 0.85rem; color: #BBB;'>
+                            <b>[ REQ ]:</b> {item['FREQ']}<br>
+                            <b>[ PRICE ]:</b> {item['CURR']}<br>
+                            <b style='color: #FF4B4B;'>[ STOP ]:</b> {item['SL']}<br>
+                            <b style='color: #00FF00;'>[ TARGET ]:</b> {item['TP']}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-            if not final_3: st.info("조건을 만족하는 감시 종목이 리더보드 상단에 없습니다.")
-            st.success("[ SUCCESS ] 사령부 데이터 동기화 및 빈도 분석 완료!")
+            
+            if not final_3: st.info("감시 리스트에 유효한 전술 종목이 없습니다.")
+            st.success("[ SUCCESS ] 사령부 전략 자산 실시간 퍼포먼스 분석 완료!")
         except Exception as e:
-            st.error(f"[ ERROR ] 데이터 분석 실패: {e}")
+            st.error(f"[ ERROR ] 전략 리스트 분석 실패: {e}")
 
 elif page.startswith("3-d."):
     st.header("[ INDUSTRY ] 산업동향 (Industry Trends TOP 10)")
@@ -1762,60 +1857,96 @@ elif page.startswith("1-a."):
         })
     st.dataframe(pd.DataFrame(all_rows), use_container_width=True, hide_index=True)
 
+# --- [ IMMUTABLE ZONE: MISSION CRITICAL DATA - DO NOT MODIFY ] ---
 elif page.startswith("5-a."):
+    st.markdown("<div style='text-align: right;'><span style='background: #FF4B4B; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: bold;'>HQ-DATA SECURED: IMMUTABLE</span></div>", unsafe_allow_html=True)
     st.markdown("<h1 style='text-align: center; color: #FFD700;'>[ MENTOR ] 월가의 멘토, 프라딥 본데</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #888; font-size: 1.2rem;'>Stockbee: 시스템 트레이딩의 선구자</p>", unsafe_allow_html=True)
     st.divider()
-    st.write("프라딥 본데는 실전 트레이더로서 자신만의 매매 프로세스를 체계화하여 거대한 유산을 남기고 있습니다.")
-    st.subheader("1. 비금융권 출신의 최적화 시각")
-    st.info("물류 사업의 '시스템 최적화' 경험을 주식 시장에 대입하여, 비즈니스 모델로서의 매매 프로세스를 구축했습니다.")
-    st.subheader("2. 스탁비의 4대 트레이딩 철학")
-    c1, c2 = st.columns(2)
-    with c1:
-        with st.expander("SINGLES: 안타 전략", expanded=True): st.write("확실한 수익을 복리로 누적시키는 꾸준함.")
-        with st.expander("DEEP DIVE: 딥 다이브", expanded=True): st.write("폭등 차트 수천 개를 연구하여 패턴을 뇌에 각인.")
-    with c2:
-        with st.expander("SHIELD: 셀프 리더십", expanded=True): st.write("자기 주도적 실행력과 원칙 고수.")
-        with st.expander("BREADTH: 상황 인식", expanded=True): st.write("시장의 폭을 분석하여 공격과 방어 구분.")
-    st.subheader("3. 시장 관통 매매 기법")
-    st.success("""
-    [ EP ]: 기업 펀더멘털을 바꾸는 강력한 뉴스 공략.
-    [ BURST ]: 눌림목(VCP) 에너지 임계점 포착.
-    [ FORMULA ]: 본데만의 대장주 선별 공식 (MAGNA 53+).
-    """)
-    st.subheader("4. 제자들의 증명")
-    st.write("크리스찬 쿨라매기 등 수천억 자산가들이 본데의 가르침을 통해 시스템을 완성했습니다.")
-    st.divider()
+    
+    st.markdown("""
+    <div class='glass-card' style='padding: 30px;'>
+        <h3 style='color: #FFD700;'>1. 비금융권 출신의 최적화 시각</h3>
+        <p style='color: #BBB; line-height: 1.8;'>프라딥 본데는 물류 사업의 '시스템 최적화' 경험을 주식 시장에 대입하여, 비즈니스 모델로서의 매매 프로세스를 구축했습니다. 그는 실전 트레이더로서 자신만의 매매 프로세스를 체계화하여 거대한 유산을 남기고 있습니다.</p>
+        
+        <h3 style='color: #FFD700; margin-top: 25px;'>2. 스탁비의 4대 트레이딩 철학</h3>
+        <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 15px;'>
+            <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
+                <b style='color: #FFF;'>SINGLES: 안타 전략</b><br><span style='font-size: 0.85rem; color: #888;'>확실한 수익을 복리로 누적시키는 꾸준함.</span>
+            </div>
+            <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
+                <b style='color: #FFF;'>DEEP DIVE: 딥 다이브</b><br><span style='font-size: 0.85rem; color: #888;'>폭등 차트 수천 개를 연구하여 패턴을 뇌에 각인.</span>
+            </div>
+            <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
+                <b style='color: #FFF;'>SHIELD: 셀프 리더십</b><br><span style='font-size: 0.85rem; color: #888;'>자기 주도적 실행력과 원칙 고수.</span>
+            </div>
+            <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,215,0,0.2);'>
+                <b style='color: #FFF;'>BREADTH: 상황 인식</b><br><span style='font-size: 0.85rem; color: #888;'>시장의 폭을 분석하여 공격과 방어 구분.</span>
+            </div>
+        </div>
 
+        <h3 style='color: #00FF00; margin-top: 25px;'>3. 시장 관통 매매 기법</h3>
+        <div style='background: rgba(0,255,0,0.03); padding: 20px; border-radius: 12px; border-left: 5px solid #00FF00;'>
+            <p style='margin-bottom: 8px;'><b style='color:#FFF;'>[ EP ]</b>: 기업 펀더멘털을 바꾸는 강력한 뉴스 공략.</p>
+            <p style='margin-bottom: 8px;'><b style='color:#FFF;'>[ BURST ]</b>: 눌림목(VCP) 에너지 임계점 포착.</p>
+            <p style='margin-bottom: 0;'><b style='color:#FFF;'>[ FORMULA ]</b>: 본데만의 대장주 선별 공식 (MAGNA 53+).</p>
+        </div>
+
+        <h3 style='color: #FFD700; margin-top: 25px;'>4. 제자들의 증명</h3>
+        <p style='color: #BBB;'>크리스찬 쿨라매기 등 수천억 자산가들이 본데의 가르침을 통해 시스템을 완성했습니다.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.divider()
+# --- [ END OF IMMUTABLE ZONE: 5-a ] ---
+
+# --- [ IMMUTABLE ZONE: MISSION CRITICAL DATA - DO NOT MODIFY ] ---
 elif page.startswith("2-d."):
+    st.markdown("<div style='text-align: right;'><span style='background: #FF4B4B; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: bold;'>HQ-DATA SECURED: IMMUTABLE</span></div>", unsafe_allow_html=True)
     st.markdown("<h1 style='text-align: center; color: #FFD700;'>[ MISSION ] 사령부 제작 동기</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #888; font-size: 1.1rem;'>Follow the Giants, Conquer the Market Together</p>", unsafe_allow_html=True)
     st.divider()
     st.write("이 플랫폼은 윌리엄 오닐, 마크 미너비니, 프라딥 본데의 철학을 기리기 위해 시작되었습니다.")
     st.markdown(f"""
     <div class='glass-card' style='padding: 30px; margin-top: 20px;'>
-        <h3 style='color: #00FF00; border-left: 5px solid #00FF00; padding-left: 15px; margin-bottom: 25px;'>
-            Dragonfly: 중력을 이기는 비행의 시작
-        </h3>
+        <div style='border-left: 4px solid #FFD700; padding-left: 20px; margin-bottom: 30px;'>
+            <h2 style='color: #FFF; margin: 0; font-size: 1.8rem;'>Dragonfly: 중력을 이기는 비행의 시작</h2>
+            <p style='color: #888; margin: 5px 0 0 0;'>사령부 시스템의 존재 이유와 대원들을 위한 약속</p>
+        </div>
         
-        <div style='margin-bottom: 25px;'>
-            <h4 style='color: #FFD700;'>🛡️ 스승님을 향한 감사의 마음에서 출발했습니다</h4>
-            <p style='color: #BBB; line-height: 1.8;'>주식 시장이라는 거친 바다에서 길을 잃지 않게 이끌어주신 스승님이 계셨습니다. 마크 미너비니, 윌리엄 오닐, 데이비드 라이언, 그리고 프라딥 본데와 같은 대가들의 지혜를 전해주신 스승님께 보답하는 가장 좋은 방법은, 그 가르침을 나노 단위로 체계화하여 더 완성도 높은 시스템으로 만드는 것이라 믿었습니다. <b style='color:#FFF;'>Dragonfly는 스승님의 유산을 잇는 보은의 결과물입니다.</b></p>
+        <div style='margin-bottom: 30px;'>
+            <h4 style='color: #FFF;'>스승님을 향한 감사의 마음에서 출발했습니다</h4>
+            <div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+                주식 시장이라는 거친 바다에서 길을 잃지 않게 이끌어주신 스승님이 계셨습니다. 마크 미너비니, 윌리엄 오닐, 데이비드 라이언, 
+                그리고 프라딥 본데와 같은 대가들의 지혜를 전해주신 스승님께 보답하는 가장 좋은 방법은, 그 가르침을 나노 단위로 체계화하여 
+                더 완성도 높은 시스템으로 만드는 것이라 믿었습니다. <b style='color:#FFD700;'>Dragonfly는 스승님의 유산을 잇는 보은의 결과물입니다.</b>
+            </div>
         </div>
 
-        <div style='margin-bottom: 25px;'>
-            <h4 style='color: #FFD700;'>🤝 경제적 이익과 즐거움을 모두와 나누고 싶습니다</h4>
-            <p style='color: #BBB; line-height: 1.8;'>혼자서만 수익을 올리는 것은 진정한 우상향이 아니라고 생각합니다. 주식 투자가 고통스러운 노동이 아니라, 모두가 편리하게 경제적 이익을 얻고 그 과정에서 성취의 즐거움을 느끼는 생태계를 만들고 싶었습니다. Dragonfly는 누구나 수수료 없이, 복잡한 중력의 방해를 받지 않고 <b style='color:#FFF;'>무중력 상태에서 수익의 가속도를 경험할 수 있는 공간</b>을 지향합니다.</p>
+        <div style='margin-bottom: 30px;'>
+            <h4 style='color: #FFF;'>경제적 이익과 즐거움을 모두와 나누고 싶습니다</h4>
+            <div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+                혼자서만 수익을 올리는 것은 진정한 우상향이 아니라고 생각합니다. 주식 투자가 고통스러운 노동이 아니라, 
+                모든 대원이 편리하게 경제적 이익을 얻고 그 과정에서 성취의 즐거움을 느끼는 생태계를 만들고 싶었습니다. 
+                Dragonfly는 복잡한 중력의 방해를 받지 않고 <b style='color:#FFD700;'>무중력 상태에서 수익의 가속도를 경험할 수 있는 공간</b>을 지향합니다.
+            </div>
         </div>
 
-        <div style='margin-bottom: 25px;'>
-            <h4 style='color: #FFD700;'>🔐 정보 보안과 자동화로 세우는 단단한 지지선</h4>
-            <p style='color: #BBB; line-height: 1.8;'>많은 사람이 모일수록 가장 중요한 것은 안전입니다. 사용자의 소중한 정보를 지키기 위해 강력한 암호화 기술을 도입하여 외부의 위협으로부터 자유로운 요새를 만들고자 합니다. 또한, 인간의 감정이 개입되어 원칙이 흔들리지 않도록 <b style='color:#FFF;'>나노 단위의 정밀한 자동 매매 시스템</b>을 구축하여, 가장 차갑고도 정확한 타점에서 승리하는 경험을 제공할 것입니다.</p>
+        <div style='margin-bottom: 30px;'>
+            <h4 style='color: #FFF;'>정보 보안과 자동화로 세우는 단단한 지지선</h4>
+            <div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+                사용자의 소중한 정보를 지키기 위해 AES-256과 같은 강력한 암호화 기술을 도입하여 외부의 위협으로부터 자유로운 요새를 만들고자 합니다. 
+                또한, 인간의 감정이 개입되어 원칙이 흔들리지 않도록 <b style='color:#FFD700;'>나노 단위의 정밀한 자동 매매 시스템</b>을 구축하여, 
+                가장 차갑고도 정확한 타점에서 승리하는 경험을 제공할 것입니다.
+            </div>
         </div>
 
         <div>
-            <h4 style='color: #FFD700;'>🌍 500명의 전우가 함께 만드는 무중력 공동체</h4>
-            <p style='color: #BBB; line-height: 1.8;'>Dragonfly의 비전은 혼자 꾸는 꿈이 아닙니다. 처음 100명의 전우가 모여 체계를 잡고, 나아가 500명의 정예 멤버가 각 섹터의 주도주를 감시하며 서로의 실력을 끌어올리는 숙달의 장을 만들 것입니다. 경제적 문맹이라는 중력을 벗어나, 500명의 전우가 함께 비상하며 시장을 압도하는 날까지 Dragonfly의 비행은 멈추지 않을 것입니다. <b style='color:#FFF;'>모두가 경제적 자유를 얻었으면 좋겠습니다.</b> 정규직, 계약직 차별없는 사회를 만들고 싶습니다.</p>
+            <h4 style='color: #FFF;'>500명의 전우가 함께 만드는 무중력 공동체</h4>
+            <div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+                 처음 100명의 전우가 모여 체계를 잡고, 나아가 500명의 정예 멤버가 각 섹터의 주도주를 감시하며 서로의 실력을 끌어올릴 것입니다. 
+                경제적 문맹이라는 중력을 벗어나, 500명의 전우가 함께 비상하며 시장을 압도하는 날까지 Dragonfly의 비행은 멈추지 않을 것입니다. 
+                <b style='color:#FFD700;'>모두가 경제적 자유를 얻었으면 좋겠습니다.</b> 정규직, 계약직 차별 없는 사회를 만들고 싶습니다.
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1823,9 +1954,48 @@ elif page.startswith("2-d."):
     st.markdown("<div class='glass-card' style='margin-top: 30px;'>", unsafe_allow_html=True)
     st.subheader("[ PILLARS ] 사령부를 지탱하는 세 개의 기둥")
     c1, c2, c3 = st.columns(3)
-    with c1: st.markdown("**1. 오닐 (CAN SLIM)**"); st.caption("Growth potential.")
-    with c2: st.markdown("**2. 미너비니 (VCP)**"); st.caption("Precision timing.")
-    with c3: st.markdown("**3. 본데 (EP/RS)**"); st.caption("Strategic process.")
+    with c1: 
+        with st.popover("**1. 오닐 (CAN SLIM)**", use_container_width=True):
+            st.markdown("### 1. 윌리엄 오닐 (William O'Neil)")
+            st.caption('"좋은 씨앗(종목)을 고르는 법"')
+            st.info("오닐은 펀더멘털(실적)이 뒷받침되는 시장 주도주를 찾는 데 집중합니다.")
+            st.markdown("""
+            **핵심 전략: CAN SLIM**
+            - **C(Current Earnings)**: 최근 분기 순이익이 전년 대비 25% 이상 급증.
+            - **A(Annual Earnings)**: 연간 이익 성장률이 꾸준히 가속화.
+            - **N(New)**: 신제품, 신기술, 새로운 경영진 또는 신고가 경신.
+            - **S(Supply/Demand)**: 유통 주식 수가 적고 거래량이 동반된 주식.
+            - **L(Leader or Laggard)**: 해당 업종 내 1등 주도주.
+            - **I(Institutional Sponsorship)**: 기관 투자자의 매수세가 유입됨.
+            - **M(Market Direction)**: 전체 시장이 상승장일 것.
+
+            **특징**: 숫자로 증명된 강력한 성장주를 선호하며, '비싸게 사서 더 비싸게 파는' 전략의 창시자입니다.
+            """)
+    with c2: 
+        with st.popover("**2. 미너비니 (VCP)**", use_container_width=True):
+            st.markdown("### 2. 마크 미너비니 (Mark Minervini)")
+            st.caption('"활시위가 팽팽해진 타이밍(VCP)을 잡는 법"')
+            st.info("미너비니는 오닐의 제자로, 차트가 에너지를 응축한 순간을 포착하는 기술적 분석의 대가입니다.")
+            st.markdown("""
+            **핵심 전략: SEPA & VCP**
+            - **SEPA**: 하락 중인 주식은 사지 않고, 2단계 상승 추세에 진입한 종목만 필터링.
+            - **VCP (Volatility Contraction Pattern)**: 주가 변동폭이 단계적으로 줄어들며(예: 20% → 10% → 3% → 1%) 매물이 모두 소화되는 과정을 확인.
+
+            **특징**: 위험 관리를 최우선으로 합니다. 변동성이 극도로 줄어든 'Tight'한 구간에서 피벗 포인트를 돌파할 때 진입하여 손절 라인을 매우 짧게 가져갑니다.
+            """)
+    with c3: 
+        with st.popover("**3. 본데 (EP/RS)**", use_container_width=True):
+            st.markdown("### 3. 프라딥 본데 (Pradeep Bonde)")
+            st.caption('"강력한 엔진(EP)과 시장의 관심을 확인하는 법"')
+            st.info("본데는 '모멘텀'과 '수급'에 집중하며, 시장에서 가장 강하게 튀어 오르는 종목을 빠르게 잡아냅니다.")
+            st.markdown("""
+            **핵심 전략: EP & RS**
+            - **EP (Explosive Pivot)**: 어닝 서프라이즈 같은 강력한 촉매제와 함께 압도적인 거래량(예: 900만 주 이상)으로 직전 고점을 뚫는 현상.
+            - **RS (Relative Strength)**: 시장 지수(S&P500 등)보다 훨씬 더 강력하게 오르는 상대적 강도 확인.
+            - **Lynch & EP**: 급등 후 주가가 밀리지 않고 옆으로 기는 '지연 반응' 구간에서 매수.
+
+            **특징**: 거래량이 터지지 않는 상승은 가짜라고 보며, 기관의 강력한 매수세가 들어온 흔적을 추적합니다.
+            """)
     st.markdown("</div>", unsafe_allow_html=True)
     
     st.markdown("""
