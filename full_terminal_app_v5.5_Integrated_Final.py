@@ -581,52 +581,73 @@ if not st.session_state["password_correct"]:
             st.info("기초 10문제 + 전술 5문제 중 13문제 이상 맞혀야 승인이 완료됩니다.")
             
             # 기초 10문제 (Q1-Q10)
+            # 기초 10문제 (Q1-Q10)
             q1 = st.radio("Q1. 우리나라 주식 차트에서 '빨간색 양초(캔들)' 그림은 무슨 뜻일까요?", ["올랐다 (상승)", "떨어졌다 (하락)", "변동 없다", "거래 중지"], index=None)
             q2 = st.radio("Q2. 파란색 양초(캔들) 그림은 무슨 뜻일까요?", ["상승 국면", "하락 국면", "보합 국면", "매수 신호"], index=None)
             q3 = st.radio("Q3. 하루 동안 사람들이 주식을 얼마나 많이 사고팔았는지 알려주는 지표는?", ["거래량", "배당금", "회전율", "수익률"], index=None)
             q4 = st.radio("Q4. 양초 모양을 닮은 막대기들로 그린 차트의 이름은 무엇일까요?", ["막대 차트", "캔들 차트", "라인 차트", "그림 차트"], index=None)
             q5 = st.radio("Q5. 주식 명언 중 가장 잘 알려진 원칙은?", ["발바닥에서 사서 정수리에서 팔아라", "무릎에서 사서 어깨에서 팔아라", "언제든 사고 언제든 팔아라", "사두면 언젠가 오른다"], index=None)
-            q6 = st.radio("Q6. 주식 가격의 평균을 내서 선으로 이은 그림을 무엇이라고 할까요?", ["이동평균선(이평선)", "추�    # BGM 시스템 일시 중단 (타이핑 렉 방지 최우선)
-    # def get_base64_audio(file_path): ...
-    st.info("💡 최적의 타이핑 속도를 위해 오디오 사령부는 현재 점검 중입니다.")
-t) if a == c])
-                    
-                    if score >= 13:
-                        users = load_users()
-                        if new_id in users: st.error("❌ 이미 존재하는 대원 코드(ID)입니다.")
-                        else:
-                            users[new_id] = {
-                                "password": new_pw, "status": "approved", "grade": "회원",
-                                "info": {
-                                    "region": reg_region, "age": reg_age, "gender": reg_gender,
-                                    "exp": reg_exp, "motivation": reg_moti, "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M")
-                                }
-                            }
-                            save_users(users)
-                            
-                            # 🛡️ 즉시 구글 시트 백업 전송 (백그라운드 전환)
-                            gsheet_sync_bg("회원명단", 
-                                ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
-                                [new_id, new_pw, "approved", "회원", reg_region, reg_age, reg_gender, reg_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), reg_moti]
-                            )
-                            
-                            st.success(f"🎊 {score}/15점! 훌륭합니다. 사령부의 지혜를 계승할 자격을 증명하셨습니다. 로그인을 진행해 주십시오.")
-                            st.balloons()
+            q6 = st.radio("Q6. 주식 가격의 평균을 내서 선으로 이은 그림을 무엇이라고 할까요?", ["이동평균선(이평선)", "추세선", "지지선", "저항선"], index=None)
+            q7 = st.radio("Q7. 단기 이평선이 장기 이평선을 아래에서 위로 뚫고 올라가는 매수 신호는?", ["골든 크로스", "데드 크로스", "실버 크로스", "캔들 크로스"], index=None)
+            q8 = st.radio("Q8. 주가 환경이 좋지 않을 때 매매를 쉬며 기회를 기다리는 것을 무엇이라 할까요?", ["관망", "포기", "퇴장", "몰빵"], index=None)
+            q9 = st.radio("Q9. 주가가 전고점을 뚫고 강력하게 상승하는 초기 시점은?", ["돌파", "이탈", "보합", "조정"], index=None)
+            q10 = st.radio("Q10. 손실을 최소화하기 위해 정해진 가격에서 파는 생명줄은?", ["손절", "익절", "물타기", "추격매수"], index=None)
+            
+            # 전술 5문제 (Q11-Q15)
+            q11 = st.text_input("Q11. 전일 종가보다 큰 차이로 높게 시작하는 것을 무엇이라 하나요? (영문 2단어)", placeholder="Gap Up")
+            q12 = st.text_input("Q12. 주식 시장의 4단계 중 가장 수익이 많이 나는 단계는? (숫자만)", placeholder="2")
+            q13 = st.radio("Q13. 주가가 너무 과하게 올랐을 때 나타나는 기술적 지표 상태는?", ["RSI 70 이상", "RSI 30 이하", "RSI 50", "이평선 수렴"], index=None)
+            q14 = st.text_input("Q14. 수익이 난 후 매수가격으로 손절가를 올리는 행위는? (본ㅁ)", placeholder="본절")
+            q15 = st.radio("Q15. 주가가 이미 3일 이상 오른 종목을 뒤늦게 따라 사는 위험한 행위는?", ["추격 매수", "분할 매수", "예약 매수", "장외 매수"], index=None)
+
+            if st.button("🚀 신규 가입 신청 및 시험 제출"):
+                corrects = [
+                    "올랐다 (상승)", "하락 국면", "거래량", "캔들 차트", "무릎에서 사서 어깨에서 팔아라",
+                    "이동평균선(이평선)", "골든 크로스", "관망", "돌파", "손절",
+                    "gap up", "2", "RSI 70 이상", "본절", "추격 매수"
+                ]
+                answers = [
+                    q1, q2, q3, q4, q5, q6, q7, q8, q9, q10,
+                    q11.strip().lower(), q12.strip(), q13, q14.strip(), q15
+                ]
+                score = sum([1 for a, c in zip(answers, corrects) if a == c])
+
+                if score >= 13:
+                    users = load_users()
+                    if new_id in users: st.error("❌ 이미 존재하는 대원 코드(ID)입니다.")
                     else:
-                        st.error(f"❌ {score}/15점. 사령부의 철학을 더 공부하고 와주시기 바랍니다. (13점 이상 합격)")
-                        with st.expander("📝 15관문 자격 시험 정답 및 해설 보기", expanded=True):
-                            st.markdown("""
-                            - **Q1-2:** 양봉(빨강)은 상승, 음봉(파란)은 하락입니다.
-                            - **Q3-4:** 거래량은 관심의 지표이며, 캔들 차트는 시세의 흐름을 보여줍니다.
-                            - **Q5-6:** 무릎에 사서 어깨에 파는 겸손한 원칙과 이동평균선의 방향을 추종하십시오.
-                            - **Q7-8:** 골든크로스는 황금빛 매수 신호, 데드크로스는 죽음의 매도 신호입니다.
-                            - **Q9-10:** 저점과 고점을 파악하고 인플레이션으로 인한 시장의 우상향을 믿으십시오.
-                            - **Q11:** MAGNA의 G는 **Gap Up**입니다. 강력한 기관 수급의 증거입니다.
-                            - **Q12:** 수익은 오직 **2단계 (Mark-up)** 에서만 창출됩니다.
-                            - **Q13:** RSI **30 이하**는 매도세가 소멸되는 과매도 구간입니다.
-                            - **Q14:** 부분 익절 후에는 손절선을 **본절(Break-even)**로 올려 무위험 상태를 만드십시오.
-                            - **Q15:** **3일 연속** 상승한 종목은 절대 추격 매수하지 않는 것이 사령부의 철칙입니다.
-                            """)
+                        users[new_id] = {
+                            "password": new_pw, "status": "approved", "grade": "회원",
+                            "info": {
+                                "region": reg_region, "age": reg_age, "gender": reg_gender,
+                                "exp": reg_exp, "motivation": reg_moti, "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                            }
+                        }
+                        save_users(users)
+                        
+                        # 🛡️ 즉시 구글 시트 백업 전송 (백그라운드 전환)
+                        gsheet_sync_bg("회원명단", 
+                            ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
+                            [new_id, new_pw, "approved", "회원", reg_region, reg_age, reg_gender, reg_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), reg_moti]
+                        )
+                        
+                        st.success(f"🎊 {score}/15점! 훌륭합니다. 사령부의 지혜를 계승할 자격을 증명하셨습니다. 로그인을 진행해 주십시오.")
+                        st.balloons()
+                else:
+                    st.error(f"❌ {score}/15점. 사령부의 철학을 더 공부하고 와주시기 바랍니다. (13점 이상 합격)")
+                    with st.expander("📝 15관문 자격 시험 정답 및 해설 보기", expanded=True):
+                        st.markdown("""
+                        - **Q1-2:** 양봉(빨강)은 상승, 음봉(파란)은 하락입니다.
+                        - **Q3-4:** 거래량은 관심의 지표이며, 캔들 차트는 시세의 흐름을 보여줍니다.
+                        - **Q5-6:** 무릎에 사서 어깨에 파는 겸손한 원칙과 이동평균선의 방향을 추종하십시오.
+                        - **Q7-8:** 골든크로스는 황금빛 매수 신호, 데드크로스는 죽음의 매도 신호입니다.
+                        - **Q9-10:** 저점과 고점을 파악하고 인플레이션으로 인한 시장의 우상향을 믿으십시오.
+                        - **Q11:** MAGNA의 G는 **Gap Up**입니다. 강력한 기관 수급의 증거입니다.
+                        - **Q12:** 수익은 오직 **2단계 (Mark-up)** 에서만 창출됩니다.
+                        - **Q13:** RSI **30 이하**는 매도세가 소멸되는 과매도 구간입니다.
+                        - **Q14:** 부분 익절 후에는 손절선을 **본절(Break-even)**로 올려 무위험 상태를 만드십시오.
+                        - **Q15:** **3일 연속** 상승한 종목은 절대 추격 매수하지 않는 것이 사령부의 철칙입니다.
+                        """)
     st.stop()
 
 with st.sidebar:
