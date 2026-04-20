@@ -1206,15 +1206,15 @@ if page.startswith("6-a."):
     c1, c2 = st.columns([1, 1])
     with c1:
         st.markdown(f"""
-        <div class='glass-card' style='text-align: center; padding: 20px; border: 1px solid #FFD700; border-radius: 15px;'>
+        <div class='glass-card' style='text-align: center; padding: 20px; border: 1px solid #FFD700; border-radius: 15px; height: 140px; margin-top: 38px;'>
             <h4 style='margin:0; color:#FFD700;'>[ DRAGONFLY ] 누적 사령부 방문</h4>
-            <span style='font-size: 2.5rem; font-weight: 900; color: #00FF00;'>{total_visits:,}</span>
-            <p style='margin:0; color:#888;'>Operatives Engaged</p>
+            <span style='font-size: 2.2rem; font-weight: 900; color: #00FF00;'>{total_visits:,}</span>
+            <p style='margin:0; color:#888; font-size: 0.8rem;'>Operatives Engaged</p>
         </div>
         """, unsafe_allow_html=True)
     with c2:
         # --- [ REAL-TIME WEATHER ] 지역별 기온 및 습도 정보 (wttr.in 활용) ---
-        locations = {"대한민국": "Seoul", "일본": "Tokyo", "미국": "New York"}
+        locations = {"대한민국 (서울)": "Seoul", "일본 (도쿄)": "Tokyo", "미국 (워싱턴)": "Washington"}
         
         # UI 레이아웃 내부에 셀렉트박스 배치 (공간 효율을 위해 소형으로)
         sel_region = st.selectbox("기상 지역 소환", list(locations.keys()), index=0, label_visibility="collapsed")
@@ -1242,14 +1242,14 @@ if page.startswith("6-a."):
         cond_val = " ".join(w_parts[2:]) if len(w_parts) > 2 else ""
         
         st.markdown(f"""
-        <div class='glass-card' style='text-align: center; padding: 15px; border: 1px solid #FFD700; border-radius: 15px;'>
+        <div class='glass-card' style='text-align: center; padding: 20px; border: 1px solid #FFD700; border-radius: 15px; height: 140px;'>
             <h4 style='margin:0; color:#FFD700;'>{sel_region.upper()} / HQ WEATHER</h4>
-            <div style='margin-top:10px;'>
-                <span style='font-size: 1.4rem; color: #00FF00; font-weight: 800;'>온도: {temp_val}</span>
-                <span style='font-size: 1.2rem; color: #888; margin: 0 10px;'>|</span>
-                <span style='font-size: 1.4rem; color: #00FFFF; font-weight: 800;'>습도: {hum_val}</span>
+            <div style='margin-top:5px;'>
+                <span style='font-size: 1.3rem; color: #00FF00; font-weight: 800;'>온도: {temp_val}</span>
+                <span style='font-size: 1.1rem; color: #888; margin: 0 5px;'>|</span>
+                <span style='font-size: 1.3rem; color: #00FFFF; font-weight: 800;'>습도: {hum_val}</span>
             </div>
-            <p style='margin:5px 0 0 0; color:#AAA; font-size: 0.85rem;'>[ {cond_val} ] HQ AREA OPERATIONAL</p>
+            <p style='margin:10px 0 0 0; color:#AAA; font-size: 0.8rem;'>[ {cond_val} ] HQ AREA OPERATIONAL</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1792,16 +1792,45 @@ elif page.startswith("2-d."):
     st.markdown("<p style='text-align: center; color: #888; font-size: 1.1rem;'>Follow the Giants, Conquer the Market Together</p>", unsafe_allow_html=True)
     st.divider()
     st.write("이 플랫폼은 윌리엄 오닐, 마크 미너비니, 프라딥 본데의 철학을 기리기 위해 시작되었습니다.")
-    st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class='glass-card' style='padding: 30px; margin-top: 20px;'>
+        <h3 style='color: #00FF00; border-left: 5px solid #00FF00; padding-left: 15px; margin-bottom: 25px;'>
+            Dragonfly: 중력을 이기는 비행의 시작
+        </h3>
+        
+        <div style='margin-bottom: 25px;'>
+            <h4 style='color: #FFD700;'>🛡️ 스승님을 향한 감사의 마음에서 출발했습니다</h4>
+            <p style='color: #BBB; line-height: 1.8;'>주식 시장이라는 거친 바다에서 길을 잃지 않게 이끌어주신 스승님이 계셨습니다. 마크 미너비니, 윌리엄 오닐, 데이비드 라이언, 그리고 프라딥 본데와 같은 대가들의 지혜를 전해주신 스승님께 보답하는 가장 좋은 방법은, 그 가르침을 나노 단위로 체계화하여 더 완성도 높은 시스템으로 만드는 것이라 믿었습니다. <b style='color:#FFF;'>Dragonfly는 스승님의 유산을 잇는 보은의 결과물입니다.</b></p>
+        </div>
+
+        <div style='margin-bottom: 25px;'>
+            <h4 style='color: #FFD700;'>🤝 경제적 이익과 즐거움을 모두와 나누고 싶습니다</h4>
+            <p style='color: #BBB; line-height: 1.8;'>혼자서만 수익을 올리는 것은 진정한 우상향이 아니라고 생각합니다. 주식 투자가 고통스러운 노동이 아니라, 모두가 편리하게 경제적 이익을 얻고 그 과정에서 성취의 즐거움을 느끼는 생태계를 만들고 싶었습니다. Dragonfly는 누구나 수수료 없이, 복잡한 중력의 방해를 받지 않고 <b style='color:#FFF;'>무중력 상태에서 수익의 가속도를 경험할 수 있는 공간</b>을 지향합니다.</p>
+        </div>
+
+        <div style='margin-bottom: 25px;'>
+            <h4 style='color: #FFD700;'>🔐 정보 보안과 자동화로 세우는 단단한 지지선</h4>
+            <p style='color: #BBB; line-height: 1.8;'>많은 사람이 모일수록 가장 중요한 것은 안전입니다. 사용자의 소중한 정보를 지키기 위해 강력한 암호화 기술을 도입하여 외부의 위협으로부터 자유로운 요새를 만들고자 합니다. 또한, 인간의 감정이 개입되어 원칙이 흔들리지 않도록 <b style='color:#FFF;'>나노 단위의 정밀한 자동 매매 시스템</b>을 구축하여, 가장 차갑고도 정확한 타점에서 승리하는 경험을 제공할 것입니다.</p>
+        </div>
+
+        <div>
+            <h4 style='color: #FFD700;'>🌍 500명의 전우가 함께 만드는 무중력 공동체</h4>
+            <p style='color: #BBB; line-height: 1.8;'>Dragonfly의 비전은 혼자 꾸는 꿈이 아닙니다. 처음 100명의 전우가 모여 체계를 잡고, 나아가 500명의 정예 멤버가 각 섹터의 주도주를 감시하며 서로의 실력을 끌어올리는 숙달의 장을 만들 것입니다. 경제적 문맹이라는 중력을 벗어나, 500명의 전우가 함께 비상하며 시장을 압도하는 날까지 Dragonfly의 비행은 멈추지 않을 것입니다. <b style='color:#FFF;'>모두가 경제적 자유를 얻었으면 좋겠습니다.</b> 정규직, 계약직 차별없는 사회를 만들고 싶습니다.</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<div class='glass-card' style='margin-top: 30px;'>", unsafe_allow_html=True)
     st.subheader("[ PILLARS ] 사령부를 지탱하는 세 개의 기둥")
     c1, c2, c3 = st.columns(3)
     with c1: st.markdown("**1. 오닐 (CAN SLIM)**"); st.caption("Growth potential.")
     with c2: st.markdown("**2. 미너비니 (VCP)**"); st.caption("Precision timing.")
     with c3: st.markdown("**3. 본데 (EP/RS)**"); st.caption("Strategic process.")
     st.markdown("</div>", unsafe_allow_html=True)
-    st.info("이 터미널이 거령들의 어깨 위에 올라타 거센 파도를 넘는 디딤돌이 되길 희망합니다.")
+    
     st.markdown("""
     <div style='text-align: right; margin-top: 40px; border-top: 1px solid #333; padding-top: 20px;'>
+        <p style='color: #888; font-size: 0.8rem; margin-bottom: 5px;'>Terminal v9.9 Platinum Edition</p>
         <b style='color: #FFD700; font-size: 1.2rem;'>Expert Turtle</b>
     </div>
     """, unsafe_allow_html=True)
@@ -3142,49 +3171,117 @@ elif page.startswith("7-e."):
         # 랭킹 정렬
         sorted_rank = sorted(user_stats.items(), key=lambda x: x[1]['total_profit'], reverse=True)
         
-        # --- 🤖 AI 요원들의 자율 실적 시뮬레이션 및 병합 ---
+        # --- 🤖 AI 요원들의 실시간 시장가 반영 시뮬레이션 및 병합 ---
         st.markdown("---")
         st.markdown("### [ NETWORK ] 사령부 통합 실시간 랭킹 (HUMAN vs AI)")
         
-        # AI 요원 실적 생성 (VIX 및 시장 심리에 따라 변동)
-        sentiment_score, _ = get_market_sentiment_score()
-        market_multiplier = (sentiment_score / 50.0) # 시장이 좋을수록 AI도 잘 벌음
-        
         ai_stats = []
+        # AI 요원별 담당 종목 매핑 (실시간 가격 반영용)
+        ai_mission_map = {
+            "minsu": "005930.KS",   # 삼성전자 (KOSPI)
+            "Olive": "247540.KQ",   # 에코프로비엠 (KOSDAQ)
+            "Pure": "NVDA",         # 엔비디아 (NASDAQ)
+            "Harmony": "AAPL",      # 애플
+            "Mint Soft": "TSLA",    # 테슬라
+            "Calm Blue12": "PLTR"   # 팔란티어
+        }
+        
+        # 실시간 가격 일괄 수집
+        ai_tickers = list(ai_mission_map.values())
+        ai_prices = {}
+        try:
+            ai_data = yf.download(ai_tickers, period="1d", progress=False)['Close']
+            if isinstance(ai_data, pd.Series): ai_data = pd.DataFrame(ai_data).T
+            for t in ai_tickers:
+                ai_prices[t] = float(ai_data[t].iloc[-1]) if t in ai_data.columns else 0
+        except: pass
+
+        sentiment_score, _ = get_market_sentiment_score()
+        market_multiplier = (sentiment_score / 50.0)
+
         for name, info in AI_OPERATIVES.items():
-            # 가상의 누적 수익 생성 (AI 요원 레벨에 따른 퍼포먼스)
-            rand_perf = (info['win_rate'] * 15000000 * market_multiplier) + (random.randint(-500000, 1000000))
-            ai_stats.append((name, {"total_profit": rand_perf, "trade_count": random.randint(50, 200), "is_ai": True}))
+            target_ticker = ai_mission_map.get(name, "NVDA")
+            curr_real_p = ai_prices.get(target_ticker, 100)
+            is_kr_ai = ".KS" in target_ticker or ".KQ" in target_ticker
+            
+            # [ LOGIC ] 실제 가격 기반의 가상 실적 생성
+            # 승률과 시장 심리에 따라 현재가 주변으로 진입/판매가 설정
+            entry_p = curr_real_p * (1 - (random.uniform(0.05, 0.15) * info['win_rate']))
+            exit_p = curr_real_p # 현재가를 최종 판매가(혹은 진행가)로 가정
+            
+            # 누적 수익 시뮬레이션 (1,000만원 기준)
+            rand_perf = (info['win_rate'] * 15000000 * market_multiplier) + (random.randint(-100000, 500000))
+            
+            ai_stats.append((name, {
+                "total_profit": rand_perf, 
+                "trade_count": random.randint(30, 100), 
+                "is_ai": True,
+                "ticker": target_ticker,
+                "entry_p": entry_p,
+                "exit_p": exit_p,
+                "is_kr": is_kr_ai
+            }))
         
         # Human + AI 통합 정렬
         human_stats = [(uid, stats) for uid, stats in sorted_rank]
         combined_ranking = sorted(human_stats + ai_stats, key=lambda x: x[1]['total_profit'], reverse=True)
 
         with st.container():
-            for i, (uid, stats) in enumerate(combined_ranking[:10]):
+            for i, (uid, stats) in enumerate(combined_ranking[:12]):
                 is_ai = stats.get("is_ai", False)
                 medal = "1ST" if i == 0 else ("2ND" if i == 1 else ("3RD" if i == 2 else "HONOR"))
                 border_color = "#00FFFF" if is_ai else "#FFD700" if i < 3 else "rgba(255,255,255,0.1)"
                 bg_color = "rgba(0, 255, 255, 0.05)" if is_ai else "rgba(255, 255, 255, 0.02)"
-                
                 label = " [AI Operative]" if is_ai else " [Commander]"
                 
-                st.markdown(f"""
-                <div class='glass-card' style='border-left: 5px solid {border_color}; background: {bg_color}; margin-bottom: 10px; padding: 15px;'>
-                    <div style='display: flex; justify-content: space-between; align-items: center;'>
-                        <div>
-                            <span style='font-size: 1.1rem; font-weight: bold;'>{medal} {uid}</span>
-                            <span style='font-size: 0.75rem; color: #888;'>{label}</span>
+                initial_seed = 10000000
+                total_asset = initial_seed + stats['total_profit']
+                
+                with st.expander(f"{medal} {uid} {label}", expanded=(i==0)):
+                    col_info1, col_info2 = st.columns([2, 1])
+                    with col_info1:
+                        st.markdown(f"""
+                        <div style='padding: 5px;'>
+                            <p style='margin:0; font-size: 0.8rem; color: #888;'>초기 운용 자산: 10,000,000 KRW</p>
+                            <h3 style='margin:5px 0; color: #00FF00;'>보유자산: {total_asset:,.0f} 원</h3>
+                            <p style='margin:0; font-size: 0.85rem; color: {"#00FF00" if stats["total_profit"] > 0 else "#FF4B4B"};'>
+                                누적 수익금: {stats['total_profit']:+,.0f} 원
+                            </p>
                         </div>
-                        <div style='text-align: right;'>
-                            <b class='{"neon-glow" if stats["total_profit"] > 0 else "neon-glow-red"}' style='font-size: 1.2rem;'>
-                                ₩ {stats['total_profit']:,.0f}
-                            </b>
-                            <br><small style='color: #555;'>Trades: {stats['trade_count']}회</small>
+                        """, unsafe_allow_html=True)
+                    with col_info2:
+                        if is_ai:
+                            ai_info = AI_OPERATIVES.get(uid, {})
+                            st.metric("승률", f"{ai_info.get('win_rate', 0)*100:.0f}%")
+                            st.caption(f"Strategy: {ai_info.get('strategy', 'N/A')}")
+                        else:
+                            st.metric("총 매매", f"{stats['trade_count']}회")
+                    
+                    if is_ai:
+                        # [ REAL-TIME LOG ] 실제 가격을 반영한 AI 전술 로그
+                        target_t = stats.get("ticker", "NVDA")
+                        disp_t = TICKER_NAME_MAP.get(target_t, target_t)
+                        entry_val = stats.get("entry_p", 0)
+                        exit_val = stats.get("exit_p", 0)
+                        is_kr_stock = stats.get("is_kr", False)
+                        
+                        # 화폐 단위 결정
+                        unit = "원" if is_kr_stock else "$"
+                        fmt = ",.0f" if is_kr_stock else ",.1f"
+                        
+                        roi = ((exit_val / entry_val) - 1) * 100 if entry_val > 0 else 0
+                        
+                        st.markdown("<hr style='border: 0.5px solid rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
+                        st.markdown(f"📡 **최근 전술 집행 내역 (Target: {disp_t})**")
+                        
+                        st.markdown(f"""
+                        <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-family: monospace; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px;'>
+                            <div><span style='color:#888;'>진입가:</span> <b style='color:#FFF;'>{entry_val:{fmt}}{unit}</b></div>
+                            <div><span style='color:#888;'>판매가:</span> <b style='color:#FFF;'>{exit_val:{fmt}}{unit}</b></div>
+                            <div><span style='color:#888;'>수익률:</span> <b style='color:#00FF00;'>{roi:+.1f}%</b></div>
+                            <div><span style='color:#888;'>판매시점:</span> <b style='color:#FFF;'>{datetime.now().strftime('%m/%d %H:%M')}</b></div>
                         </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                        """, unsafe_allow_html=True)
             
             if len(combined_ranking) > 0 and combined_ranking[0][0] == st.session_state.get("current_user"):
                 st.balloons()
