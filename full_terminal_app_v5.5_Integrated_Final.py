@@ -16,6 +16,17 @@ import io
 import random
 import shutil
 import hashlib
+import threading
+import concurrent.futures
+
+# --- 🛰️ [GLOBAL HELPER] Safe Network Request ---
+def safe_get(url, timeout=3):
+    """지연 및 멈춤 방지를 위한 글로벌 네트워크 헬퍼"""
+    try:
+        resp = requests.get(url, timeout=timeout)
+        if resp.status_code == 200: return resp
+    except: pass
+    return None
 
 # --- 💾 데이터베이스 및 영구 보존 설정 ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -146,17 +157,18 @@ def load_users():
             with open(USER_DB_FILE, "r", encoding="utf-8") as f: users = json.load(f)
         except: pass
     
-    # 2. 구글 시트에서 최신 정보 가져와서 동기화
+    # 2. 구글 시트에서 최신 정보 가져와서 동기화 (비동기 시도)
     if USERS_SHEET_URL:
+        # 로그인 페이지거나 관리자 페이지 등 인원이 꼭 필요한 경우에만 빡빡하게 확인
         try:
-            response = requests.get(USERS_SHEET_URL, timeout=5)
-            if response.status_code == 200:
+            # 5초 타임아웃 적용 (get_db_path 대신 직접 시도하는 지점은 이미 있음)
+            response = safe_get(USERS_SHEET_URL, timeout=4)
+            if response:
                 import io
                 df_u = pd.read_csv(io.StringIO(response.text))
                 new_users_found = False
                 for _, row in df_u.iterrows():
                     try:
-                        # 🔍 유연한 헤더 매핑 (아이디/ID, 연령/연령대 등)
                         u_id = str(row.get('아이디', row.get('ID', ''))).strip()
                         if not u_id or u_id == 'nan' or u_id == '': continue
                         
@@ -175,15 +187,9 @@ def load_users():
                             }
                         }
                     except: continue
-                # 최신화된 정보를 로컬에도 저장
                 if new_users_found:
                     with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f, ensure_ascii=False, indent=4)
-            elif response.status_code == 401:
-                st.session_state["gs_error"] = "🔒 구글 시트 접근 권한이 없습니다. '링크가 있는 모든 사용자에게 공개'로 설정해 주세요."
-            else:
-                st.session_state["gs_error"] = f"⚠️ 시트 연결 실패 (Status: {response.status_code})"
-        except Exception as e:
-            st.session_state["gs_error"] = f"❌ 데이터 통신 오류: {str(e)}"
+        except: pass # 실패 시 로컬 데이터만 사용
 
     # 기본 방장 계정 보장
     if "cntfed" not in users:
@@ -217,8 +223,8 @@ def save_users(users):
 @st.cache_data(ttl=600)
 def fetch_gs_attendance():
     try:
-        response = requests.get(ATTENDANCE_SHEET_URL, timeout=5)
-        if response.status_code == 200:
+        response = safe_get(ATTENDANCE_SHEET_URL, timeout=4)
+        if response:
             import io
             df = pd.read_csv(io.StringIO(response.text))
             # 🔍 유연한 헤더 매핑
@@ -239,8 +245,8 @@ def fetch_gs_attendance():
 @st.cache_data(ttl=300)
 def fetch_gs_chat():
     try:
-        response = requests.get(CHAT_SHEET_URL, timeout=5)
-        if response.status_code == 200:
+        response = safe_get(CHAT_SHEET_URL, timeout=4)
+        if response:
             import io
             df = pd.read_csv(io.StringIO(response.text))
             df = df.rename(columns={'시간': '시간', '아이디': '아이디', '내용': '내용', '등급': '등급'})
@@ -262,17 +268,25 @@ def fetch_gs_visitors():
 # --- 🚀 [NEW v9.9] Optimized Data Helpers ---
 @st.cache_data(ttl=86400) # ROE는 하루 한 번 정도로 충분
 def get_ticker_roe(tic):
+    """
+    ⚠️ yf.Ticker.info는 매우 느리므로 스캐너 루프 내부에서 직접 사용을 지양해야 합니다.
+    최대한 캐싱을 활용하고 일괄 데이터(Fastinfo 등)를 고려합니다.
+    """
     try:
         tk = yf.Ticker(tic)
-        return tk.info.get('returnOnEquity', 0) * 100
+        # 🛡️ info 대신 fast_info나 다른 빠른 필드가 있다면 그것을 쓰는 것이 좋으나 
+        # ROE는 info에 있음. 2초 타임아웃 형태로 우회 시도(yf 자체 지원 미비 시 수동 제한)
+        # 여기서는 최소한의 호출을 위해 st.cache_data를 유지
+        info = tk.info
+        return info.get('returnOnEquity', 0) * 100
     except:
         return 0
 
 @st.cache_data(ttl=900)
 def fetch_gs_notices():
     try:
-        response = requests.get(NOTICE_SHEET_URL, timeout=5)
-        if response.status_code == 200:
+        response = safe_get(NOTICE_SHEET_URL, timeout=4)
+        if response:
             import io
             df = pd.read_csv(io.StringIO(response.text))
             if not df.empty:
@@ -317,8 +331,12 @@ def gsheet_sync(sheet_name, headers, values):
             print(f"DEBUG: GSheet Sync Error {resp.status_code} - {resp.text}")
         return resp
     except Exception as e:
-        st.error(f"📡 구글 시트 동기화 실패: {e}")
+        print(f"DEBUG: GSheet Sync Connection Failed: {e}")
         return None
+
+def gsheet_sync_bg(sheet_name, headers, values):
+    """구글 시트 동기화를 백그라운드 스레드에서 실행하여 UI 멈춤 방지"""
+    threading.Thread(target=gsheet_sync, args=(sheet_name, headers, values), daemon=True).start()
 
 st.set_page_config(page_title="StockDragonfly Pro", page_icon="🔴", layout="wide")
 
@@ -533,8 +551,8 @@ if not st.session_state["password_correct"]:
                             }
                             save_users(users)
                             
-                            # 🛡️ 즉시 구글 시트 백업 전송 (사용자 시트 순서에 최적화: 성별 추가)
-                            gsheet_sync("회원명단", 
+                            # 🛡️ 즉시 구글 시트 백업 전송 (백그라운드 전환)
+                            gsheet_sync_bg("회원명단", 
                                 ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
                                 [new_id, new_pw, "approved", "회원", reg_region, reg_age, reg_gender, reg_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), reg_moti]
                             )
@@ -603,7 +621,13 @@ with st.sidebar:
             del st.session_state.shuffled_bgm
 
     if target_bgm and os.path.exists(target_bgm):
-        with open(target_bgm, "rb") as f: b64 = base64.b64encode(f.read()).decode()
+        # 🚀 오디오 성능 최적화: 캐시에 저장된 base64 사용 (매번 인코딩 방지)
+        @st.cache_data(show_spinner=False)
+        def get_base64_audio(file_path):
+            with open(file_path, "rb") as f: 
+                return base64.b64encode(f.read()).decode()
+        
+        b64 = get_base64_audio(target_bgm)
         # onended 이벤트를 활용하여 랜덤 믹스 시 다음 곡으로 넘어가게 설정 (Streamlit 한계상 재실행 필요)
         st.components.v1.html(f"""
             <audio id='aud' autoplay loop>
@@ -870,8 +894,8 @@ if page.startswith("6-a."):
                 new_row = pd.DataFrame([[now_kst, st.session_state.current_user, greeting, curr_grade]], columns=["시간", "아이디", "인사", "등급"])
                 safe_write_csv(new_row, ATTENDANCE_FILE, mode='a', header=False)
                 
-                # 📡 구글 시트(시트1)와 즉시 동기화
-                gsheet_sync("시트1", ["시간", "아이디", "인사", "등급"], [now_kst, st.session_state.current_user, greeting, curr_grade])
+                # 📡 구글 시트(시트1)와 백그라운드 동기화 (속도 최적화)
+                gsheet_sync_bg("시트1", ["시간", "아이디", "인사", "등급"], [now_kst, st.session_state.current_user, greeting, curr_grade])
                 
                 st.success("✅ 사령부 명부에 정상 등록되었습니다. 오늘의 전술을 확인하십시오.")
                 st.balloons()
@@ -943,6 +967,11 @@ elif page.startswith("3-a."):
             data_high = data_full['High']
             data_low = data_full['Low']
             
+            # --- 🚀 [Parallel ROE Fetching] ---
+            # 모든 티커의 ROE를 병렬로 미리 수집 (캐시가 있으면 즉시 반환됨)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                roe_map = {tic: res for tic, res in zip(full_list, executor.map(get_ticker_roe, full_list))}
+
             for tic in full_list:
                 try:
                     if tic not in data.columns: continue
@@ -956,11 +985,11 @@ elif page.startswith("3-a."):
                     tight_label = "Loose"
                     if len(h_high) > 20:
                         ranges = (h_high - h_low) / h * 100
-                        w1 = ranges.iloc[-5:].mean() # 최근 1주
-                        w2 = ranges.iloc[-10:-5].mean() # 2주 전
-                        w3 = ranges.iloc[-20:-10].mean() # 한달 전
+                        w1 = ranges.iloc[-5:].mean() 
+                        w2 = ranges.iloc[-10:-5].mean() 
+                        w3 = ranges.iloc[-20:-10].mean() 
                         if w1 < w2 < w3: 
-                            vcp_score = 25 # 점진적 수축 포착
+                            vcp_score = 25 
                             tight_label = "Excellent"
                         elif w1 < w2: 
                             vcp_score = 15
@@ -973,10 +1002,10 @@ elif page.startswith("3-a."):
                     ch = (cp/pp - 1) * 100
                     rs = ((cp / y_ago) - 1) * 100
                     
-                    # ROE는 캐싱된 함수 사용 (성능 최적화)
-                    roe = get_ticker_roe(tic)
+                    # 미리 수집된 ROE 맵에서 가져옴
+                    roe = roe_map.get(tic, 0)
                     
-                    score = rs + (roe * 1.2) + vcp_score # VCP 가산점 합산
+                    score = rs + (roe * 1.2) + vcp_score 
                     is_us = (".KS" not in tic and ".KQ" not in tic)
                     display_name = TICKER_NAME_MAP.get(tic, tic) if not is_us else tic
                     
@@ -1097,8 +1126,8 @@ elif page.startswith("6-b."):
                 # 로컬 저장
                 new_msg = pd.DataFrame([[t, u, ms, curr_grade]], columns=["시간", "유저", "내용", "등급"])
                 new_msg.to_csv(CHAT_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
-                # 구글 시트 백업
-                gsheet_sync("소통기록_통합", ["시간", "유저", "내용", "등급"], [t, u, ms, curr_grade])
+                # 구글 시트 백업 (백그라운드)
+                gsheet_sync_bg("소통기록_통합", ["시간", "유저", "내용", "등급"], [t, u, ms, curr_grade])
                 st.success("✅ 메시지가 사령부 전역에 전파되었습니다.")
                 st.rerun()
 
@@ -1597,8 +1626,8 @@ elif page.startswith("6-c."):
                 # 로컬 영구 저장 (8번 배너와 연동)
                 new_req = pd.DataFrame([[t, u, g1, g2, g3]], columns=["시간", "아이디", "첫인사", "자기소개", "포부"])
                 new_req.to_csv(VISITOR_FILE, mode='a', header=not os.path.exists(VISITOR_FILE), index=False, encoding="utf-8-sig")
-                # 백업용 동기화
-                gsheet_sync("방문자_승격신청", ["시간", "아이디", "첫인사", "자기소개", "포부"], [t, u, g1, g2, g3])
+                # 백업용 동기화 (백그라운드 전환)
+                gsheet_sync_bg("방문자_승격신청", ["시간", "아이디", "첫인사", "자기소개", "포부"], [t, u, g1, g2, g3])
                 st.success("✅ 승격 신청서가 성공적으로 관리자 승인센터로 전파되었습니다!")
             else: st.error("모든 항목을 작성해 주셔야 신청이 가능합니다.")
 
@@ -1697,17 +1726,13 @@ elif page.startswith("5-e."):
                     
                     # 📡 구글 시트 동기화 (익절방 탭)
                     sync_resp = None
-                    try:
-                        sync_resp = gsheet_sync("익절방", 
-                            ["날짜", "시간", "회원명", "종목명/티커", "수익률", "수익금", "승리소감 및 노하우"], 
-                            [d_str, t_str, u, tic, roi, p_val, msg]
-                        )
-                    except: pass
+                    # 📡 구글 시트 백그라운드 동기화 (익절방)
+                    gsheet_sync_bg("익절방", 
+                        ["날짜", "시간", "회원명", "종목명/티커", "수익률", "수익금", "승리소감 및 노하우"], 
+                        [d_str, t_str, u, tic, roi, p_val, msg]
+                    )
                     
-                    if sync_resp and sync_resp.status_code == 200:
-                        st.success("🎊 대원님의 위대한 승리 기록이 사령부 통합 시트(구글)에 기록되었습니다!")
-                    else:
-                        st.info("📂 로컬 저장 완료! (구글 시트 전송은 스크립트 설정을 확인해 주세요.)")
+                    st.success("🎊 대원님의 위대한 승리 기록이 저장되었습니다! (구글 시트 동기화는 배경에서 진행됩니다.)")
                     
                     st.balloons()
                     time.sleep(1) # 저장을 위한 짧은 지연
@@ -1792,7 +1817,7 @@ elif page.startswith("5-e."):
                             u = st.session_state.current_user
                             c_new = pd.DataFrame([[pid, now_c_t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
                             safe_write_csv(c_new, COMMENTS_FILE, mode='a', header=False)
-                            gsheet_sync("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, now_c_t, u, new_c])
+                            gsheet_sync_bg("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, now_c_t, u, new_c])
                             st.rerun()
                 st.write("") # 스페이싱
         except Exception as e:
@@ -1842,19 +1867,12 @@ elif page.startswith("5-f."):
                     if not save_l_success:
                         st.error("❌ 로컬 파일(CSV) 저장에 실패했습니다.")
 
-                    # 📡 구글 시트 동기화 (손절방 탭)
-                    sync_resp = None
-                    try:
-                        sync_resp = gsheet_sync("손절방", 
-                            ["날짜", "시간", "회원명", "종목명/티커", "손실률", "과오원인", "구체적인 상황 복기 및 향후 다짐"], 
-                            [d_str, t_str, u, l_tic, l_roi, l_reason, l_msg]
-                        )
-                    except: pass
-                    
-                    if sync_resp and sync_resp.status_code == 200:
-                        st.toast("✅ 성찰 기록이 구글 시트에 안전하게 백업되었습니다.")
-                    else:
-                        st.toast("📁 로컬 복기 완료! (구글 시트 연결 지연 중)")
+                    # 📡 구글 시트 백그라운드 동기화 (손절방 탭)
+                    gsheet_sync_bg("손절방", 
+                        ["날짜", "시간", "회원명", "종목명/티커", "손실률", "과오원인", "구체적인 상황 복기 및 향후 다짐"], 
+                        [d_str, t_str, u, l_tic, l_roi, l_reason, l_msg]
+                    )
+                    st.toast("✅ 성찰 기록이 저장되었습니다. (배경에서 시트 동기화 중)")
                     
                     time.sleep(1)
                     st.rerun()
@@ -1935,7 +1953,7 @@ elif page.startswith("5-f."):
                             u = st.session_state.current_user
                             c_new = pd.DataFrame([[pid, now_c_t, u, new_c]], columns=["PostID", "시간", "작성자", "내용"])
                             safe_write_csv(c_new, COMMENTS_FILE, mode='a', header=False)
-                            gsheet_sync("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, now_c_t, u, new_c])
+                            gsheet_sync_bg("댓글_통합", ["PostID", "시간", "작성자", "내용"], [pid, now_c_t, u, new_c])
                             st.rerun()
                 st.write("") # 스페이싱
         except Exception as e:
@@ -2297,7 +2315,7 @@ elif page.startswith("1-c."):
                 else:
                     users[u_id]["password"] = new_pw_input
                     safe_save_json(users, USER_DB_FILE)
-                    gsheet_sync("회원명단", 
+                    gsheet_sync_bg("회원명단", 
                         ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
                         [u_id, new_pw_input, u_data.get("status", "approved"), u_data.get("grade", "회원"), u_info.get("region", "-"), u_info.get("age", "-"), u_info.get("gender", "-"), u_info.get("exp", "-"), u_info.get("joined_at", "-"), u_info.get("motivation", "-")]
                     )
@@ -2321,7 +2339,7 @@ elif page.startswith("1-d."):
         if st.button("🌙 임시 휴식 모드 전환", use_container_width=True):
             users[u_id]["status"] = "resting"
             save_users(users)
-            gsheet_sync("회원명단", 
+            gsheet_sync_bg("회원명단", 
                 ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
                 [u_id, u_data.get("password"), "resting", u_data.get("grade"), u_info.get("region", "-"), u_info.get("age", "-"), u_info.get("gender", "-"), u_info.get("exp", "-"), u_info.get("joined_at", "-"), u_info.get("motivation", "-")]
             )
@@ -2347,17 +2365,18 @@ elif page.startswith("1-d."):
                         users[u_id]["status"] = "withdrawn"
                         save_users(users)
                         
-                        # 1. 회원명단 탭 상태 업데이트
-                        gsheet_sync("회원명단", 
+                        # 1. 회원명단 탭 상태 업데이트 (백그라운드)
+                        gsheet_sync_bg("회원명단", 
                             ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
                             [u_id, u_data.get("password"), "withdrawn", u_data.get("grade"), u_info.get("region", "-"), u_info.get("age", "-"), u_info.get("gender", "-"), u_info.get("exp", "-"), u_info.get("joined_at", "-"), u_info.get("motivation", "-")]
                         )
                         
-                        # 2. '탈퇴회원' 탭에 정보 전송
-                        gsheet_sync("탈퇴회원", 
+                        # 2. '탈퇴회원' 탭에 정보 전송 (백그라운드)
+                        gsheet_sync_bg("탈퇴회원", 
                             ["탈퇴날짜", "아이디", "탈퇴사유", "개선할 점"],
                             [datetime.now().strftime("%Y-%m-%d %H:%M"), u_id, withdraw_reason, withdraw_improve]
                         )
+ Broadway: true
                         
                         st.error("🔥 탈퇴 처리가 완료되었습니다. 그동안의 헌신에 감사드립니다.")
                         time.sleep(2)
