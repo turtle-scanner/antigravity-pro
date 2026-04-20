@@ -1077,8 +1077,8 @@ if page.startswith("6-a."):
     c1, c2 = st.columns([1, 1])
     with c1:
         st.markdown(f"""
-        <div class='glass-card' style='text-align: center; padding: 20px;'>
-            <h4 style='margin:0; color:#FFD700;'>📡 누적 사령부 방문</h4>
+        <div class='glass-card' style='text-align: center; padding: 20px; border: 1px solid #FFD700; border-radius: 15px;'>
+            <h4 style='margin:0; color:#FFD700;'>[ DRAGONFLY ] 누적 사령부 방문</h4>
             <span style='font-size: 2.5rem; font-weight: 900; color: #00FF00;'>{total_visits:,}</span>
             <p style='margin:0; color:#888;'>Operatives Engaged</p>
         </div>
@@ -1086,13 +1086,12 @@ if page.startswith("6-a."):
     with c2:
         # 간단한 날씨 MOCK (실제 API 대신 시각에 따른 날씨 이모지)
         hour = datetime.now(pytz.timezone('Asia/Seoul')).hour
-        weather_icon = "☀️" if 6 <= hour < 18 else "🌙"
-        weather_text = "맑음/쾌적" if 6 <= hour < 18 else "은은한 달빛"
+        weather_text = "READY / D-DAY CLEAR" if 6 <= hour < 18 else "STEALTH / NIGHT OPS"
         st.markdown(f"""
-        <div class='glass-card' style='text-align: center; padding: 20px;'>
-            <h4 style='margin:0; color:#FFD700;'>🌤️ 작전 지역 날씨</h4>
-            <span style='font-size: 2.5rem;'>{weather_icon}</span>
-            <p style='margin:0; color:#888;'>서울 기준: {weather_text}</p>
+        <div class='glass-card' style='text-align: center; padding: 20px; border: 1px solid #FFD700; border-radius: 15px;'>
+            <h4 style='margin:0; color:#FFD700;'>HQ OP-AREA WEATHER</h4>
+            <span style='font-size: 2.0rem; color: #00FF00; font-weight: 800;'>{weather_text}</span>
+            <p style='margin:0; color:#888;'>HQ AREA STATUS</p>
         </div>
         """, unsafe_allow_html=True)
         
