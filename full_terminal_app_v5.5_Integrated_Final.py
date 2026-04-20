@@ -2376,7 +2376,6 @@ elif page.startswith("1-d."):
                             ["탈퇴날짜", "아이디", "탈퇴사유", "개선할 점"],
                             [datetime.now().strftime("%Y-%m-%d %H:%M"), u_id, withdraw_reason, withdraw_improve]
                         )
- Broadway: true
                         
                         st.error("🔥 탈퇴 처리가 완료되었습니다. 그동안의 헌신에 감사드립니다.")
                         time.sleep(2)
