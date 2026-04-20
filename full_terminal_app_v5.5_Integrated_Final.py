@@ -337,6 +337,9 @@ def fetch_gs_notices():
 로그인 후 해당 메뉴에서 본인만의 안전한 비밀번호로 즉시 변경이 가능합니다. 개인정보 보호를 위해 접속 즉시 수정을 권장합니다."""
     }
 
+@st.cache_data
+def get_cached_bg_b64():
+    if os.path.exists("StockDragonfly2.png"):
         with open("StockDragonfly2.png", "rb") as imm: return base64.b64encode(imm.read()).decode()
     elif os.path.exists("StockDragonfly.png"):
         with open("StockDragonfly.png", "rb") as imm: return base64.b64encode(imm.read()).decode()
