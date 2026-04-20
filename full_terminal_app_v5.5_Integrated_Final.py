@@ -989,27 +989,35 @@ with st.container():
     for i, name in enumerate(indices_list):
         val, pct = idx_info.get(name, [0.0, 0.0])
         with cols[i]:
-            # [ ACTION ] 요청에 따른 시간 배치 조정
+            # [ ACTION ] 시간 레이블 출력 (DOW와 KOSPI 기준)
             if name == "DOW":
-                st.caption(f"[ USA ] {now_us.strftime('%m/%d %H:%M')}")
+                st.markdown(f"<p style='font-size: 0.7rem; color: #888; margin-bottom: 5px;'>[ USA ] {now_us.strftime('%m/%d %H:%M')}</p>", unsafe_allow_html=True)
             elif name == "KOSPI":
-                st.caption(f"[ KOREA ] {now_kr.strftime('%m/%d %H:%M')}")
+                st.markdown(f"<p style='font-size: 0.7rem; color: #888; margin-bottom: 5px;'>[ KOREA ] {now_kr.strftime('%m/%d %H:%M')}</p>", unsafe_allow_html=True)
             else:
-                st.write("") # 공간 확보용 빈 칸
+                st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
                 
-            if name in ["KOSPI", "KOSDAQ"]:
-                # [ KOREA ] 한국 시장 표준 (상승 시 빨간색) + 레이블 강조
-                color = "#FF4B4B" if pct >= 0 else "#0088FF"
+            # [ ACTION ] 모든 지수 스타일 통일
+            is_kr = name in ["KOSPI", "KOSDAQ"]
+            theme_color = "#FF4B4B" if is_kr else "#00FF00"
+            border_alpha = "44" if is_kr else "11"
+            bg_alpha = "0.05" if is_kr else "0.02"
+            
+            # 상승/하락 색상 결정
+            if is_kr:
+                stat_color = "#FF4B4B" if pct >= 0 else "#0088FF"
                 arrow = "▲" if pct >= 0 else "▼"
-                st.markdown(f"""
-                    <div style='background: rgba(255,75,75,0.05); padding: 10px; border-radius: 12px; border: 1px solid {color}44; text-align: center; height: 110px;'>
-                        <div style='color: #FF4B4B; font-weight: 900; font-size: 0.85rem; margin-bottom: 5px;'>{name}</div>
-                        <div style='color: #FFF; font-size: 1.5rem; font-weight: 700;'>{val:,.1f}</div>
-                        <div style='color: {color}; font-size: 0.95rem; font-weight: 800;'>{arrow} {pct:+.2f}%</div>
-                    </div>
-                """, unsafe_allow_html=True)
             else:
-                st.metric(name, f"{val:,.1f}", f"{pct:+.2f}%")
+                stat_color = "#00FF00" if pct >= 0 else "#FF4B4B"
+                arrow = "↑" if pct >= 0 else "↓"
+                
+            st.markdown(f"""
+                <div style='background: rgba({ "255,75,75" if is_kr else "255,255,255" },{bg_alpha}); padding: 12px; border-radius: 12px; border: 1px solid {theme_color}{border_alpha}; text-align: center; height: 120px; transition: all 0.3s;'>
+                    <div style='color: {theme_color}; font-weight: 800; font-size: 0.8rem; margin-bottom: 8px; opacity: 0.8;'>{name}</div>
+                    <div style='color: #FFF; font-size: 1.4rem; font-weight: 700; letter-spacing: -0.5px;'>{val:,.1f}</div>
+                    <div style='color: {stat_color}; font-size: 0.9rem; font-weight: 800; margin-top: 5px;'>{arrow} {pct:+.2f}%</div>
+                </div>
+            """, unsafe_allow_html=True)
 
 st.divider()
 
@@ -1106,7 +1114,7 @@ if page.startswith("6-a."):
             <p style='margin:0; color:#888;'>Operatives Engaged</p>
         </div>
         """, unsafe_allow_html=True)
-    with c_2:
+    with c2:
         # --- [ REAL-TIME WEATHER ] 서울 기온 및 날씨 정보 (API 시뮬레이션) ---
         # 실제 운영 시 wttr.in 또는 OpenWeatherMap 활용 가능
         @st.cache_data(ttl=1800)
