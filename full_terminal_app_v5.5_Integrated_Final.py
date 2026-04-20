@@ -980,7 +980,7 @@ st.markdown(f"""
         </div>
     </div>
     <div class='responsive-indices' style='display: flex; gap: 15px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 5px;'>
-        <style> .responsive-indices::-webkit-scrollbar { display: none; } </style>
+        <style> .responsive-indices::-webkit-scrollbar {{ display: none; }} </style>
         <div style='text-align: right; min-width: 65px;'>
             <span style='color: #888; font-size: 0.65rem;'>DOW</span><br>
             <b style='color: #EEE; font-size: 0.75rem;'>{idx_info["DOW"][0]:,.1f}</b><br>
