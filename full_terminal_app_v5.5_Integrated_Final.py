@@ -34,19 +34,26 @@ def get_db_path(f): return os.path.join(BASE_DIR, f)
 
 BACKUP_DIR = get_db_path("backups")
 
-def auto_backup(file_path):
+def auto_backup(file_path, force=False):
     if not os.path.exists(file_path): return
     try:
-        os.makedirs(BACKUP_DIR, exist_ok=True)
+        # 파일이 너무 자주 백업되는 것을 방지 (1시간당 1회 정도로 제한하거나 수동 강제시에만 실행)
         fname = os.path.basename(file_path)
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        
+        # 고빈도 로그 파일은 강제(force) 옵션이 없으면 백업 건너뜀 (성능 최적화)
+        if not force and fname in ["attendance.csv", "chat_log.csv", "shared_comments.csv"]:
+            return
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_path = os.path.join(BACKUP_DIR, f"{fname}_{timestamp}.bak")
         shutil.copy2(file_path, backup_path)
         
-        # 주 단위로 너무 쌓이지 않게 관리 (최신 30개 유지)
-        all_backups = sorted([os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.startswith(fname)], key=os.path.getmtime)
-        if len(all_backups) > 30:
-            for old_f in all_backups[:-30]: os.remove(old_f)
+        # ⚠️ 성능 최적화: 파일 목록 조회를 매번 하지 않고 확률적으로 수행 (10% 확률)
+        if random.random() < 0.1:
+            all_backups = sorted([os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.startswith(fname)], key=os.path.getmtime)
+            if len(all_backups) > 30:
+                for old_f in all_backups[:-30]: os.remove(old_f)
     except: pass
 
 USER_DB_FILE = get_db_path("users_db.json")
@@ -78,9 +85,9 @@ def safe_read_csv(file_path, columns=None):
         st.warning(f"⚠️ 데이터 파일([.csv]) 읽기 시도 중 지연이 발생하고 있습니다. 잠시 후 자동 복구됩니다. ({os.path.basename(file_path)})")
         return pd.DataFrame(columns=columns) if columns else pd.DataFrame()
 
-def safe_write_csv(df, file_path, mode='w', header=True):
+def safe_write_csv(df, file_path, mode='w', header=True, backup=False):
     try:
-        if os.path.exists(file_path): auto_backup(file_path) # 저장 전 기존 파일 백업
+        if backup and os.path.exists(file_path): auto_backup(file_path) # 명시적으로 요청 시에만 백업
         os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
         if mode == 'a' and os.path.exists(file_path):
             header = False
@@ -892,7 +899,9 @@ if page.startswith("6-a."):
             if greeting:
                 now_kst = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d %H:%M")
                 new_row = pd.DataFrame([[now_kst, st.session_state.current_user, greeting, curr_grade]], columns=["시간", "아이디", "인사", "등급"])
-                safe_write_csv(new_row, ATTENDANCE_FILE, mode='a', header=False)
+                
+                # 🚀 최적화: 백업 생략 (이미 수동 백업 로직이 상단에 있음)
+                safe_write_csv(new_row, ATTENDANCE_FILE, mode='a', header=False, backup=False)
                 
                 # 📡 구글 시트(시트1)와 백그라운드 동기화 (속도 최적화)
                 gsheet_sync_bg("시트1", ["시간", "아이디", "인사", "등급"], [now_kst, st.session_state.current_user, greeting, curr_grade])
@@ -1718,8 +1727,8 @@ elif page.startswith("5-e."):
                     u = st.session_state.current_user
                     pid = f"P_{int(time.time())}_{random.randint(100,999)}_{u}"
                     new_p = pd.DataFrame([[pid, t_now, u, tic, roi, p_val, msg]], columns=["ID", "시간", "아이디", "종목", "수익률", "수익금", "포부"])
-                    # 💾 로컬 저장 (파일 잠금 대비 리트라이 로직 포함)
-                    save_success = safe_write_csv(new_p, PROFIT_FILE, mode='a', header=False)
+                    # 💾 로컬 저장 (최적화: 백업 생략)
+                    save_success = safe_write_csv(new_p, PROFIT_FILE, mode='a', header=False, backup=False)
                     
                     if not save_success:
                         st.error("❌ 로컬 파일(CSV) 저장에 실패했습니다. 파일 잠금을 확인해 주세요.")
@@ -1861,8 +1870,8 @@ elif page.startswith("5-f."):
                     u = st.session_state.current_user
                     lid = f"L_{int(time.time())}_{random.randint(100,999)}_{u}"
                     new_l = pd.DataFrame([[lid, t_now, u, l_tic, l_roi, l_reason, l_msg]], columns=["ID", "시간", "아이디", "종목", "손실률", "원인", "다짐"])
-                    # 💾 로컬 저장 (파일 잠금 대비 리트라이 로직 포함)
-                    save_l_success = safe_write_csv(new_l, LOSS_FILE, mode='a', header=False)
+                    # 💾 로컬 저장 (최적화: 백업 생략)
+                    save_l_success = safe_write_csv(new_l, LOSS_FILE, mode='a', header=False, backup=False)
                     
                     if not save_l_success:
                         st.error("❌ 로컬 파일(CSV) 저장에 실패했습니다.")
