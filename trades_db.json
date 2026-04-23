@@ -1,0 +1,47 @@
+{
+    "mock": [
+        {
+            "id": "1776615181",
+            "user": "cntfed",
+            "ticker": "NVDA",
+            "buy_price": 201.67999267578125,
+            "amount": 10,
+            "strategy": "VCP 돌파",
+            "date": "2026-04-20 01:13"
+        },
+        {
+            "id": "1776616038",
+            "user": "cntfed",
+            "ticker": "TSLA",
+            "buy_price": 400.6199951171875,
+            "amount": 10,
+            "strategy": "VCP 돌파",
+            "date": "2026-04-20 01:27",
+            "is_kr": false
+        },
+        {
+            "id": "1776616054",
+            "user": "cntfed",
+            "ticker": "TSLA",
+            "buy_price": 400.6199951171875,
+            "amount": 1,
+            "strategy": "VCP 돌파",
+            "date": "2026-04-20 01:27",
+            "is_kr": false
+        },
+        {
+            "id": "1776616058",
+            "user": "cntfed",
+            "ticker": "TSLA",
+            "buy_price": 400.6199951171875,
+            "amount": 1,
+            "strategy": "VCP 돌파",
+            "date": "2026-04-20 01:27",
+            "is_kr": false
+        }
+    ],
+    "auto": [],
+    "wallets": {
+        "cntfed": 3269584.08203125
+    }
+}
