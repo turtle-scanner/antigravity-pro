@@ -594,46 +594,69 @@ def get_bonde_top_50():
 
 def analyze_stockbee_setup(ticker, hist_df=None):
     """
-    설명 가능한 본데 스캐너: 탈락 사유(Reason)와 매수 근거를 함께 제공
+    [ BONDE ELITE ENGINE ] 프라딥 본데 3단계 + 피벗 포인트(전일고점) 돌파 확인
     """
     try:
-        # 1. ROE 필터
-        roe = get_ticker_roe(ticker)
-        if roe <= 0: return {"status": "REJECT", "reason": f"ROE({roe:.1f})가 마이너스인 적자 기업 (본데 원칙 위배)"}
-        
+        is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
         if hist_df is None:
-            hist = yf.Ticker(ticker).history(period="75d")
+            hist = yf.Ticker(ticker).history(period="1y")
         else:
             hist = hist_df
-            
-        if len(hist) < 65: return {"status": "REJECT", "reason": "최근 상장주 혹은 데이터 부족 (TI65 산출 불가)"}
+        if len(hist) < 200: return {"status": "REJECT", "stage": "INIT", "reason": "데이터 부족"}
         
-        # 2. 지표 계산
-        ti65 = (hist['Close'].iloc[-1] / hist['Close'].iloc[-65]) * 100
+        # --- [ STEP 1. UNIVERSE FILTER ] ---
         latest_close = hist['Close'].iloc[-1]
-        prev_close = hist['Close'].iloc[-2]
-        pct = (latest_close / prev_close - 1) * 100
-        vol_ratio = hist['Volume'].iloc[-1] / hist['Volume'].rolling(20).mean().iloc[-2]
+        min_price = 5000 if is_kr else 5
+        if latest_close < min_price:
+            return {"status": "REJECT", "stage": "UNIVERSE", "reason": f"저가주 제외"}
         
-        # 3. 상세 탈락 사유 분석
-        if ti65 <= 105: return {"status": "REJECT", "reason": f"추세 강도 TI65({ti65:.1f})가 기준치(105) 미달 (모멘텀 부족)"}
-        if pct < 4.0: return {"status": "REJECT", "reason": f"당일 상승폭({pct:.1f}%)이 본데의 최소 기준(4%)에 미달"}
-        if vol_ratio < 1.5: return {"status": "REJECT", "reason": f"거래량 촉매제({vol_ratio:.1f}x) 부족 (기관 수급 부재)"}
+        avg_vol_3m = hist['Volume'].iloc[-60:].mean()
+        if (avg_vol_3m * latest_close) < (2000000000 if is_kr else 2000000):
+            return {"status": "REJECT", "stage": "UNIVERSE", "reason": f"거래대금 부족"}
+            
+        sma50 = hist['Close'].rolling(50).mean().iloc[-1]
+        sma150 = hist['Close'].rolling(150).mean().iloc[-1]
+        sma200 = hist['Close'].rolling(200).mean().iloc[-1]
+        if not (latest_close > sma50 > sma150 > sma200):
+            return {"status": "REJECT", "stage": "UNIVERSE", "reason": "이평선 역배열"}
+
+        # --- [ STEP 2. RS FOCUS ] ---
+        ret_6m = (hist['Close'].iloc[-1] / hist['Close'].iloc[-126]) - 1
+        ret_3m = (hist['Close'].iloc[-1] / hist['Close'].iloc[-63]) - 1
+        rs_score = (ret_6m * 0.7 + ret_3m * 0.3) * 100
         
-        is_mb = (pct >= 4.0 and vol_ratio >= 1.5 and ti65 > 105)
-        is_ep = (pct >= 8.0 and vol_ratio >= 2.5)
+        high_52w = hist['High'].max()
+        dist_from_high = (latest_close / high_52w - 1) * 100
         
-        if is_mb or is_ep:
-            reason = "4% 모멘텀 버스트 포착" if is_mb else "강력한 에피소딕 피벗(EP) 발생"
-            return {
-                "status": "SUCCESS", "ticker": ticker, "close": latest_close, "pct": round(pct, 2), 
-                "ti65": round(ti65, 1), "roe": round(roe, 1), "lod": hist['Low'].iloc[-1],
-                "setups": ["4% Burst"] if is_mb else ["Episodic Pivot"],
-                "reason": f"{reason} (TI65:{ti65:.1f}, Vol:{vol_ratio:.1f}x)"
-            }
+        if rs_score < 30 or dist_from_high < -25:
+            return {"status": "PASS", "stage": "UNIVERSE", "ticker": ticker, "close": latest_close, "rs": rs_score, "reason": "기본 유니버스 충족"}
+
+        # --- [ STEP 3. EXECUTION (VCP & PIVOT) ] ---
+        prev_high = hist['High'].iloc[-2] # 전일 고점
+        is_pivot_break = latest_close > prev_high # 피벗 포인트 돌파 여부
+        
+        vol_avg_20 = hist['Volume'].iloc[-25:-5].mean()
+        recent_5d = hist.iloc[-5:]
+        ep_detected = any((recent_5d['Close'].iloc[i]/hist['Close'].iloc[-(5-i+1)]-1)*100 >= 4.0 and (recent_5d['Volume'].iloc[i]/vol_avg_20) >= 3.0 for i in range(5))
+        
+        last_3d_range = (hist['High'].iloc[-3:].max() - hist['Low'].iloc[-3:].min()) / hist['Low'].iloc[-3:].min() * 100
+        is_tight = last_3d_range < 5.0
+        
+        if not (ep_detected and is_tight):
+            return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "reason": "핵심 타겟 확보 (응축 부족)"}
+
+        # 피벗 포인트 돌파 최종 확인
+        if not is_pivot_break:
+             return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "reason": f"응축 완료, 피벗 대기 (전일고점:{prev_high:,.0f})"}
+
+        # [ SUCCESS ] 실행 범위 진입 (피벗 돌파 성공)
+        return {
+            "status": "SUCCESS", "stage": "EXECUTION", "ticker": ticker, "close": latest_close, 
+            "rs": round(rs_score, 1), "reason": f"🔥 피벗 돌파! (RS:{rs_score:.1f}, 고점:{prev_high:,.0f} 돌파)",
+            "setups": ["Pivot Break", "VCP Tightness"]
+        }
     except Exception as e:
-        return {"status": "ERROR", "reason": f"데이터 분석 중 오류 발생: {str(e)}"}
-    return {"status": "REJECT", "reason": "알 수 없는 기술적 조건 미달"}
+        return {"status": "ERROR", "stage": "ERROR", "reason": f"오류: {str(e)}"}
 
 # --- [ SCANNER HELPERS: STOCKBEE STRICT EDITION ] ---
         
@@ -2784,6 +2807,75 @@ elif page.startswith("5-e."):
                         e_roi = st.text_input("수익률 수정", value=row['수익률'])
                         e_val = st.text_input("수익금 수정", value=row['수익금'])
                         e_msg = st.text_area("소감 수정", value=row['포부'])
+                        # 1. 1차 광범위 분석
+                        scanned_pool = []
+                        for t in targets[:40]: 
+                            msg_pre = f"📡 {t} 분석 중..."
+                            report_log.insert(0, msg_pre)
+                            report_placeholder.markdown("\n".join(report_log[:15]))
+                            
+                            t_hist = None
+                            if all_hist is not None:
+                                try:
+                                    t_hist = pd.DataFrame({
+                                        "Close": all_hist["Close"][t], "High": all_hist["High"][t],
+                                        "Low": all_hist["Low"][t], "Volume": all_hist["Volume"][t]
+                                    }).dropna()
+                                except: t_hist = None
+                            
+                            res = analyze_stockbee_setup(t, hist_df=t_hist)
+                            res["ticker"] = t
+                            res["name"] = TICKER_NAME_MAP.get(t, t)
+                            scanned_pool.append(res)
+                        
+                        # 2. RS 점수 기반 상위 10개 종목 압축 (Ranking)
+                        # RS 점수가 없는 경우(REJECT 등)는 0점으로 처리
+                        top_10_pool = sorted(scanned_pool, key=lambda x: x.get('rs', 0), reverse=True)[:10]
+                        
+                        # 단계별 분류 및 매수 집행
+                        st.session_state.universe_list = []
+                        st.session_state.rs_target_list = []
+                        st.session_state.execution_list = []
+                        
+                        # 현재 보유 종목 수 체크 (최대 4개 제한)
+                        current_holdings_count = len(real_holdings) + len(over_holdings)
+                        
+                        for res in top_10_pool:
+                            name, t = res['name'], res['ticker']
+                            
+                            if res["status"] == "SUCCESS":
+                                st.session_state.execution_list.append(res)
+                                report_log.insert(0, f"🔥 **[ TOP 10 / EXECUTION ] {name} 포착!**")
+                                
+                                # [ CONCENTRATION ] 최대 4종목 제한 및 25% 비중 투입
+                                if st.session_state.get("live_toggle_v6_pro"):
+                                    if current_holdings_count >= 4:
+                                        report_log[0] += " | 🛡️ 포트폴리오(4개) 풀가동 중 (진입 보류)"
+                                    else:
+                                        # 자본금의 25% 계산
+                                        invest_amount = full_balance * 0.25
+                                        qty = int(invest_amount / res['close']) if res['close'] > 0 else 0
+                                        
+                                        if qty > 0:
+                                            st.toast(f"🚀 {name} 피벗 돌파! 자본 25% 투입...", icon="⚡")
+                                            if execute_kis_market_order(t, qty, is_buy=True):
+                                                current_holdings_count += 1
+                                                if st.session_state.combat_logs:
+                                                    st.session_state.combat_logs[-1]["msg"] += f" (비중 25% 집중 투입)"
+                            
+                            elif res["status"] == "PASS":
+                                if res["stage"] == "RS_TARGET":
+                                    st.session_state.rs_target_list.append(res)
+                                    report_log.insert(0, f"🎯 **[ TOP 10 / TARGET ] {name} 확보**")
+                                else:
+                                    st.session_state.universe_list.append(res)
+                                    report_log.insert(0, f"🛡️ **[ TOP 10 / UNIVERSE ] {name} 통과**")
+                            else:
+                                report_log.insert(0, f"❌ {t} 순위권 탈락: {res.get('reason', '점수 미달')}")
+                            
+                            report_placeholder.markdown("\n".join(report_log[:20]))
+                        
+                        status.update(label="[ SUCCESS ] 최정예 10개 종목 압축 및 전략 집행 완료!", state="complete")
                         c_edit1, c_edit2 = st.columns(2)
                         if c_edit1.form_submit_button("[ SAVE ] 저장"):
                             temp_df = safe_read_csv(PROFIT_FILE)
@@ -3228,7 +3320,89 @@ elif page.startswith("5-b."):
         
         cc1, cc2 = st.columns([2, 1])
         with cc1:
-            st.markdown("""
+            with st.status("[ SCANNING ] 본데(Stockbee) 전술 타점 정밀 분석 및 자동 집행 중...", expanded=True) as status:
+                targets = sorted(list(set(get_bonde_top_50() + get_kospi_top_200())))
+                # 단계별 분류 리스트 초기화
+                st.session_state.universe_list = []
+                st.session_state.rs_target_list = []
+                st.session_state.execution_list = []
+                
+                try:
+                    all_hist = yf.download(targets[:30], period="1y", progress=False)
+                except: all_hist = None
+                
+                for t in targets[:30]: 
+                    current_msg = f"📡 {t} 분석 중..."
+                    report_log.insert(0, current_msg)
+                    report_placeholder.markdown("\n".join(report_log[:15]))
+                    
+                    t_hist = None
+                    if all_hist is not None:
+                        try:
+                            t_hist = pd.DataFrame({
+                                "Close": all_hist["Close"][t], "High": all_hist["High"][t],
+                                "Low": all_hist["Low"][t], "Volume": all_hist["Volume"][t]
+                            }).dropna()
+                        except: t_hist = None
+                    
+                    analysis = analyze_stockbee_setup(t, hist_df=t_hist)
+                    name = TICKER_NAME_MAP.get(t, t)
+                    analysis["ticker"] = t
+                    analysis["name"] = name
+
+                    if analysis["status"] == "SUCCESS":
+                        st.session_state.execution_list.append(analysis)
+                        report_log[0] = f"🔥 **[ EXECUTION ] {name}({t}) 포착!** - {analysis['reason']}"
+                        
+                        if st.session_state.get("live_toggle_v6_pro"):
+                            st.toast(f"🚀 {name} 실전 매수 집행!", icon="⚡")
+                            if execute_kis_market_order(t, 10, is_buy=True):
+                                if st.session_state.combat_logs:
+                                    st.session_state.combat_logs[-1]["msg"] += f" (근거: {analysis['reason']})"
+                    elif analysis["status"] == "PASS":
+                        if analysis["stage"] == "RS_TARGET":
+                            st.session_state.rs_target_list.append(analysis)
+                            report_log[0] = f"🎯 **[ RS TARGET ] {name}({t}) 확보** - {analysis['reason']}"
+                        else:
+                            st.session_state.universe_list.append(analysis)
+                            report_log[0] = f"🛡️ **[ UNIVERSE ] {name}({t}) 통과** - {analysis['reason']}"
+                    else:
+                        report_log[0] = f"❌ {t} 탈락: {analysis['reason']}"
+                    
+                    report_placeholder.markdown("\n".join(report_log[:15]))
+                
+                status.update(label="[ SUCCESS ] 전술 단계별 분석 완료!", state="complete")
+
+    with col_btn2:
+        if st.button("🛑 중단", use_container_width=True):
+            st.session_state.scanning_active = False
+            st.rerun()
+
+    # --- [ DISPLAY STAGED RESULTS ] ---
+    if st.session_state.scanning_active:
+        st.markdown("### 🛰️ TACTICAL STAGING AREA")
+        tab1, tab2, tab3 = st.tabs(["🔥 EXECUTION (매수)", "🎯 RS TARGET (감시)", "🛡️ UNIVERSE (관심)"])
+        
+        with tab1:
+            if not st.session_state.execution_list: st.info("현재 실행 범위에 진입한 종목이 없습니다.")
+            for res in st.session_state.execution_list:
+                with st.expander(f"🚀 {res['name']} ({res['ticker']}) - 즉시 대응", expanded=True):
+                    st.write(f"**상태:** {res['reason']}")
+                    st.write(f"**전략:** {', '.join(res.get('setups', ['VCP']))}")
+
+        with tab2:
+            if not st.session_state.rs_target_list: st.info("확보된 핵심 타겟이 없습니다.")
+            for res in st.session_state.rs_target_list:
+                with st.expander(f"🎯 {res['name']} ({res['ticker']}) - RS 90↑", expanded=False):
+                    st.write(f"**상태:** {res['reason']}")
+                    st.write(f"**RS 지수:** {res.get('rs', 0):.1f}")
+
+        with tab3:
+            if not st.session_state.universe_list: st.info("유니버스를 통과한 종목이 없습니다.")
+            for res in st.session_state.universe_list:
+                with st.expander(f"🛡️ {res['name']} ({res['ticker']}) - 정배열 유지", expanded=False):
+                    st.write(f"**상태:** {res['reason']}")
+        st.markdown("""
             <div style='height: 400px; display: flex; align-items: center; justify-content: center; background: #111; border: 2px dashed #444; border-radius: 15px;'>
                 <div style='text-align: center; color: #666;'>
                     <h3>[피벗 포인트 퀴즈 모드]</h3>
@@ -3700,72 +3874,80 @@ elif page.startswith("7-c."):
     with col_btn1:
         if st.button("🔍 엔진 가동", use_container_width=True):
             st.session_state.scanning_active = True
-            
-            # [ LIVE TACTICAL REPORT ] 실시간 전술 해설 판넬
-            st.markdown("---")
-            st.markdown("#### 📡 LIVE TACTICAL REPORT (Real-time Scanner Log)")
-            report_placeholder = st.empty()
-            report_log = []
+            st.rerun()
 
-            with st.status("[ SCANNING ] 본데(Stockbee) 전술 타점 정밀 분석 및 자동 집행 중...", expanded=True) as status:
-                # 1. 대상 리스트 확보
-                targets = get_bonde_top_50()
-                new_results = []
+    # --- [ AUTO-SCANNING LOOP ] ---
+    if st.session_state.scanning_active:
+        # 실시간 전술 브리핑 판넬
+        st.markdown("---")
+        st.markdown(f"#### 📡 LIVE TACTICAL MONITORING (Loop Active)")
+        report_placeholder = st.empty()
+        
+        while st.session_state.scanning_active:
+            report_log = [f"🕒 Last Update: {datetime.now().strftime('%H:%M:%S')}"]
+            
+            with st.status(f"[ MONITORING ] {datetime.now().strftime('%H:%M:%S')} 전술 스캐닝 가동 중...", expanded=True) as status:
+                targets = sorted(list(set(get_bonde_top_50() + get_kospi_top_200())))
+                st.session_state.universe_list = []
+                st.session_state.rs_target_list = []
+                st.session_state.execution_list = []
                 
-                # [ PERFORMANCE ] 렉 방지를 위한 배치 다운로드
                 try:
-                    all_hist = yf.download(targets[:15], period="75d", progress=False)
+                    all_hist = yf.download(targets[:40], period="1y", progress=False)
                 except: all_hist = None
                 
-                for t in targets[:15]: 
-                    # 실시간 로그 업데이트 (최신순)
-                    current_msg = f"📡 {t} 분석 중..."
-                    report_log.insert(0, current_msg)
-                    report_placeholder.markdown("\n".join(report_log[:15]))
-                    
-                    # 배치 데이터에서 해당 종목만 추출
+                scanned_pool = []
+                for t in targets[:40]: 
                     t_hist = None
                     if all_hist is not None:
                         try:
                             t_hist = pd.DataFrame({
-                                "Close": all_hist["Close"][t],
-                                "High": all_hist["High"][t],
-                                "Low": all_hist["Low"][t],
-                                "Volume": all_hist["Volume"][t]
+                                "Close": all_hist["Close"][t], "High": all_hist["High"][t],
+                                "Low": all_hist["Low"][t], "Volume": all_hist["Volume"][t]
                             }).dropna()
                         except: t_hist = None
                     
-                    analysis = analyze_stockbee_setup(t, hist_df=t_hist)
+                    res = analyze_stockbee_setup(t, hist_df=t_hist)
+                    res["ticker"] = t
+                    res["name"] = TICKER_NAME_MAP.get(t, t)
+                    scanned_pool.append(res)
                     
-                    if analysis["status"] == "SUCCESS":
-                        name = TICKER_NAME_MAP.get(t, t)
-                        report_log[0] = f"✅ **{name}({t}) 포착!** - {analysis['reason']}"
-                        
-                        setup_data = analysis
-                        setup_data["name"] = name
-                        new_results.append(setup_data)
-                        
-                        # [ AUTO_EXECUTION ] 포착 즉시 실전 매수 집행
+                    # 실시간 중계
+                    report_placeholder.markdown(f"📡 `{t}` 분석 중... (진행률: {len(scanned_pool)}/40)")
+
+                # RS 기반 랭킹 및 필터링
+                top_10_pool = sorted(scanned_pool, key=lambda x: x.get('rs', 0), reverse=True)[:10]
+                token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+                _, _, real_holdings = get_kis_balance(token)
+                _, over_holdings = get_kis_overseas_balance(token)
+                current_holdings_count = len(real_holdings) + len(over_holdings)
+
+                for res in top_10_pool:
+                    name, t = res['name'], res['ticker']
+                    if res["status"] == "SUCCESS":
+                        st.session_state.execution_list.append(res)
                         if st.session_state.get("live_toggle_v6_pro"):
-                            st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
-                            if execute_kis_market_order(t, 10, is_buy=True):
-                                if st.session_state.combat_logs:
-                                    st.session_state.combat_logs[-1]["msg"] += f" (근거: {analysis['reason']})"
-                            else:
-                                # 매수 실패 시 사유를 리포트에 명시
-                                last_combat_log = st.session_state.combat_logs[-1]["msg"] if st.session_state.combat_logs else "사유 미상"
-                                report_log[0] += f" | ⚠️ **주문실패**: {last_combat_log}"
-                    
-                    elif analysis["status"] == "REJECT":
-                        report_log[0] = f"❌ {t} 탈락: {analysis['reason']}"
-                    else:
-                        report_log[0] = f"⚠️ {t} 오류: {analysis['reason']}"
-                    
-                    # 로그 화면 갱신
-                    report_placeholder.markdown("\n".join(report_log[:15]))
-                
-                status.update(label="[ SUCCESS ] 본데의 전략 자동매매 엔진 분석 및 자동 집행 완료!", state="complete")
-            st.session_state.scanning_results = new_results
+                            if current_holdings_count < 4:
+                                invest_amount = full_balance * 0.25
+                                qty = int(invest_amount / res['close'])
+                                if qty > 0:
+                                    if execute_kis_market_order(t, qty, is_buy=True):
+                                        current_holdings_count += 1
+                                        report_log.append(f"🔥 **[ BUY ] {name}** (25% 투입)")
+                        else:
+                            report_log.append(f"🎯 **[ EXECUTION ] {name}** (피벗 돌파 성공)")
+                    elif res["status"] == "PASS":
+                        if res["stage"] == "RS_TARGET": st.session_state.rs_target_list.append(res)
+                        else: st.session_state.universe_list.append(res)
+
+                status.update(label="[ SUCCESS ] 정밀 분석 완료. 다음 사이클 대기 중...", state="complete")
+            
+            # 대시보드 갱신
+            report_placeholder.markdown("\n".join(report_log))
+            time.sleep(60) # 1분 간격으로 무한 반복
+            if not st.session_state.scanning_active: break
+            # Streamlit의 한계로 인해 루프 내에서 UI를 완벽히 갱신하려면 rerun이 필요할 수 있으나, 
+            # while 문 내에서도 placeholder는 갱신됩니다.
 elif page.startswith("7-c."):
     st.title("🛰️ STOCKBEE PROCEDURAL ENGINE")
     st.markdown("""
