@@ -372,10 +372,13 @@ def get_macro_indicators():
     return f"[ USD/KRW ]: {rate:,.1f}원 | [ US 10Y ]: {yield10y:.2f}%"
 
 # --- [ ENGINE ] KIS API & Core Trading Logic ---
-KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "")
-KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "")
-KIS_ACCOUNT_NO = st.secrets.get("KIS_ACCOUNT_NO", "")
-KIS_MOCK_TRADING = st.secrets.get("KIS_MOCK_TRADING", True)
+# [ SECURITY ] 사용자가 제공한 API 정보를 우선 적용하되, secrets 설정이 있다면 그것을 따릅니다.
+KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "PSwPjCXRoSuY1Uz59aDWYKpIPix7VgNB8QUX")
+KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "4WF33M5pnD3Y3qskLfWAlwo0eFxpYIK+TdIXNVW9r+wSLAAF/WVxtqDIvNBDNakV28aFM9ZO+v8069JwBlYDpS1lBvoFf7j9dgSsPwjiwclbvyJ7nMYl5m62wH7VInWWtXgl/8hDnmihzDidKEIss87UdT42JANMvOrCSEF18e5SilJKRIA=")
+# 계좌번호가 8자리일 경우 상품코드 '01'을 기본으로 붙여 10자리로 보정
+raw_acc = st.secrets.get("KIS_ACCOUNT_NO", "46289819")
+KIS_ACCOUNT_NO = raw_acc + "01" if len(raw_acc) == 8 else raw_acc
+KIS_MOCK_TRADING = st.secrets.get("KIS_MOCK_TRADING", False) # 실전 계좌 연동을 위해 False 설정 권장
 
 @st.cache_data(ttl=3500)
 def get_kis_access_token(app_key, app_secret, mock=True):
@@ -397,20 +400,83 @@ def get_kis_access_token(app_key, app_secret, mock=True):
     return None
 
 def get_kis_balance(token):
-    """국내 주식 잔고 및 예수금 현황 조회"""
-    if not token: return 0, 0, []
-    # [ FIX ] 실전 데이터 연동 전까지 안전한 Mock 데이터 반환
-    return 10000000.0, 5000000.0, [] # 총자산, 예수금, 보유종목
+    """국내 주식 잔고 및 예수금 현황 조회 (실제 연동)"""
+    if not token or not KIS_ACCOUNT_NO: return 0, 0, []
+    base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+    url = f"{base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {token}",
+        "appkey": KIS_APP_KEY,
+        "appsecret": KIS_APP_SECRET,
+        "tr_id": "VTTC8434R" if KIS_MOCK_TRADING else "TTTC8434R"
+    }
+    params = {
+        "CANO": KIS_ACCOUNT_NO[:8],
+        "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
+        "AFHR_FLG": "N", "OVAL_DLY_TR_FECONT_YN": "N", "PRCS_DLY_VW_FNC_G": "0",
+        "CANL_DLY_VW_FNC_G": "0", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""
+    }
+    try:
+        res = requests.get(url, headers=headers, params=params, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get('output2'):
+                total_eval = float(data['output2'][0].get('tot_evlu_amt', 0))
+                cash = float(data['output2'][0].get('dnca_tot_amt', 0))
+                holdings = data.get('output1', [])
+                return total_eval, cash, holdings
+    except: pass
+    return 0, 0, []
 
 def get_kis_overseas_balance(token):
-    """해외 주식 잔고 현황 조회"""
-    if not token: return 0, []
-    return 5000000.0, [] # 해외총자산, 보유종목
+    """해외 주식 잔고 현황 조회 (실제 연동)"""
+    if not token or not KIS_ACCOUNT_NO: return 0, []
+    base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+    url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {token}",
+        "appkey": KIS_APP_KEY,
+        "appsecret": KIS_APP_SECRET,
+        "tr_id": "VTTW8434R" if KIS_MOCK_TRADING else "TTTW8434R"
+    }
+    params = {
+        "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
+        "WCRC_FRCR_DVS_CD": "01", "NATN_CD": "840", "TR_PACC_CD": "", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""
+    }
+    try:
+        res = requests.get(url, headers=headers, params=params, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            total_eval = float(data.get('output2', {}).get('tot_evlu_pamt', 0))
+            holdings = data.get('output1', [])
+            return total_eval, holdings
+    except: pass
+    return 0, []
 
 def execute_kis_market_order(ticker, qty, is_buy=True):
-    """시장가 주문 실행 엔진"""
+    """시장가 주문 실행 엔진 (실제 연동 대비 구조)"""
     print(f"LOG: KIS Order Execution - {ticker} / {qty} / {is_buy}")
     return True
+
+# --- [ SCANNER HELPERS ] ---
+@st.cache_data(ttl=3600)
+def get_kospi_top_200():
+    """KOSPI 200 주요 종목 리스트 반환 (Mock: 실제론 라이브러리나 크롤링 연동)"""
+    return ["005930.KS", "000660.KS", "196170.KQ", "042700.KS", "105560.KS", "055550.KS", "005490.KS", "000270.KS", "066570.KS", "035720.KS"]
+
+def get_rs_score(ticker):
+    """상대강도(RS) 점수 산출"""
+    try:
+        h = yf.Ticker(ticker).history(period="6mo")
+        if len(h) < 20: return 50
+        return int((h['Close'].iloc[-1] / h['Close'].iloc[0]) * 100)
+    except: return 50
+
+def get_ml_pattern_score(ticker):
+    """머신러닝 기반 패턴 점수 (Mock)"""
+    return random.randint(40, 95)
 
 # --- [ AI ] 사령부 AI 정예 요원 (NPC Operatives) 설정 ---
 AI_OPERATIVES = {
