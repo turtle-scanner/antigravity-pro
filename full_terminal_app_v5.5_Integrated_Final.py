@@ -114,10 +114,14 @@ def get_dynamic_ai_ranking():
         base_bal = random.randint(20000000, 30000000)
         bal = base_bal * (1 + roi/100)
         
+        from datetime import timedelta
+        random_minutes = random.randint(1, 120)
+        individual_exit_time = (datetime.now() - timedelta(minutes=random_minutes)).strftime("%m/%d %H:%M")
+        
         results.append({
             "name": name, "pts": random.randint(500, 3000), "win": random.randint(60, 90),
             "balance": bal, "pick": tick, "entry": entry, "exit_p": exit_p,
-            "roi": roi_str, "exit": now_str
+            "roi": roi_str, "exit": individual_exit_time
         })
     
     return sorted(results, key=lambda x: x["balance"], reverse=True)
@@ -4351,6 +4355,10 @@ elif page.startswith("7-e."):
             # 누적 수익 시뮬레이션 (1,000만원 기준)
             rand_perf = (info['win_rate'] * 15000000 * market_multiplier) + (random.randint(-100000, 500000))
             
+            from datetime import timedelta
+            rand_min = random.randint(1, 120)
+            exit_t = (datetime.now() - timedelta(minutes=rand_min)).strftime("%m/%d %H:%M")
+            
             ai_stats.append((name, {
                 "total_profit": rand_perf, 
                 "trade_count": random.randint(30, 100), 
@@ -4358,7 +4366,8 @@ elif page.startswith("7-e."):
                 "ticker": target_ticker,
                 "entry_p": entry_p,
                 "exit_p": exit_p,
-                "is_kr": is_kr_ai
+                "is_kr": is_kr_ai,
+                "exit_time": exit_t
             }))
         
         # Human + AI 통합 정렬
@@ -4418,7 +4427,7 @@ elif page.startswith("7-e."):
                             <div><span style='color:#888;'>진입가:</span> <b style='color:#FFF;'>{entry_val:{fmt}}{unit}</b></div>
                             <div><span style='color:#888;'>판매가:</span> <b style='color:#FFF;'>{exit_val:{fmt}}{unit}</b></div>
                             <div><span style='color:#888;'>수익률:</span> <b style='color:#00FF00;'>{roi:+.1f}%</b></div>
-                            <div><span style='color:#888;'>판매시점:</span> <b style='color:#FFF;'>{datetime.now().strftime('%m/%d %H:%M')}</b></div>
+                            <div><span style='color:#888;'>판매시점:</span> <b style='color:#FFF;'>{stats.get('exit_time', datetime.now().strftime('%m/%d %H:%M'))}</b></div>
                         </div>
                         """, unsafe_allow_html=True)
             
