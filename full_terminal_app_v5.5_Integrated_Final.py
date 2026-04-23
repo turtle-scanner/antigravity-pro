@@ -133,11 +133,25 @@ KIS_ACCOUNT = st.secrets.get("KIS_ACCOUNT", os.environ.get("KIS_ACCOUNT", "46289
 # 실전 계좌 연동을 위해 Mock Trading을 False로 설정
 KIS_MOCK_TRADING = str(st.secrets.get("KIS_MOCK_TRADING", os.environ.get("KIS_MOCK_TRADING", "False"))).lower() in ("true", "1", "t")
 
-@st.cache_data(ttl=40000)
 def get_kis_access_token(app_key, app_secret, mock_trading):
-    """한국투자증권 API 토큰 발급 (캐싱 적용으로 API 호출 제한 방지)"""
+    """한국투자증권 API 토큰 발급 (로컬 파일 캐싱 적용으로 KIS 1분 호출 제한 완벽 우회)"""
     if not app_key or not app_secret:
         return None
+        
+    token_file = os.path.join(os.path.dirname(__file__), "kis_token_cache.json")
+    
+    # 1. 파일에서 토큰 읽기 시도 (Streamlit 재시작에도 유지됨)
+    if os.path.exists(token_file):
+        try:
+            with open(token_file, "r") as f:
+                data = json.load(f)
+            # 유효기간(24시간) 중 23시간 이내면 기존 토큰 재사용
+            if time.time() - data.get("timestamp", 0) < 82800:
+                return data.get("token")
+        except:
+            pass
+
+    # 2. 파일에 없거나 만료된 경우 KIS 서버로 API 호출
     try:
         url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP" if not mock_trading else "https://openapivts.koreainvestment.com:29443/oauth2/tokenP"
         headers = {"content-type": "application/json"}
@@ -148,9 +162,23 @@ def get_kis_access_token(app_key, app_secret, mock_trading):
         }
         res = requests.post(url, headers=headers, json=body, timeout=5)
         if res.status_code == 200:
-            return res.json().get("access_token")
+            token = res.json().get("access_token")
+            # 3. 발급받은 새 토큰을 파일에 영구 저장
+            try:
+                with open(token_file, "w") as f:
+                    json.dump({"token": token, "timestamp": time.time()}, f)
+            except:
+                pass
+            return token
         else:
             print(f"[ KIS API ERROR ] 토큰 발급 실패: {res.status_code} {res.text}")
+            
+            # 실패했는데 혹시 파일에 이전 토큰이 남아있다면 마지막 수단으로 그거라도 반환 시도
+            if os.path.exists(token_file):
+                try:
+                    with open(token_file, "r") as f:
+                        return json.load(f).get("token")
+                except: pass
             return None
     except Exception as e:
         print(f"[ KIS API ERROR ] 토큰 발급 중 예외 발생: {e}")
