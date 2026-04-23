@@ -4156,7 +4156,51 @@ elif page.startswith("7-c."):
             
         # --- 민수의 반도체 전략 엔진 결과 출력 ---
         st.markdown(f"#### 🤖 AI 요원 민수의 [ KOSPI ] 추천")
-        live_trade_allowed = st.toggle("[ LIVE ] KIS 실전 API 계좌 매수/매도 자동 연동 허용", value=False)
+        
+        # [ UI ] LIVE 모드 시각화 강화 (깜박이는 네온 효과)
+        st.markdown("""
+            <style>
+                @keyframes blinker {
+                    50% { opacity: 0; }
+                }
+                .live-indicator {
+                    display: inline-block;
+                    width: 12px;
+                    height: 12px;
+                    background-color: #FF0000;
+                    border-radius: 50%;
+                    margin-right: 8px;
+                    box-shadow: 0 0 10px #FF0000;
+                }
+                .blink {
+                    animation: blinker 1s linear infinite;
+                }
+                .live-banner {
+                    background: rgba(255, 0, 0, 0.1);
+                    padding: 10px;
+                    border-radius: 5px;
+                    border: 1px solid #FF0000;
+                    margin-bottom: 10px;
+                    display: flex;
+                    align-items: center;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        col_live1, col_live2 = st.columns([1, 4])
+        with col_live1:
+            live_trade_allowed = st.toggle("[ LIVE ]", value=False, key="kis_live_toggle_v2")
+        with col_live2:
+            if live_trade_allowed:
+                st.markdown("""
+                    <div class="live-banner">
+                        <span class="live-indicator blink"></span>
+                        <b style="color:#FF0000; font-size:1.1rem;">실전 계좌 연동 중 (LIVE TRADING ACTIVE)</b>
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("<p style='color:#888; padding: 10px;'>현재 가상 매매 모드입니다.</p>", unsafe_allow_html=True)
+
         st.info("💡 팁: 본 시스템은 사용자 요청에 따라 모든 종목에 대해 '손실 -3% 시 손절', '수익 +25% 시 익절' 알고리즘이 기본 탑재되어 동작합니다.")
         
         if not kr_open and live_trade_allowed:
