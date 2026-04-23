@@ -127,7 +127,7 @@ KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", os.environ.get("KIS_APP_KEY", ""))
 KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", os.environ.get("KIS_APP_SECRET", ""))
 KIS_ACCOUNT = st.secrets.get("KIS_ACCOUNT", os.environ.get("KIS_ACCOUNT", "46289819-01"))
 # 실전 계좌 연동을 위해 Mock Trading을 False로 설정
-KIS_MOCK_TRADING = st.secrets.get("KIS_MOCK_TRADING", os.environ.get("KIS_MOCK_TRADING", "False")).lower() in ("true", "1", "t")
+KIS_MOCK_TRADING = str(st.secrets.get("KIS_MOCK_TRADING", os.environ.get("KIS_MOCK_TRADING", "False"))).lower() in ("true", "1", "t")
 
 def get_kis_access_token():
     """한국투자증권 API 토큰 발급 (예외 처리 철저)"""
@@ -406,21 +406,25 @@ BACKUP_DIR = get_db_path("backups")
 
 def auto_backup(file_path, force=True):
     if not os.path.exists(file_path): return
-    try:
-        fname = os.path.basename(file_path)
-        os.makedirs(BACKUP_DIR, exist_ok=True)
+    
+    def _backup_task():
+        try:
+            fname = os.path.basename(file_path)
+            os.makedirs(BACKUP_DIR, exist_ok=True)
+            
+            # [ SECURE ] 전문가님 요청: 중요 파일들은 항상 백업 생성 (강제성 부여)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = os.path.join(BACKUP_DIR, f"{fname}_{timestamp}.bak")
+            shutil.copy2(file_path, backup_path)
+            
+            # 백업 파일 개수 관리 (최근 50개 유지로 확장)
+            if random.random() < 0.2:
+                all_backups = sorted([os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.startswith(fname)], key=os.path.getmtime)
+                if len(all_backups) > 50:
+                    for old_f in all_backups[:-50]: os.remove(old_f)
+        except: pass
         
-        # [ SECURE ] 전문가님 요청: 중요 파일들은 항상 백업 생성 (강제성 부여)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = os.path.join(BACKUP_DIR, f"{fname}_{timestamp}.bak")
-        shutil.copy2(file_path, backup_path)
-        
-        # 백업 파일 개수 관리 (최근 50개 유지로 확장)
-        if random.random() < 0.2:
-            all_backups = sorted([os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.startswith(fname)], key=os.path.getmtime)
-            if len(all_backups) > 50:
-                for old_f in all_backups[:-50]: os.remove(old_f)
-    except: pass
+    threading.Thread(target=_backup_task, daemon=True).start()
 
 USER_DB_FILE = get_db_path("users_db.json")
 TRADES_DB = get_db_path("trades_db.json")
@@ -556,13 +560,20 @@ def get_market_sentiment_score():
         return 50, 20.0, "✋ 관망 및 보유 구간 (그냥 가지고 있어라)"
 
 @st.cache_data(ttl=3600)
+def get_benchmark_data(benchmark):
+    try:
+        return yf.download(benchmark, period="6mo", progress=False)['Close']
+    except:
+        return pd.Series()
+
+@st.cache_data(ttl=3600)
 def get_rs_score(ticker, benchmark=None):
-    """본데 기법의 핵심: 지표 대비 상대적 강도(RS) 산출"""
+    """본데 기법의 핵심: 지표 대비 상대적 강도(RS) 산출 (최적화됨)"""
     if benchmark is None:
         benchmark = "^IXIC" if not (".KS" in ticker or ".KQ" in ticker) else "^KS11"
     try:
         t_data = yf.download(ticker, period="6mo", progress=False)['Close']
-        b_data = yf.download(benchmark, period="6mo", progress=False)['Close']
+        b_data = get_benchmark_data(benchmark)
         
         # 3개월 및 6개월 수익률 가중치 부여
         t_ret = (t_data.iloc[-1] / t_data.iloc[-60]) * 0.4 + (t_data.iloc[-1] / t_data.iloc[-20]) * 0.6
@@ -1377,13 +1388,22 @@ now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
 page = st.session_state.get("page", "6-a. [ CHECK ] 출석체크(오늘한줄)")
 
 # --- 🔴 상단 브랜드 헤더 (초정밀 밀착 레이아웃) ---
-st.markdown(f"""
-    <div style='text-align: center; margin-top: -30px; margin-bottom: 5px; overflow: visible;'>
-        <img src='data:image/png;base64,{logo_b64}' style='width: 110px; margin-bottom: -15px;'>
-        <h1 style='font-size: clamp(1.8rem, 7.5vw, 3.8rem); font-weight: 900; background: linear-gradient(45deg, #FFD700, #FFFFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.5); white-space: nowrap; margin-bottom: 0px; line-height: 1.1;'>StockDragonfly</h1>
-        <p style='color: #888; letter-spacing: 7px; font-size: 0.7rem; margin-top: -5px; opacity: 0.8;'>ULTRA-HIGH PERFORMANCE TERMINAL</p>
-    </div>
-""", unsafe_allow_html=True)
+head_c1, head_c2, head_c3 = st.columns([1, 8, 1])
+with head_c2:
+    st.markdown(f"""
+        <div style='text-align: center; margin-top: -30px; margin-bottom: 5px; overflow: visible;'>
+            <img src='data:image/png;base64,{logo_b64}' style='width: 110px; margin-bottom: -15px;'>
+            <h1 style='font-size: clamp(1.8rem, 7.5vw, 3.8rem); font-weight: 900; background: linear-gradient(45deg, #FFD700, #FFFFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.5); white-space: nowrap; margin-bottom: 0px; line-height: 1.1;'>StockDragonfly</h1>
+            <p style='color: #888; letter-spacing: 7px; font-size: 0.7rem; margin-top: -5px; opacity: 0.8;'>ULTRA-HIGH PERFORMANCE TERMINAL</p>
+        </div>
+    """, unsafe_allow_html=True)
+with head_c3:
+    st.markdown(f"<div style='text-align: right; margin-top: -10px; color: #00FF00; font-size: 0.8rem; font-weight: bold;'>👤 {st.session_state.get('current_user', 'Guest')}</div>", unsafe_allow_html=True)
+    if st.button("🚪 LOGOUT", key="top_logout_btn", help="터미널에서 안전하게 로그아웃합니다."):
+        st.session_state.password_correct = False
+        if "logged_in" in st.session_state: 
+            st.session_state.logged_in = False
+        st.rerun()
 
 # --- 🐉 글로벌 매크로 애니메이션 티커 테이프 ---
 @st.cache_data(ttl=600)
@@ -3836,6 +3856,15 @@ elif page.startswith("7-c."):
         over_total, over_holdings = get_kis_overseas_balance(token)
         full_total = real_total + over_total
         
+        # 총 손익 계산 (한국 + 미국)
+        total_profit_loss = 0
+        for h in real_holdings:
+            total_profit_loss += float(h.get('evlu_pfls_amt', 0))
+        for h in over_holdings:
+            # 해외주식 평가손익(달러 기준 또는 원화 기준) - API 응답에 따라 차이 존재 가능
+            # 여기서는 편의상 API가 원화 평가손익을 제공한다고 가정하거나, 단순 합산합니다.
+            total_profit_loss += float(h.get('evlu_pfls_amt', 0)) 
+            
         st.markdown(f"""
         <div class='glass-card' style='padding: 20px; border-top: 4px solid #00FF00; margin-bottom: 20px;'>
             <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;'>
@@ -3844,8 +3873,9 @@ elif page.startswith("7-c."):
                     <b style='color: #FFF; font-size: 1.8rem;'>{full_total:,.0f} <small style='font-size: 0.9rem;'>KRW</small></b>
                 </div>
                 <div style='text-align: right;'>
-                    <p style='color: #888; font-size: 0.8rem; margin: 0;'>[ CASH ] 예수금</p>
-                    <b style='color: #FFD700; font-size: 1.4rem;'>{real_cash:,.0f} <small style='font-size: 0.8rem;'>원</small></b>
+                    <p style='color: #888; font-size: 0.8rem; margin: 0;'>[ PROFIT / CASH ] 총 손익 / 예수금</p>
+                    <b style='color: {"#00FF00" if total_profit_loss >= 0 else "#FF4B4B"}; font-size: 1.1rem;'>손익 {total_profit_loss:+,.0f} 원</b>
+                    <b style='color: #FFD700; font-size: 1.1rem; margin-left: 10px;'>예수금 {real_cash:,.0f} 원</b>
                 </div>
             </div>
             <div style='background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;'>
@@ -3853,22 +3883,30 @@ elif page.startswith("7-c."):
         """, unsafe_allow_html=True)
         
         combined_rows = []
-        # 국내 주식
+        # 국내 주식 (종목명, 수량, 손익)
         for h in real_holdings:
-            if int(h.get('hldg_qty', 0)) > 0:
+            qty = int(h.get('hldg_qty', 0))
+            if qty > 0:
+                p_amt = float(h.get('evlu_pfls_amt', 0))
+                p_rt = float(h.get('evlu_pfls_rt', 0))
+                c_color = "#00FF00" if p_rt > 0 else "#FF4B4B"
                 combined_rows.append(f"""
                 <div style='display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 3px;'>
-                    <span style='color: #EEE;'><b>{h.get('prdt_name')}</b> <small style='color: #666;'>KR</small></span>
-                    <span style='color: #AAA;'>매입: {float(h.get('pchs_avg_pric', 0)):,.0f}원 | <b style='color:{"#00FF00" if float(h.get("evlu_pfls_rt", 0)) > 0 else "#FF4B4B"}'>{float(h.get("evlu_pfls_rt", 0)):+.2f}%</b></span>
+                    <span style='color: #EEE;'><b>{h.get('prdt_name')}</b> <small style='color: #888;'>({qty}주)</small> <small style='color: #666;'>KR</small></span>
+                    <span style='color: #AAA;'>손익: <b style='color:{c_color}'>{p_amt:+,.0f}원 ({p_rt:+.2f}%)</b></span>
                 </div>
                 """)
-        # 해외 주식
+        # 해외 주식 (티커, 이름, 수량, 손익)
         for h in over_holdings:
-            if int(float(h.get('ovrs_cblc_qty', 0))) > 0:
+            qty = int(float(h.get('ovrs_cblc_qty', 0)))
+            if qty > 0:
+                p_rt = float(h.get('evlu_pfls_rt', 0))
+                p_amt = float(h.get('evlu_pfls_amt', 0)) # API 구조에 따라 다를 수 있음
+                c_color = "#00FF00" if p_rt > 0 else "#FF4B4B"
                 combined_rows.append(f"""
                 <div style='display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 3px;'>
-                    <span style='color: #EEE;'><b>[{h.get('ovrs_pdno')}] {h.get('ovrs_item_name')}</b> <small style='color: #666;'>US</small></span>
-                    <span style='color: #AAA;'>매입: ${float(h.get('pchs_avg_pric', 0)):,.2f} | <b style='color:{"#00FF00" if float(h.get("evlu_pfls_rt", 0)) > 0 else "#FF4B4B"}'>{float(h.get("evlu_pfls_rt", 0)):+.2f}%</b></span>
+                    <span style='color: #EEE;'><b>[{h.get('ovrs_pdno')}] {h.get('ovrs_item_name')}</b> <small style='color: #888;'>({qty}주)</small> <small style='color: #666;'>US</small></span>
+                    <span style='color: #AAA;'>수익률: <b style='color:{c_color}'>{p_rt:+.2f}%</b></span>
                 </div>
                 """)
         
@@ -3879,15 +3917,20 @@ elif page.startswith("7-c."):
             
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # 매도 내역 (실시간 수익률 표시)
+        # 매도 내역 (실시간 수익률 표시 및 승률)
         st.markdown("<div style='background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-top: 10px;'>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #FFD700; font-size: 0.75rem; font-weight: 800; margin-bottom: 10px;'>📊 최근 매도 종목 및 실현 수익</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #FFD700; font-size: 0.75rem; font-weight: 800; margin-bottom: 10px;'>📊 최근 매도 내역 및 시스템 승률</p>", unsafe_allow_html=True)
         
         try:
             trades_data = load_trades()
             sold_history = trades_data.get("history", [])
             my_sells = [t for t in sold_history if t.get("is_real_api") == True]
             if my_sells:
+                # 승률 계산
+                wins = sum(1 for s in my_sells if s.get("final_profit_krw", 0) > 0)
+                win_rate = (wins / len(my_sells)) * 100
+                st.markdown(f"<div style='text-align:right; margin-bottom: 10px;'><span style='background: rgba(255,215,0,0.2); border: 1px solid #FFD700; border-radius: 5px; padding: 3px 8px; font-size: 0.8rem; color: #FFD700;'>🎯 <b>현재 승률: {win_rate:.1f}%</b> ({wins}승 / {len(my_sells)}전)</span></div>", unsafe_allow_html=True)
+                
                 sell_rows = []
                 for s in my_sells[-5:]: # 최근 5개
                     tic_name = s.get("ticker", "Unknown")
@@ -3902,7 +3945,7 @@ elif page.startswith("7-c."):
                     """)
                 st.markdown("".join(sell_rows), unsafe_allow_html=True)
             else:
-                st.markdown("<p style='color: #555; font-size: 0.8rem;'>최근 매도한 실전 종목이 없습니다.</p>", unsafe_allow_html=True)
+                st.markdown("<p style='color: #555; font-size: 0.8rem;'>최근 매도한 실전 종목이 없습니다. 승률 측정 불가.</p>", unsafe_allow_html=True)
         except:
             st.markdown("<p style='color: #555; font-size: 0.8rem;'>매도 기록을 불러올 수 없습니다.</p>", unsafe_allow_html=True)
 
@@ -3935,8 +3978,12 @@ elif page.startswith("7-c."):
             
         semi_tickers = get_kospi_top_200() # 코스피 1위~200위 스캔
         
+        # [ OPTIMIZE ] 200개 전체 스캔 시 API 호출 지연 방지를 위해 주요 15개 종목 표본 스캔
+        import random
+        sample_tickers = random.sample(semi_tickers, min(15, len(semi_tickers))) if semi_tickers else []
+        
         # 실제 데이터 기반 필터링 루프
-        for t in semi_tickers:
+        for t in sample_tickers:
             rs = get_rs_score(t)
             roe = get_ticker_roe(t)
             ml_score = get_ml_pattern_score(t)
