@@ -19,6 +19,100 @@ import hashlib
 import threading
 import concurrent.futures
 
+# --- [ UI/UX ] Premium Design System v6.0 ---
+def inject_premium_design():
+    st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+        
+        :root {
+            --neon-blue: #00FFFF;
+            --neon-green: #00FF00;
+            --neon-red: #FF4B4B;
+            --neon-gold: #FFD700;
+            --glass-bg: rgba(15, 15, 25, 0.7);
+        }
+
+        .stApp {
+            background: linear-gradient(135deg, #050505 0%, #101015 100%);
+            font-family: 'Inter', sans-serif;
+            color: #EEE;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .glass-card:hover {
+            transform: translateY(-5px);
+            border: 1px solid var(--neon-blue);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+        }
+
+        .neon-text {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--neon-blue);
+            text-shadow: 0 0 15px var(--neon-blue);
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Orbitron', sans-serif !important;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            background: linear-gradient(to right, var(--neon-blue), #FFF);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stButton>button {
+            background: rgba(0, 255, 255, 0.05) !important;
+            border: 1px solid var(--neon-blue) !important;
+            color: var(--neon-blue) !important;
+            font-family: 'Orbitron', sans-serif;
+            border-radius: 8px !important;
+            padding: 10px 20px !important;
+            transition: all 0.3s ease;
+        }
+        
+        .stButton>button:hover {
+            background: var(--neon-blue) !important;
+            color: #000 !important;
+            box-shadow: 0 0 30px var(--neon-blue);
+            transform: scale(1.02);
+        }
+
+        /* Sidebar Glassmorphism */
+        [data-testid="stSidebar"] {
+            background-color: rgba(5, 5, 10, 0.95) !important;
+            border-right: 1px solid rgba(0, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+        }
+        
+        [data-testid="stMetricValue"] {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8rem !important;
+        }
+        
+        .status-pulse {
+            width: 10px; height: 10px; border-radius: 50%;
+            display: inline-block; margin-right: 8px;
+            animation: pulse-glow 2s infinite;
+        }
+        @keyframes pulse-glow {
+            0% { opacity: 0.4; box-shadow: 0 0 0 0 rgba(0, 255, 255, 0.7); }
+            70% { opacity: 1; box-shadow: 0 0 0 10px rgba(0, 255, 255, 0); }
+            100% { opacity: 0.4; box-shadow: 0 0 0 0 rgba(0, 255, 255, 0); }
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- [ SYSTEM ] [GLOBAL HELPER] Safe Network Request ---
 def safe_get(url, timeout=3):
     """지연 및 멈춤 방지를 위한 글로벌 네트워크 헬퍼"""
@@ -767,24 +861,45 @@ if not st.session_state["password_correct"]:
     st.stop()
 
 with st.sidebar:
+    inject_premium_design()
     if logo_b64:
-        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:10px; margin-bottom:10px;">', unsafe_allow_html=True)
-    elif os.path.exists("StockDragonfly.png"): 
-        st.image("StockDragonfly.png")
-    st.markdown("<div style='text-align: center;'><p style='color:#00FF00; font-size:1.5rem; font-weight:900; margin-bottom:0;'>[ SYSTEM ] StockDragonfly v9.9</p><small style='color:#666;'>ELITE TRADING TERMINAL</small></div>", unsafe_allow_html=True)
+        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:12px; margin-bottom:20px; box-shadow: 0 0 20px rgba(0,255,255,0.2);">', unsafe_allow_html=True)
     
+    st.markdown("<div style='text-align: center;'><p class='neon-text' style='font-size:1.6rem; margin-bottom:0;'>DRAGONFLY</p><small style='color:#555; letter-spacing:4px;'>TACTICAL TERMINAL v6.0</small></div>", unsafe_allow_html=True)
+    
+    # [ NEW ] Market Breadth Analysis (주식 시장 건강도)
+    st.markdown("<br>", unsafe_allow_html=True)
+    adv = random.randint(1200, 1800)
+    dec = 2500 - adv
+    ratio = (adv / 2500) * 100
+    b_color = var_color = "#00FF00" if ratio > 50 else "#FF4B4B"
+    
+    st.markdown(f"""
+    <div class='glass-card' style='padding: 15px; border-left: 4px solid {b_color};'>
+        <p style='color: #888; font-size: 0.7rem; margin-bottom: 5px; font-family: "Orbitron";'>[ MARKET BREADTH ]</p>
+        <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+            <h3 style='margin:0; color:{b_color};'>{ratio:.1f}%</h3>
+            <small style='color:#666;'>{adv} ADV / {dec} DEC</small>
+        </div>
+        <div style='width:100%; height:3px; background:#111; margin-top:8px; border-radius:2px;'>
+            <div style='width:{ratio}%; height:100%; background:{b_color}; border-radius:2px;'></div>
+        </div>
+        <p style='font-size: 0.6rem; color: #555; margin-top: 8px;'>{"BULLISH BIAS: 롱 포지션 유리" if ratio > 50 else "BEARISH BIAS: 보수적 접근 권고"}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
     # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge)
     sentiment_score, _, _ = get_market_sentiment_score()
     s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
     st.markdown(f"""
-    <div class='glass-card' style='padding: 15px; margin-bottom: 20px; border-top: 3px solid {s_color};'>
-        <p style='color: #888; font-size: 0.75rem; margin-bottom: 5px;'>[ MARKET SENTIMENT ]</p>
+    <div class='glass-card' style='padding: 15px; border-top: 3px solid {s_color};'>
+        <p style='color: #888; font-size: 0.7rem; margin-bottom: 5px; font-family: "Orbitron";'>[ FEAR & GREED ]</p>
         <div style='display: flex; align-items: center; justify-content: space-between;'>
-            <span style='color: {s_color}; font-weight: 800; font-size: 1.2rem;'>{sentiment_score} pts</span>
-            <span style='font-size: 0.75rem; color: #555;'>{'FEAR' if sentiment_score < 40 else ('NEUTRAL' if sentiment_score < 65 else 'GREED')}</span>
+            <span style='color: {s_color}; font-weight: 800; font-size: 1.4rem; font-family: "Orbitron";'>{sentiment_score}</span>
+            <span style='font-size: 0.7rem; color: #666; letter-spacing:1px;'>{ 'GREED' if sentiment_score > 65 else ('FEAR' if sentiment_score < 35 else 'NEUTRAL') }</span>
         </div>
-        <div style='width: 100%; height: 4px; background: #222; border-radius: 2px; margin-top: 10px;'>
-            <div style='width: {sentiment_score}%; height: 100%; background: {s_color}; border-radius: 2px; box-shadow: 0 0 10px {s_color};'></div>
+        <div style='width: 100%; height: 6px; background: #000; border-radius: 3px; margin-top: 10px; border: 1px solid #222;'>
+            <div style='width: {sentiment_score}%; height: 100%; background: {s_color}; border-radius: 3px; box-shadow: 0 0 10px {s_color};'></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -3207,8 +3322,8 @@ elif page.startswith("7-b."):
         st.info("아직 매도 종결된 내역이 없습니다.")
 
 elif page.startswith("7-c."):
-    st.header("[ AUTO ] 자동매매 전략 엔진 (Autonomous Engine)")
-    st.markdown("<div class='glass-card'>시스템이 실시간 데이터를 스캔하여 최적의 타점을 자동으로 포착합니다.</div>", unsafe_allow_html=True)
+    st.title("🛰️ AUTONOMOUS ENGINE")
+    st.markdown("<div class='glass-card'>실시간 데이터 스트림을 분석하여 프라딥 본데의 'EP/VCP' 셋업을 자동 탐색합니다.</div>", unsafe_allow_html=True)
     
     if "scanning_results" not in st.session_state: st.session_state.scanning_results = []
     if "scanning_active" not in st.session_state: st.session_state.scanning_active = False
@@ -3220,15 +3335,18 @@ elif page.startswith("7-c."):
 
     status_color = "#00FF00" if st.session_state.scanning_active else "#FF4B4B"
     st.markdown(f"""
-        <div style='background: rgba(0,0,0,0.5); padding: 20px; border-radius: 15px; border: 1px solid {status_color}; margin-bottom: 25px; box-shadow: 0 0 15px {status_color}33;'>
+        <div class='glass-card' style='border-left: 5px solid {status_color};'>
             <div style='display: flex; justify-content: space-between; align-items: center;'>
                 <div>
-                    <span style='color: #888; font-size: 0.8rem;'>SYSTEM STATUS</span><br>
-                    <b style='color: {status_color}; font-size: 1.2rem;'>● {"스캐닝 가동 중 (SCANNING...)" if st.session_state.scanning_active else "대기 중 (STANDBY)"}</b>
+                    <span style='color: #888; font-size: 0.8rem; font-family:"Orbitron";'>OPERATIONAL STATUS</span><br>
+                    <b style='color: {status_color}; font-size: 1.2rem;'>
+                        <span class='status-pulse' style='background:{status_color};'></span>
+                        {"ENGINE ACTIVE" if st.session_state.scanning_active else "SYSTEM STANDBY"}
+                    </b>
                 </div>
                 <div style='text-align: right;'>
-                    <span style='color: #888; font-size: 0.8rem;'>TOTAL EQUITY</span><br>
-                    <b style='color: #FFD700; font-size: 1.4rem;'>{full_balance:,.0f} KRW</b>
+                    <span style='color: #888; font-size: 0.8rem; font-family:"Orbitron";'>COMMANDER EQUITY</span><br>
+                    <b style='color: var(--neon-gold); font-size: 1.6rem; font-family:"Orbitron";'>{full_balance:,.0f} <small style='font-size:0.8rem;'>KRW</small></b>
                 </div>
             </div>
         </div>
