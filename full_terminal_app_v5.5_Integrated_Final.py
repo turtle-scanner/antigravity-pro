@@ -4383,6 +4383,51 @@ elif page.startswith("7-f."):
                                     st.info(f"🛡️ [SIMULATION] {target_tic} 가상 진입이 완료되었습니다.")
                 except Exception as e: st.error(f"데이터 로드 중 오류: {e}")
 
+        # --- [ NEW ] AI OPERATIVES REAL-TIME STATUS (7-g 전용) ---
+        st.divider()
+        st.markdown("### 🛰️ AI OPERATIVE COMBAT STATUS")
+        st.write("AI 정예 요원 6인의 실시간 필드 교전 및 수익률 현황입니다.")
+        
+        # AI 요원들의 가상 실시간 데이터 생성 (세션 상태 유지)
+        if "ai_combat_data" not in st.session_state:
+            st.session_state.ai_combat_data = {
+                "minsu": {"ticker": "005930.KS", "entry": 78200, "roi": 1.2},
+                "Olive": {"ticker": "247540.KQ", "entry": 245500, "roi": -0.8},
+                "Pure": {"ticker": "NVDA", "entry": 122.4, "roi": 5.7},
+                "Harmony": {"ticker": "AAPL", "entry": 185.2, "roi": 0.4},
+                "Mint Soft": {"ticker": "PLTR", "entry": 24.5, "roi": 2.1},
+                "Calm Blue12": {"ticker": "TSLA", "entry": 178.5, "roi": -3.2}
+            }
+        
+        # 실시간 변동 시뮬레이션 (약간의 랜덤성)
+        for name in st.session_state.ai_combat_data:
+            st.session_state.ai_combat_data[name]["roi"] += random.uniform(-0.1, 0.12)
+            
+        ai_cols = st.columns(3)
+        for i, (name, data) in enumerate(st.session_state.ai_combat_data.items()):
+            with ai_cols[i % 3]:
+                roi_color = "#00FF00" if data['roi'] > 0 else "#FF4B4B"
+                op_info = AI_OPERATIVES.get(name, {"strategy": "Analyzing"})
+                st.markdown(f"""
+                <div class='glass-card' style='border-top: 3px solid {roi_color}; padding: 15px;'>
+                    <div style='display: flex; justify-content: space-between;'>
+                        <b style='color: #EEE;'>{name}</b>
+                        <span style='color: #888; font-size: 0.7rem;'>{op_info['strategy']}</span>
+                    </div>
+                    <div style='margin-top: 10px;'>
+                        <span style='color: #888; font-size: 0.8rem;'>MISSION: </span>
+                        <b style='color: #00FFFF;'>{data['ticker']}</b>
+                    </div>
+                    <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
+                        <span style='color: {roi_color}; font-size: 1.4rem; font-weight: 800; font-family: "Orbitron";'>{data['roi']:+.2f}%</span>
+                        <small style='color: #555;'>Entry: {data['entry']}</small>
+                    </div>
+                    <div style='width: 100%; height: 2px; background: #111; margin-top: 8px;'>
+                        <div style='width: {min(100, max(0, 50 + data['roi']*5))}%; height: 100%; background: {roi_color}; shadow: 0 0 5px {roi_color};'></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
     # --- [ 7-h. RECAP ] 기계적 매매 복기방 ---
     elif page.startswith("7-h."):
         st.title("📋 MISSION RECAP")
