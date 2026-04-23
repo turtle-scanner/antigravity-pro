@@ -3887,9 +3887,12 @@ elif page.startswith("7-c."):
         report_placeholder = st.empty()
         
         while st.session_state.scanning_active:
-            report_log = [f"🕒 Last Update: {datetime.now().strftime('%H:%M:%S')}"]
+            # 현재 시각 동기화
+            now = datetime.now()
+            current_time_str = now.strftime('%Y-%m-%d %H:%M:%S')
+            report_log = [f"🕒 Last Update: {current_time_str}"]
             
-            with st.status(f"[ MONITORING ] {datetime.now().strftime('%H:%M:%S')} 전술 스캐닝 가동 중...", expanded=True) as status:
+            with st.status(f"[ MONITORING ] {current_time_str} 전술 스캐닝 가동 중...", expanded=True) as status:
                 targets = sorted(list(set(get_bonde_top_50() + get_kospi_top_200())))
                 st.session_state.universe_list = []
                 st.session_state.rs_target_list = []
@@ -3969,14 +3972,40 @@ elif page.startswith("7-c."):
 
             with grid_col3:
                 st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축)</h4></div>", unsafe_allow_html=True)
-                # 변동폭이 가장 좁은 종목들
                 tight_candidates = sorted([r for r in scanned_pool if r.get('range_3d')], key=lambda x: x.get('range_3d', 100))[:5]
                 for res in tight_candidates:
                     st.caption(f"🎯 {res['name']} ({res['ticker']})")
 
-            time.sleep(60) # 1분 간격으로 무한 반복
+            # --- [ XAI: TACTICAL REASONING ] 왜 사고, 왜 안 샀는가? ---
+            st.markdown("---")
+            reason_col1, reason_col2 = st.columns(2)
+            
+            with reason_col1:
+                st.markdown("<h4 style='color:#00FF00;'>✅ WHY BUY? (매수 근거)</h4>", unsafe_allow_html=True)
+                if st.session_state.execution_list:
+                    for res in st.session_state.execution_list[:3]:
+                        st.success(f"**{res['name']}**: {res['reason']} (자본 25% 투입)")
+                else:
+                    st.info("현재 매수 조건을 완벽히 충족한 종목이 없습니다.")
+
+            with reason_col2:
+                st.markdown("<h4 style='color:#FF4B4B;'>❌ WHY NOT? (보류/탈락 사유)</h4>", unsafe_allow_html=True)
+                # 탈락 사유 중 의미 있는 것 3개 추출
+                reject_reasons = []
+                if current_holdings_count >= 4:
+                    reject_reasons.append("⚠️ **포트폴리오 제한**: 현재 4종목 풀가동 중으로 신규 진입을 차단했습니다.")
+                
+                # 상위 10개 중 SUCCESS가 아닌 것들의 사유
+                for res in top_10_pool:
+                    if res["status"] != "SUCCESS":
+                        reject_reasons.append(f"📍 **{res['name']}**: {res['reason']}")
+                
+                for r in reject_reasons[:5]:
+                    st.error(r)
+
+            time.sleep(60) 
             if not st.session_state.scanning_active: break
-            st.rerun() # UI 전체 갱신을 위해 rerun 호출
+            st.rerun()
 elif page.startswith("7-c."):
     st.title("🛰️ STOCKBEE PROCEDURAL ENGINE")
     st.markdown("""
