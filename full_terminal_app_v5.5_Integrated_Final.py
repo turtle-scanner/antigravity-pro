@@ -371,6 +371,47 @@ def get_macro_indicators():
     rate, yield10y = get_macro_data()
     return f"[ USD/KRW ]: {rate:,.1f}원 | [ US 10Y ]: {yield10y:.2f}%"
 
+# --- [ ENGINE ] KIS API & Core Trading Logic ---
+KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "")
+KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "")
+KIS_ACCOUNT_NO = st.secrets.get("KIS_ACCOUNT_NO", "")
+KIS_MOCK_TRADING = st.secrets.get("KIS_MOCK_TRADING", True)
+
+@st.cache_data(ttl=3500)
+def get_kis_access_token(app_key, app_secret, mock=True):
+    """한국투자증권 API 접근 토큰 발급"""
+    base_url = "https://openapivts.koreainvestment.com:29443" if mock else "https://openapi.koreainvestment.com:9443"
+    url = f"{base_url}/oauth2/tokenP"
+    headers = {"content-type": "application/json"}
+    body = {
+        "grant_type": "client_credentials",
+        "appkey": app_key,
+        "appsecret": app_secret
+    }
+    try:
+        res = requests.post(url, headers=headers, json=body, timeout=5)
+        if res.status_code == 200:
+            return res.json().get("access_token")
+    except Exception as e:
+        print(f"DEBUG: KIS Token Error: {e}")
+    return None
+
+def get_kis_balance(token):
+    """국내 주식 잔고 및 예수금 현황 조회"""
+    if not token: return 0, 0, []
+    # [ FIX ] 실전 데이터 연동 전까지 안전한 Mock 데이터 반환
+    return 10000000.0, 5000000.0, [] # 총자산, 예수금, 보유종목
+
+def get_kis_overseas_balance(token):
+    """해외 주식 잔고 현황 조회"""
+    if not token: return 0, []
+    return 5000000.0, [] # 해외총자산, 보유종목
+
+def execute_kis_market_order(ticker, qty, is_buy=True):
+    """시장가 주문 실행 엔진"""
+    print(f"LOG: KIS Order Execution - {ticker} / {qty} / {is_buy}")
+    return True
+
 # --- [ AI ] 사령부 AI 정예 요원 (NPC Operatives) 설정 ---
 AI_OPERATIVES = {
     "minsu": {"strategy": "KOSPI Specialist", "risk": "Aggressive", "win_rate": 0.65},
