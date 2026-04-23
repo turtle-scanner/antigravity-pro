@@ -57,34 +57,52 @@ def get_dynamic_ai_ranking():
     us_list = get_us_top_stocks()
     now_str = datetime.now().strftime("%m/%d %H:%M")
     
-    def gen_trade(name, t_list, is_kr):
-        tick = random.choice(t_list) if t_list else "005930.KS"
+    ai_configs = [
+        ("[ AI ] minsu", True), ("[ AI ] Olive", True), ("[ AI ] Pure", False),
+        ("[ AI ] Harmony", True), ("[ AI ] Mint Soft", False), ("[ AI ] Calm Blue12", False)
+    ]
+    
+    # [ OPTIMIZE ] 티커 먼저 선발 후 일괄 다운로드
+    ai_picks = []
+    for _, is_kr in ai_configs:
+        t_list = kospi_list if is_kr else us_list
+        ai_picks.append(random.choice(t_list) if t_list else ("005930.KS" if is_kr else "NVDA"))
+    
+    try:
+        # 모든 AI 티커 일괄 수집
+        all_data = yf.download(ai_picks, period="5d", progress=False)['Close']
+        # 티커가 하나인 경우 처리
+        if isinstance(all_data, pd.Series):
+            all_data = pd.DataFrame({ai_picks[0]: all_data})
+    except:
+        all_data = pd.DataFrame()
+
+    results = []
+    for i, (name, is_kr) in enumerate(ai_configs):
+        tick = ai_picks[i]
         try:
-            p_data = yf.Ticker(tick).history(period="5d")['Close']
+            p_data = all_data[tick].dropna() if tick in all_data.columns else pd.Series()
             if len(p_data) >= 2:
                 entry = float(p_data.iloc[-2])
                 exit_p = float(p_data.iloc[-1])
-            else:
-                entry = 100.0; exit_p = 105.0
-        except:
-            entry = 100.0; exit_p = 105.0
-            
+            else: entry = 100.0; exit_p = 105.0
+        except: entry = 100.0; exit_p = 105.0
+        
+        # NaN 방어
+        if np.isnan(entry) or np.isnan(exit_p): entry = 100.0; exit_p = 105.0
+
         roi = ((exit_p / entry) - 1) * 100 if entry > 0 else 0
         roi_str = f"+{roi:.1f}%" if roi > 0 else f"{roi:.1f}%"
-        profit = (exit_p - entry) * (100 if is_kr else 50)
-        bal = 10000000 + (profit if is_kr else profit*1400)
+        base_bal = random.randint(20000000, 30000000)
+        bal = base_bal * (1 + roi/100)
         
-        return {
-            "name": name, "pts": random.randint(500, 2500), "win": random.randint(50, 80),
+        results.append({
+            "name": name, "pts": random.randint(500, 3000), "win": random.randint(60, 90),
             "balance": bal, "pick": tick, "entry": entry, "exit_p": exit_p,
             "roi": roi_str, "exit": now_str
-        }
-
-    return [
-        gen_trade("[ AI ] minsu", kospi_list[:50], True),
-        gen_trade("[ AI ] Olive", kospi_list[50:150], True),
-        gen_trade("[ AI ] Pure", us_list[:20], False)
-    ]
+        })
+    
+    return sorted(results, key=lambda x: x["balance"], reverse=True)
 
 # --- [ API SETUP ] 한국투자증권 (KIS) API 연동 ---
 # [USER RULE: High Security] 민감한 정보는 환경 변수로 처리하고 절대 코드 내 하드코딩하지 않습니다.
@@ -175,6 +193,7 @@ def execute_kis_market_order(ticker, amount, is_buy=True):
         else: return False, f"주문 실패: {res.json().get('msg1')}"
     except Exception as e: return False, f"API 오류: {e}"
 
+@st.cache_data(ttl=3600)
 def get_ml_pattern_score(ticker):
     """[ UPGRADED ML ] RSI, 볼린저밴드 압축, MACD 결합 VCP 점수 산출"""
     try:
@@ -410,7 +429,9 @@ TICKER_NAME_MAP = {
     "005490.KS": "POSCO홀딩스", "000270.KS": "기아", "066570.KS": "LG전자", "035720.KS": "카카오", "035420.KS": "NAVER",
     "005380.KS": "현대차", "000810.KS": "삼성화재", "NFLX": "넷플릭스", "MSTR": "마이크로스트래티지", "COIN": "코인베이스", 
     "MARA": "마라톤디지털", "PANW": "팔로알토", "SNOW": "스노우플레이크", "STX": "씨게이트", "WDC": "웨스턴디지털",
-    "247540.KQ": "에코프로비엠", "277810.KQ": "에코프로", "091990.KQ": "셀트리온헬스케어", "293490.KQ": "카카오게임즈", "086520.KQ": "에코프로"
+    "247540.KQ": "에코프로비엠", "277810.KQ": "에코프로", "091990.KQ": "셀트리온헬스케어", "293490.KQ": "카카오게임즈", "086520.KQ": "에코프로",
+    "000100.KS": "유한양행", "012330.KS": "현대모비스", "068270.KS": "셀트리온", "112610.KQ": "씨젠", "028300.KQ": "HLB",
+    "035900.KQ": "JYP Ent.", "SM": "SM엔터", "HYBE": "하이브", "JYP": "JYP"
 }
 
 REVERSE_TICKER_MAP = {v: k for k, v in TICKER_NAME_MAP.items()}
@@ -427,32 +448,33 @@ def resolve_ticker(query):
 
 @st.cache_data(ttl=900)
 def get_market_sentiment_score():
-    """VIX 및 나스닥 RSI 기반 실전 공포/탐욕 점수 산출"""
+    """VIX 및 나스닥 RSI 기반 IBD 스타일 시장 단계 산출"""
     try:
-        # VIX(^VIX)는 공포의 지수
         m_data = yf.download(["^VIX", "^IXIC"], period="14d", interval="1d", progress=False)['Close']
         curr_vix = float(m_data["^VIX"].dropna().iloc[-1]) if "^VIX" in m_data.columns else 20.0
-        
-        # 기본 점수: VIX가 낮을수록 탐욕(높음), 높을수록 공포(낮음)
-        # VIX 15 -> 85점, VIX 40 -> 10점 정도의 보간
         vix_score = max(5, min(95, 100 - (curr_vix * 2.2)))
-        
-        # 나스닥 RSI로 보정
         ndx = m_data["^IXIC"].dropna()
         delta = ndx.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         rsi = 100 - (100 / (1+rs.iloc[-1])) if not rs.empty else 50
-        
         final_score = (vix_score * 0.6) + (rsi * 0.4)
-        return int(final_score), curr_vix
+        
+        # IBD 단계 매핑
+        if final_score > 65: stage = "Confirmed Uptrend (시장 우상향)"
+        elif final_score > 40: stage = "Uptrend Under Pressure (횡보/주의)"
+        else: stage = "Market in Correction (시장 우하향)"
+        
+        return int(final_score), curr_vix, stage
     except:
-        return 50, 20.0
+        return 50, 20.0, "Uptrend Under Pressure (횡보/주의)"
 
 @st.cache_data(ttl=3600)
-def get_rs_score(ticker, benchmark="^KS11"):
+def get_rs_score(ticker, benchmark=None):
     """본데 기법의 핵심: 지표 대비 상대적 강도(RS) 산출"""
+    if benchmark is None:
+        benchmark = "^IXIC" if not (".KS" in ticker or ".KQ" in ticker) else "^KS11"
     try:
         t_data = yf.download(ticker, period="6mo", progress=False)['Close']
         b_data = yf.download(benchmark, period="6mo", progress=False)['Close']
@@ -606,7 +628,7 @@ def fetch_gs_visitors():
     return pd.DataFrame()
 
 # --- [ ACTION ] Optimized Data Helpers ---
-@st.cache_data(ttl=86400) # ROE는 하루 한 번 정도로 충분
+@st.cache_data(ttl=86400) # ROE는 변동이 적으므로 하루 단위 캐싱
 def get_ticker_roe(tic):
     """
     ⚠️ yf.Ticker.info는 매우 느리므로 스캐너 루프 내부에서 직접 사용을 지양해야 합니다.
@@ -738,7 +760,7 @@ ZONE_CONFIG = {
     "[ TARGET ] 3. 주도주 추격대": ["3-a. [ SCAN ] 주도주 타점 스캐너", "3-b. [ RANK ] 주도주 랭킹 TOP 50", "3-c. [ WATCH ] 본데 감시 리스트", "3-d. [ INDUSTRY ] 산업동향(TOP 10)", "3-e. [ RS ] RS 강도(TOP 10)"],
     "[ RISK ] 4. 전략 및 리스크": ["4-a. [ REPORT ] 프로 분석 리포트", "4-b. [ CALC ] 리스크 계산기", "4-c. [ SHIELD ] 리스크 방패"],
     "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ WHOWS ] 본데는 누구인가?", "5-b. [ STUDY ] 주식공부방(차트)", "5-c. [ RADAR ] 나노바나나 레이더", "5-d. [ EXAM ] 정기 승급 시험 안내", "5-e. [ SUCCESS ] 실전 익절 자랑방", "5-f. [ REVIEW ] 손실 위로 및 복기방"],
-    "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방", "6-c. [ VISIT ] 방문자 인사 신청"],
+    "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방", "6-c. [ VISIT ] 방문자 인사 신청", "6-d. [ HISTORY ] 누적 출석 기록부"],
     "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ EXEC ] 모의투자 매수테스트", "7-b. [ DASHBOARD ] 모의투자 현황/결과", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-d. [ REPORT ] 자동투자 성적표", "7-e. [ RANK ] 사령부 명예의 전당", "7-f. [ COOLAMAGIE ] [쿨라매기 엔진 적용]"]
 }
 
@@ -873,20 +895,23 @@ if not st.session_state["password_correct"]:
     # 모바일에서는 컬럼 비율 조정
     c1, m, c2 = st.columns([0.1, 0.8, 0.1]) if st.session_state.get("is_mobile", False) else st.columns([1, 2, 1])
     with m:
-        st.markdown("<div class='main-title'>StockDragonfly</div>", unsafe_allow_html=True)
-        if logo_b64:
-            st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:15px; margin-bottom:20px;">', unsafe_allow_html=True)
-        elif os.path.exists("StockDragonfly.png"): 
-            st.image("StockDragonfly.png", use_container_width=True)
+        # 통합 로고 및 타이틀 섹션 (간격 압축)
+        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width:350px; border-radius:15px; margin-top:-20px; margin-bottom:10px;">' if logo_b64 else ""
+        st.markdown(f"""
+            <div style='text-align: center;'>
+                <div class='main-title'>StockDragonfly</div>
+                {logo_html}
+            </div>
+        """, unsafe_allow_html=True)
         if "show_notice" not in st.session_state: st.session_state["show_notice"] = True
         
         if st.session_state["show_notice"]:
             cloud_notice = fetch_gs_notices()
             with st.container():
                 st.markdown(f"""
-                <div style='background: rgba(255, 0, 0, 0.1); border: 2px solid #FF4B4B; border-radius: 15px; padding: 25px; margin-bottom: 25px; color: white;'>
-                    <h3 style='color: #FF4B4B; margin-top: 0;'>{cloud_notice['title']}</h3>
-                    <p style='font-size: 1rem; line-height: 1.6;'>{cloud_notice['content']}</p>
+                <div style='background: rgba(255, 0, 0, 0.08); border: 1px solid #FF4B4B; border-radius: 12px; padding: 15px; margin-bottom: 15px; color: white;'>
+                    <h4 style='color: #FF4B4B; margin-top: 0; margin-bottom: 10px;'>{cloud_notice['title']}</h4>
+                    <p style='font-size: 0.9rem; line-height: 1.5; margin: 0;'>{cloud_notice['content']}</p>
                 </div>
                 """, unsafe_allow_html=True)
                 if st.button("[ OK ] 공지 확인 및 열지 않기", use_container_width=True):
@@ -1097,7 +1122,7 @@ with st.sidebar:
                     <b style='color: #FFF; font-size: 1.1rem;'>{r_item['name']}</b>
                 </div>
                 <div style='margin-top: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;'>
-                    <span style='color: #00FF00; font-size: 0.9rem; font-weight: 800;'>보유자산: {r_item['balance']/10000:,.2f} 만원</span>
+                    <span style='color: #00FF00; font-size: 0.9rem; font-weight: 800;'>보유자산: {r_item['balance']/10000:,.1f} 만원</span>
                 </div>
                 <div style='margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem;'>
                     <span style='color: #555; white-space: nowrap;'>대상: <b style='color: #EEE;'>{disp_ticker}</b></span>
@@ -1666,9 +1691,13 @@ elif page.startswith("3-a."):
             st.warning("스캔할 종목 리스트가 비어 있습니다.")
             return
 
+        @st.cache_data(ttl=3600) # 1시간 동안 historical 데이터 캐싱
+        def fetch_scanner_data(t_list):
+            return yf.download(t_list, period="1y", interval="1d", progress=False)
+
         try:
             # 1년치 일봉 데이터 일괄 수집
-            data_full = yf.download(full_list, period="1y", interval="1d", progress=False)
+            data_full = fetch_scanner_data(full_list)
             
             final_results = {"Burst": [], "EP": [], "Anticipation": []}
             
@@ -1756,12 +1785,14 @@ elif page.startswith("3-a."):
             cols = st.columns(3)
             for i, stock in enumerate(res["Burst"][:9]):
                 with cols[i % 3]:
+                    is_kr = (".KS" in stock['TIC'] or ".KQ" in stock['TIC'])
+                    price_str = f"{int(stock['P']):,}원" if is_kr else f"{stock['P']:,.2f}$"
                     st.markdown(f"""
                     <div class='glass-card' style='border-left: 5px solid #00FF00; margin-bottom: 15px; padding: 15px;'>
                         <div style='font-size: 0.8rem; color: #888;'>HIT: MOMENTUM BURST</div>
                         <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
                         <span style='color: #00FF00; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
-                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
+                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>P: {price_str} | Vol: {stock['V']:,}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -1774,12 +1805,14 @@ elif page.startswith("3-a."):
             cols = st.columns(3)
             for i, stock in enumerate(res["EP"][:9]):
                 with cols[i % 3]:
+                    is_kr = (".KS" in stock['TIC'] or ".KQ" in stock['TIC'])
+                    price_str = f"{int(stock['P']):,}원" if is_kr else f"{stock['P']:,.2f}$"
                     st.markdown(f"""
                     <div class='glass-card' style='border-left: 5px solid #FFD700; margin-bottom: 15px; padding: 15px;'>
                         <div style='font-size: 0.8rem; color: #888;'>HIT: EPISODIC PIVOT</div>
                         <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
                         <span style='color: #FFD700; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
-                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
+                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>P: {price_str} | Vol: {stock['V']:,}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -1792,12 +1825,14 @@ elif page.startswith("3-a."):
             cols = st.columns(3)
             for i, stock in enumerate(res["Anticipation"][:9]):
                 with cols[i % 3]:
+                    is_kr = (".KS" in stock['TIC'] or ".KQ" in stock['TIC'])
+                    price_str = f"{int(stock['P']):,}원" if is_kr else f"{stock['P']:,.2f}$"
                     st.markdown(f"""
                     <div class='glass-card' style='border-left: 5px solid #00FFFF; margin-bottom: 15px; padding: 15px;'>
                         <div style='font-size: 0.8rem; color: #888;'>HIT: COILING / DRY-UP</div>
                         <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
                         <span style='color: #00FFFF; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
-                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
+                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>P: {price_str} | Vol: {stock['V']:,}</div>
                     </div>
                     """, unsafe_allow_html=True)
         
@@ -1915,6 +1950,7 @@ elif page.startswith("6-b."):
                         if ce2.form_submit_button("[ CANCEL ] 취소"):
                             del st.session_state["editing_msg_idx"]
                             st.rerun()
+                else:
                     # 일반 버블 모드 (아바타/배지 포함 프리미엄 UI)
                     avatar_char = str(row["유저"])[0].upper() if row["유저"] else "?"
                     st.markdown(f"""
@@ -2054,6 +2090,53 @@ elif page.startswith("3-c."):
                 st.warning("원본 시트 데이터를 불러올 수 없습니다. 권한 또는 네트워크를 확인하십시오.")
         except Exception as e:
             st.error(f"[ ERROR ] 전략 리스트 분석 실패: {e}")
+
+elif page.startswith("6-d."):
+    st.header("[ HISTORY ] 사령부 대원 누적 출석 기록부")
+    st.markdown("<div class='glass-card'>지난 활동의 발자취입니다. 대원님들의 성실함이 수익으로 이어집니다.</div>", unsafe_allow_html=True)
+    
+    if not os.path.exists(ATTENDANCE_FILE):
+        st.info("아직 기록된 출석 내역이 없습니다.")
+    else:
+        # 데이터 로드
+        att_df = safe_read_csv(ATTENDANCE_FILE, ["시간", "아이디", "인사", "등급"])
+        
+        if att_df.empty:
+            st.info("출석 기록이 비어 있습니다.")
+        else:
+            # 검색 및 필터링 기능
+            col_f1, col_f2 = st.columns([2, 1])
+            search_id = col_f1.text_input("대원 아이디 검색", placeholder="아이디를 입력하세요")
+            sort_order = col_f2.selectbox("정렬 순서", ["최신순", "오래된순"])
+            
+            filtered_df = att_df.copy()
+            if search_id:
+                filtered_df = filtered_df[filtered_df['아이디'].str.contains(search_id, case=False)]
+            
+            if sort_order == "최신순":
+                filtered_df = filtered_df.iloc[::-1]
+            
+            # 통계 정보
+            st.markdown(f"**총 출석 횟수:** {len(filtered_df)}회")
+            
+            # 테이블 출력
+            st.dataframe(
+                filtered_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "시간": st.column_config.TextColumn("출석 일시", width="medium"),
+                    "아이디": st.column_config.TextColumn("대원 ID"),
+                    "인사": st.column_config.TextColumn("오늘의 각오", width="large"),
+                    "등급": st.column_config.TextColumn("직책")
+                }
+            )
+            
+            # 사용자별 출석 횟수 랭킹 (간이)
+            if st.checkbox("출석왕 랭킹 보기"):
+                ranking = att_df['아이디'].value_counts().reset_index()
+                ranking.columns = ['아이디', '누적 출석']
+                st.table(ranking.head(10))
 
 elif page.startswith("3-d."):
     st.header("[ INDUSTRY ] 산업동향 (Industry Trends TOP 10)")
@@ -2825,14 +2908,15 @@ elif page.startswith("2-b."):
 elif page.startswith("2-c."):
     st.header("[ SENTIMENT ] 시장 심리 게이지 (Market Sentiment Tracker)")
     st.markdown("<div class='glass-card'>글로벌 투자자들의 공포와 탐욕 및 주요 지수 심리를 실시간 추적합니다.</div>", unsafe_allow_html=True)
-    val, curr_vix = get_market_sentiment_score()
+    val, curr_vix, stage = get_market_sentiment_score()
     
-    st.info(f"[ ADVICE ] 현재 시장 변동성 지수(VIX): **{curr_vix:.1f}** | 수치가 낮을수록 시장은 안정적(탐욕), 높을수록 불안정(공포) 상태입니다.")
+    st.info(f"[ ADVICE ] 현재 시장 변동성 지수(VIX): **{curr_vix:.1f}** | IBD 시장 단계: **{stage}**")
 
-    st.info("[ ADVICE ] 위 지표를 통해 대중의 광기(Greed)가 극에 달했을 때는 현금 비중을 높이고, 공포(Fear)가 극에 달했을 때는 기회를 포착하십시오.")
+    st.info("[ ADVICE ] IBD(Investor's Business Daily) 원칙에 따라 시장 단계별로 현금 비중을 조절하십시오.")
     
     col1, col2 = st.columns([1.5, 1.2])
     with col1:
+        # (TradingView widget remains the same)
         st.components.v1.html("""
             <div class="tradingview-widget-container">
               <div class="tradingview-widget-container__widget"></div>
@@ -2874,27 +2958,27 @@ elif page.startswith("2-c."):
     
     with col2:
         st.markdown("<div class='glass-card' style='padding:25px;'>", unsafe_allow_html=True)
-        st.subheader("[ TRUTH ] StockDragonfly의 실시간 뼈 때리는 훈계 (Harsh Truth)")
-        if val <= 35: 
-            st.error("""
-            **[ STATUS: DEFENSIVE/CASH ]**  
-            "떨어지는 칼날을 왜 잡으려 하나? 네가 시장보다 똑똑하다고 착각하지 마라. 
-            지금 네가 할 일은 스캐닝이 아니라 자본 보호다. 계좌 박살 내고 울지 말고 당장 HTS 꺼라. 
-            시장은 어디 안 간다, 네 돈이 도망갈 뿐이지."
+        st.subheader("[ STRATEGY ] IBD 기반 사령부 전술 지침")
+        if val <= 40: 
+            st.error(f"""
+            **[ PHASE: {stage} ]**  
+            "시장이 조정을 받고 있습니다. 하락장에서는 아무리 좋은 기법도 승률이 급감합니다. 
+            지금은 공격할 때가 아니라 방패를 들 때입니다. 현금 비중을 80% 이상으로 높이고 
+            다음 'Follow-through Day'가 올 때까지 인내하며 주도주 후보군만 관찰하십시오."
             """)
         elif val <= 65: 
-            st.warning("""
-            **[ STATUS: SELECTIVE/CHOPPY ]**  
-            "지금 매수 버튼에 손이 가나? 그건 투자가 아니라 도박이다. 아무것도 하지 않는 것도 포지션이다. 
-            푼돈 벌려다 큰돈 잃지 말고, 확실한 A+ 셋업이 올 때까지 얌전히 현금 쥐고 기다려라. 
-            지루함을 못 견디면 파산뿐이다."
+            st.warning(f"""
+            **[ PHASE: {stage} ]**  
+            "상승 추세가 흔들리고 있습니다. 지수가 주요 이평선 부근에서 공방 중입니다. 
+            신규 매수는 극도로 보수적으로 접근하고, 보유 종목의 손절가를 타이트하게 올려 잡으십시오. 
+            주도주들이 꺾이기 시작하면 즉시 현금화 준비를 해야 합니다."
             """)
         else: 
-            st.success("""
-            **[ STATUS: GREED/AGGRESSIVE ]**  
-            "수익 좀 났다고 네가 천재가 된 줄 아나? 시장이 좋은 것뿐이다. 
-            자만심(Ego)이 고개를 드는 순간, 시장은 네 계좌를 갈기갈기 찢어놓을 거다. 
-            익절 라인 올려 잡고 닥치고 프로세스나 지켜라."
+            st.success(f"""
+            **[ PHASE: {stage} ]**  
+            "시장이 강력한 상승 궤도에 있습니다. 주도주들이 신고가를 경신하며 에너지를 분출 중입니다. 
+            공격적으로 포지션을 구축하되, 자만심에 빠져 원칙 없는 매매를 하지 않도록 주의하십시오. 
+            강한 종목에 집중하고 수익을 극대화(Let your winners run)하십시오."
             """)
         st.markdown("</div>", unsafe_allow_html=True)
         
@@ -3455,7 +3539,7 @@ elif page.startswith("7-b."):
                         c3.write(price_display)
                         
                         res_color = "#00FF00" if profit_krw > 0 else "#FF4B4B"
-                        c4.markdown(f"<span style='color:{res_color}; font-weight:700;'>{profit_krw/10000:+,.2f} 만원 ({roi:+.2f}%)</span>", unsafe_allow_html=True)
+                        c4.markdown(f"<span style='color:{res_color}; font-weight:700;'>{profit_krw/10000:+,.1f} 만원 ({roi:+.1f}%)</span>", unsafe_allow_html=True)
                         
                         if c5.button("[ SELL ] 매도", key=f"sell_{t['id']}_{i}"):
                             trades["wallets"][uid] += curr_val_krw
