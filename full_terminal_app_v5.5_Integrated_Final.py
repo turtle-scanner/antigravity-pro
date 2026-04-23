@@ -3936,16 +3936,32 @@ elif page.startswith("7-c."):
                     name, t = res['name'], res['ticker']
                     if res["status"] == "SUCCESS":
                         st.session_state.execution_list.append(res)
+                        
+                        # [ TACTICAL RECORDING ] 주문 결과와 상관없이 전술 기록에 무조건 저장
+                        trades = load_trades()
+                        new_log = {
+                            "id": str(int(time.time())) + f"_{t}", "user": st.session_state.get("current_user", "Commander"),
+                            "ticker": t, "name": name, "buy_price": res['close'], "reason": res['reason'],
+                            "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "status": "포착됨"
+                        }
+                        
                         if st.session_state.get("live_toggle_v6_pro"):
                             if current_holdings_count < 4:
                                 invest_amount = full_balance * 0.25
-                                qty = int(invest_amount / res['close'])
+                                qty = int(invest_amount / res['close']) if res['close'] > 0 else 0
                                 if qty > 0:
-                                    if execute_kis_market_order(t, qty, is_buy=True):
-                                        current_holdings_count += 1
-                                        report_log.append(f"🔥 **[ BUY ] {name}** (25% 투입)")
+                                    success = execute_kis_market_order(t, qty, is_buy=True)
+                                    if success:
+                                        report_log.append(f"🚀 **[ BUY ] {name}** (체결 성공)")
+                                        new_log["status"] = "체결완료"
+                                    else:
+                                        report_log.append(f"⚠️ **[ BUY ] {name}** (잔액부족/실패 - 기록 보존)")
+                                        new_log["status"] = "잔액부족(기록)"
                         else:
-                            report_log.append(f"🎯 **[ EXECUTION ] {name}** (피벗 돌파 성공)")
+                            report_log.append(f"🎯 **[ SIGNAL ] {name}** (모의 포착)")
+                        
+                        trades["auto"].append(new_log)
+                        save_trades(trades)
                     elif res["status"] == "PASS":
                         if res["stage"] == "RS_TARGET": st.session_state.rs_target_list.append(res)
                         else: st.session_state.universe_list.append(res)
