@@ -1098,6 +1098,47 @@ if not st.session_state["password_correct"]:
     st.stop()
 
 with st.sidebar:
+    # [ TOP-LEFT POPUP ] 글로벌 상황실 및 랭킹 (Time/Weather/Ranking)
+    with st.expander("🛰️ [ OPS ] 실시간 글로벌 상황실 & 요원 랭킹", expanded=False):
+        # 1. 글로벌 시간 & 날씨
+        st.markdown("<p style='font-weight:bold; font-size:0.7rem; color:#888; margin-top:5px;'>[ GLOBAL TIME & WEATHER ]</p>", unsafe_allow_html=True)
+        for city_label, info in sessions.items():
+            city_now = datetime.now(info['tz'])
+            h_dec = city_now.hour + city_now.minute / 60
+            is_open = info['open'] <= h_dec < info['close']
+            s_color = "#00FF00" if is_open else "#FF4B4B"
+            temp, hum = get_weather_info(info['city'])
+            day_str = day_map.get(city_now.strftime('%A'), city_now.strftime('%A'))
+            st.markdown(f"""
+            <div style='background: rgba(255,255,255,0.03); padding: 8px; border-radius: 8px; border-left: 3px solid {s_color}; margin-bottom: 8px;'>
+                <div style='display: flex; justify-content: space-between; margin-bottom: 2px;'>
+                    <span style='font-size: 0.65rem; color: #888;'>{city_label}</span>
+                    <span style='font-size: 0.55rem; color: {s_color};'>● {"OPEN" if is_open else "CLOSED"}</span>
+                </div>
+                <div style='display: flex; justify-content: space-between; align-items: flex-end;'>
+                    <div style='font-size: 0.85rem; font-weight: 800; color: #FFF;'>{city_now.strftime('%H:%M:%S')} <small style='font-size:0.6rem; color:#888;'>{day_str}</small></div>
+                    <div style='text-align: right;'>
+                        <span style='font-size: 0.75rem; color: #FFD700; font-weight: 700;'>{temp}</span> <small style='font-size: 0.55rem; color: #666;'>💧{hum}</small>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        st.divider()
+        
+        # 2. 요원 랭킹 (Ranking)
+        st.markdown("<p style='font-weight:bold; font-size:0.7rem; color:#888;'>[ WEEKLY COMMANDER RANKING ]</p>", unsafe_allow_html=True)
+        ranking_data = get_dynamic_ai_ranking()
+        for i, r_item in enumerate(ranking_data[:3]): # 상위 3명만 표시
+            medals = {0: "🥇", 1: "🥈", 2: "🥉"}
+            medal_color = {0: "#FFD700", 1: "#C0C0C0", 2: "#CD7F32"}
+            st.markdown(f"""
+            <div style='font-size: 0.75rem; display: flex; justify-content: space-between; margin-bottom: 5px; color: #EEE;'>
+                <span>{medals.get(i, '')} {r_item['name']}</span>
+                <span style='color: {medal_color.get(i, "#888")};'>{r_item['roi']}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
     if logo_b64:
         st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:10px; margin-bottom:10px;">', unsafe_allow_html=True)
     elif os.path.exists("StockDragonfly.png"): 
@@ -1107,67 +1148,23 @@ with st.sidebar:
     # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge)
     sentiment_score, _, _ = get_market_sentiment_score()
     s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
+    s_label = "공포 (FEAR)" if sentiment_score < 40 else ("중립 (NEUTRAL)" if sentiment_score < 65 else "탐욕 (GREED)")
+    s_desc = "하락 경계 및 보수적 대응" if sentiment_score < 40 else ("방향성 탐색 및 관망" if sentiment_score < 65 else "적극 매수 및 주도주 추격")
+    
     st.markdown(f"""
     <div class='glass-card' style='padding: 15px; margin-bottom: 20px; border-top: 3px solid {s_color};'>
-        <p style='color: #888; font-size: 0.75rem; margin-bottom: 5px;'>[ MARKET SENTIMENT ]</p>
-        <div style='display: flex; align-items: center; justify-content: space-between;'>
-            <span style='color: {s_color}; font-weight: 800; font-size: 1.2rem;'>{sentiment_score} pts</span>
-            <span style='font-size: 0.75rem; color: #555;'>{'FEAR' if sentiment_score < 40 else ('NEUTRAL' if sentiment_score < 65 else 'GREED')}</span>
+        <p style='color: #888; font-size: 0.75rem; margin-bottom: 5px;'>[ MARKET MOOD ] 시장 심리 지수</p>
+        <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+            <b style='color: {s_color}; font-size: 1.4rem;'>{sentiment_score} <small style='font-size:0.7rem;'>pts</small></b>
+            <span style='font-size: 0.75rem; color: #FFF; font-weight: 700;'>{s_label}</span>
         </div>
-        <div style='width: 100%; height: 4px; background: #222; border-radius: 2px; margin-top: 10px;'>
-            <div style='width: {sentiment_score}%; height: 100%; background: {s_color}; border-radius: 2px; box-shadow: 0 0 10px {s_color};'></div>
+        <div style='width: 100%; height: 6px; background: #222; border-radius: 3px; margin-top: 8px;'>
+            <div style='width: {sentiment_score}%; height: 100%; background: {s_color}; border-radius: 3px; box-shadow: 0 0 10px {s_color};'></div>
         </div>
+        <p style='margin-top: 10px; font-size: 0.7rem; color: #AAA; line-height: 1.4;'>💡 <b>현재 대응 전략:</b><br>{s_desc}</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # [ PRO ] 글로벌 마켓 세션 & 실시간 날씨 (Sidebar Clock & Weather)
-    def get_weather_info(city):
-        """wttr.in을 사용한 실시간 날씨 수집 (Temp, Humidity)"""
-        try:
-            res = requests.get(f"https://wttr.in/{city}?format=%t|%h", timeout=3)
-            if res.status_code == 200:
-                parts = res.text.split('|')
-                return parts[0], parts[1]
-        except: pass
-        return "N/A", "N/A"
-
-    now_utc = datetime.utcnow()
-    sessions = {
-        "SEOUL": {"tz": pytz.timezone('Asia/Seoul'), "open": 9, "close": 15.5, "city": "Seoul"},
-        "NEW YORK": {"tz": pytz.timezone('America/New_York'), "open": 9.5, "close": 16, "city": "NewYork"},
-    }
-    
-    day_map = {"Monday": "월요일", "Tuesday": "화요일", "Wednesday": "수요일", "Thursday": "목요일", "Friday": "금요일", "Saturday": "토요일", "Sunday": "일요일"}
-    
-    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#888; margin-top:20px;'>[ GLOBAL OPS TIME & WEATHER ]</p>", unsafe_allow_html=True)
-    for city_label, info in sessions.items():
-        city_now = datetime.now(info['tz'])
-        h_dec = city_now.hour + city_now.minute / 60
-        is_open = info['open'] <= h_dec < info['close']
-        s_color = "#00FF00" if is_open else "#FF4B4B"
-        
-        # 날씨 정보 (캐싱 적용 고려 가능하지만 실시간성 위해 직접 호출)
-        temp, hum = get_weather_info(info['city'])
-        day_str = day_map.get(city_now.strftime('%A'), city_now.strftime('%A'))
-        
-        st.markdown(f"""
-        <div style='background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; border-left: 4px solid {s_color}; margin-bottom: 10px;'>
-            <div style='display: flex; justify-content: space-between; margin-bottom: 5px;'>
-                <span style='font-size: 0.7rem; color: #888; font-weight: 800;'>{city_label}</span>
-                <span style='font-size: 0.6rem; color: {s_color}; font-weight: 800;'>● {"OPEN" if is_open else "CLOSED"}</span>
-            </div>
-            <div style='display: flex; justify-content: space-between; align-items: flex-end;'>
-                <div>
-                    <div style='font-size: 0.95rem; font-weight: 900; color: #FFF;'>{city_now.strftime('%H:%M:%S')}</div>
-                    <div style='font-size: 0.65rem; color: #AAA;'>{city_now.strftime('%m/%d')} ({day_str})</div>
-                </div>
-                <div style='text-align: right;'>
-                    <div style='font-size: 0.85rem; color: #FFD700; font-weight: 700;'>{temp}</div>
-                    <div style='font-size: 0.6rem; color: #666;'>💧 습도: {hum}</div>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
 
     # [NEW] 실시간 작전 대원 상태 (AI 6인방)
     st.markdown("<p style='margin-top:20px; font-weight:bold; font-size:0.8rem; color:#888;'>[ LIVE ] AI OPERATIVES STATUS</p>", unsafe_allow_html=True)
@@ -3783,6 +3780,59 @@ elif page.startswith("7-b."):
 
 elif page.startswith("7-c."):
     st.header("[ AUTO ] 자동매매 전략 엔진 (Autonomous Engine)")
+    
+    # --- [ REAL ACCOUNT STATUS BANNER v2.0 ] ---
+    token = get_kis_access_token()
+    if token:
+        real_total, real_cash, real_holdings = get_kis_balance(token)
+        over_total, over_holdings = get_kis_overseas_balance(token)
+        full_total = real_total + over_total
+        
+        st.markdown(f"""
+        <div class='glass-card' style='padding: 20px; border-top: 4px solid #00FF00; margin-bottom: 20px;'>
+            <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;'>
+                <div>
+                    <p style='color: #888; font-size: 0.8rem; margin: 0;'>[ LIVE ACCOUNT ] 실제 총 자산 가치</p>
+                    <b style='color: #FFF; font-size: 1.8rem;'>{full_total:,.0f} <small style='font-size: 0.9rem;'>KRW</small></b>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: #888; font-size: 0.8rem; margin: 0;'>[ CASH ] 예수금</p>
+                    <b style='color: #FFD700; font-size: 1.4rem;'>{real_cash:,.0f} <small style='font-size: 0.8rem;'>원</small></b>
+                </div>
+            </div>
+            <div style='background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;'>
+                <p style='color: #00FF00; font-size: 0.75rem; font-weight: 800; margin-bottom: 10px;'>🚀 현재 실전 보유 포지션 (Live Holdings)</p>
+        """, unsafe_allow_html=True)
+        
+        combined_rows = []
+        # 국내 주식
+        for h in real_holdings:
+            if int(h.get('hldg_qty', 0)) > 0:
+                combined_rows.append(f"""
+                <div style='display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 3px;'>
+                    <span style='color: #EEE;'><b>{h.get('prdt_name')}</b> <small style='color: #666;'>KR</small></span>
+                    <span style='color: #AAA;'>매입: {float(h.get('pchs_avg_pric', 0)):,.0f}원 | <b style='color:{"#00FF00" if float(h.get("evlu_pfls_rt", 0)) > 0 else "#FF4B4B"}'>{float(h.get("evlu_pfls_rt", 0)):+.2f}%</b></span>
+                </div>
+                """)
+        # 해외 주식
+        for h in over_holdings:
+            if int(float(h.get('ovrs_cblc_qty', 0))) > 0:
+                combined_rows.append(f"""
+                <div style='display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 3px;'>
+                    <span style='color: #EEE;'><b>[{h.get('ovrs_pdno')}] {h.get('ovrs_item_name')}</b> <small style='color: #666;'>US</small></span>
+                    <span style='color: #AAA;'>매입: ${float(h.get('pchs_avg_pric', 0)):,.2f} | <b style='color:{"#00FF00" if float(h.get("evlu_pfls_rt", 0)) > 0 else "#FF4B4B"}'>{float(h.get("evlu_pfls_rt", 0)):+.2f}%</b></span>
+                </div>
+                """)
+        
+        if combined_rows:
+            st.markdown("".join(combined_rows), unsafe_allow_html=True)
+        else:
+            st.markdown("<p style='color: #555; font-size: 0.8rem;'>현재 보유 중인 포지션이 없습니다.</p>", unsafe_allow_html=True)
+            
+        st.markdown("</div></div>", unsafe_allow_html=True)
+    else:
+        st.warning("실전 계좌 정보를 불러오려면 API 토큰 발급이 필요합니다.")
+
     st.markdown("<div class='glass-card'>시스템이 실시간 데이터를 스캔하여 최적의 타점을 자동으로 포착합니다.</div>", unsafe_allow_html=True)
     
     # 전략 스캐닝 시뮬레이션
