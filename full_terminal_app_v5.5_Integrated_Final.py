@@ -1098,6 +1098,23 @@ if not st.session_state["password_correct"]:
     st.stop()
 
 with st.sidebar:
+    # [ GLOBAL SESSIONS & WEATHER CONFIG ]
+    sessions = {
+        "SEOUL": {"tz": pytz.timezone('Asia/Seoul'), "open": 9, "close": 15.5, "city": "Seoul"},
+        "NEW YORK": {"tz": pytz.timezone('America/New_York'), "open": 9.5, "close": 16, "city": "NewYork"},
+    }
+    day_map = {"Monday": "월요일", "Tuesday": "화요일", "Wednesday": "수요일", "Thursday": "목요일", "Friday": "금요일", "Saturday": "토요일", "Sunday": "일요일"}
+    
+    def get_weather_info(city):
+        """wttr.in을 사용한 실시간 날씨 수집 (Temp, Humidity) - 섭씨(m) 강제"""
+        try:
+            res = requests.get(f"https://wttr.in/{city}?m&format=%t|%h", timeout=3)
+            if res.status_code == 200:
+                parts = res.text.split('|')
+                return parts[0], parts[1]
+        except: pass
+        return "N/A", "N/A"
+
     # [ TOP-LEFT POPUP ] 글로벌 상황실 및 랭킹 (Time/Weather/Ranking)
     with st.expander("🛰️ [ OPS ] 실시간 글로벌 상황실 & 요원 랭킹", expanded=False):
         # 1. 글로벌 시간 & 날씨
