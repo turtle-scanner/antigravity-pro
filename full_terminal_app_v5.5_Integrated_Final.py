@@ -19,7 +19,14 @@ import shutil
 import hashlib
 import threading
 import concurrent.futures
-import FinanceDataReader as fdr
+try:
+    import FinanceDataReader as fdr
+except ImportError:
+    # Fallback if FinanceDataReader is not installed
+    class DummyFDR:
+        def StockListing(self, market):
+            return pd.DataFrame(columns=['Code', 'Name', 'Marcap'])
+    fdr = DummyFDR()
 
 @st.cache_data(ttl=3600)
 def get_kospi_top_200():

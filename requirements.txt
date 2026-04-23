@@ -5,3 +5,7 @@ plotly
 requests
 pytz
 numpy
+finance-datareader
+lxml
+beautifulsoup4
+html5lib
