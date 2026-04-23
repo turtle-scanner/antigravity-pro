@@ -1074,42 +1074,79 @@ if not st.session_state["password_correct"]:
             reg_moti = st.text_area("주식을 하는 이유와 사령부에 임하는 각오", placeholder="예: 경제적 자유를 얻어 가족들에게 헌신하고 싶습니다.")
             
             st.divider()
-            st.markdown("#### [ EXAM ] [필수] 사령부 정예 요원 자격 시험 (15문항)")
-            st.info("기초 10문제 + 전술 5문제 중 13문제 이상 맞혀야 승인이 완료됩니다.")
+            st.markdown("#### ⏳ [ EXAM ] 사령부 정예 요원 자격 시험 (30문항 / 10분 제한)")
+            st.warning("⚠️ 시험 시작 버튼을 누르면 10분의 타이머가 작동합니다. 30문제 중 26문제 이상 맞혀야 입성 자격이 부여됩니다.")
             
-            # 기초 10문제 (Q1-Q10)
-            # 기초 10문제 (Q1-Q10)
-            q1 = st.radio("Q1. 우리나라 주식 차트에서 '빨간색 양초(캔들)' 그림은 무슨 뜻일까요?", ["올랐다 (상승)", "떨어졌다 (하락)", "변동 없다", "거래 중지"], index=None)
-            q2 = st.radio("Q2. 파란색 양초(캔들) 그림은 무슨 뜻일까요?", ["상승 국면", "하락 국면", "보합 국면", "매수 신호"], index=None)
-            q3 = st.radio("Q3. 하루 동안 사람들이 주식을 얼마나 많이 사고팔았는지 알려주는 지표는?", ["거래량", "배당금", "회전율", "수익률"], index=None)
-            q4 = st.radio("Q4. 양초 모양을 닮은 막대기들로 그린 차트의 이름은 무엇일까요?", ["막대 차트", "캔들 차트", "라인 차트", "그림 차트"], index=None)
-            q5 = st.radio("Q5. 주식 명언 중 가장 잘 알려진 원칙은?", ["발바닥에서 사서 정수리에서 팔아라", "무릎에서 사서 어깨에서 팔아라", "언제든 사고 언제든 팔아라", "사두면 언젠가 오른다"], index=None)
-            q6 = st.radio("Q6. 주식 가격의 평균을 내서 선으로 이은 그림을 무엇이라고 할까요?", ["이동평균선(이평선)", "추세선", "지지선", "저항선"], index=None)
-            q7 = st.radio("Q7. 단기 이평선이 장기 이평선을 아래에서 위로 뚫고 올라가는 매수 신호는?", ["골든 크로스", "데드 크로스", "실버 크로스", "캔들 크로스"], index=None)
-            q8 = st.radio("Q8. 주가 환경이 좋지 않을 때 매매를 쉬며 기회를 기다리는 것을 무엇이라 할까요?", ["관망", "포기", "퇴장", "몰빵"], index=None)
-            q9 = st.radio("Q9. 주가가 전고점을 뚫고 강력하게 상승하는 초기 시점은?", ["돌파", "이탈", "보합", "조정"], index=None)
-            q10 = st.radio("Q10. 손실을 최소화하기 위해 정해진 가격에서 파는 생명줄은?", ["손절", "익절", "물타기", "추격매수"], index=None)
+            # --- [ TIMER LOGIC ] ---
+            if "exam_start_time" not in st.session_state:
+                if st.button("🚀 자격 시험 시작 (타이머 작동)"):
+                    st.session_state.exam_start_time = time.time()
+                    st.rerun()
+                st.stop()
             
-            # 전술 5문제 (Q11-Q15)
-            q11 = st.text_input("Q11. 전일 종가보다 큰 차이로 높게 시작하는 것을 무엇이라 하나요? (영문 2단어)", placeholder="Gap Up")
-            q12 = st.text_input("Q12. 주식 시장의 4단계 중 가장 수익이 많이 나는 단계는? (숫자만)", placeholder="2")
-            q13 = st.radio("Q13. 주가가 너무 과하게 올랐을 때 나타나는 기술적 지표 상태는?", ["RSI 70 이상", "RSI 30 이하", "RSI 50", "이평선 수렴"], index=None)
-            q14 = st.text_input("Q14. 수익이 난 후 매수가격으로 손절가를 올리는 행위는? (본ㅁ)", placeholder="본절")
-            q15 = st.radio("Q15. 주가가 이미 3일 이상 오른 종목을 뒤늦게 따라 사는 위험한 행위는?", ["추격 매수", "분할 매수", "예약 매수", "장외 매수"], index=None)
+            # 타이머 계산
+            elapsed = time.time() - st.session_state.exam_start_time
+            remaining = max(0, 600 - int(elapsed))
+            mins, secs = divmod(remaining, 60)
+            
+            t_color = "#FFD700" if remaining > 60 else "#FF4B4B"
+            st.markdown(f"<div style='text-align: right; font-size: 1.5rem; color: {t_color}; font-weight: 900; font-family: \"Orbitron\";'>REMAINING TIME: {mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
+            
+            if remaining <= 0:
+                st.error("⏰ 제한 시간이 초과되었습니다. 사령부의 지혜를 더 연마하고 다시 도전하십시오.")
+                if st.button("시험 재도전"):
+                    del st.session_state.exam_start_time
+                    st.rerun()
+                st.stop()
 
-            if st.button("[ SUBMIT ] 신규 가입 신청 및 시험 제출"):
-                corrects = [
-                    "올랐다 (상승)", "하락 국면", "거래량", "캔들 차트", "무릎에서 사서 어깨에서 팔아라",
-                    "이동평균선(이평선)", "골든 크로스", "관망", "돌파", "손절",
-                    "gap up", "2", "RSI 70 이상", "본절", "추격 매수"
-                ]
-                answers = [
-                    q1, q2, q3, q4, q5, q6, q7, q8, q9, q10,
-                    q11.strip().lower(), q12.strip(), q13, q14.strip(), q15
-                ]
-                score = sum([1 for a, c in zip(answers, corrects) if a == c])
+            st.info("Part 1: 기초 및 전술 통합 테스트 (30문항)")
+            
+            # --- [ 30 QUESTIONS ] ---
+            with st.container():
+                st.info("Part 1: 기초 시장 이해 (10문항)")
+                q1 = st.radio("Q1. 주식 차트에서 양봉(빨간색)의 의미는?", ["상승", "하락", "정지", "보합"], index=None)
+                q2 = st.radio("Q2. 음봉(파란색)의 의미는?", ["상승", "하락", "정지", "보합"], index=None)
+                q3 = st.radio("Q3. 거래량이 폭증하는 것은 무엇의 증거인가?", ["관심과 수급", "거래 정지", "상장 폐지", "가격 하락"], index=None)
+                q4 = st.radio("Q4. 이동평균선(이평선)의 정의는?", ["일정 기간 가격의 평균", "미래 주가 예측선", "거래량 평균", "기관의 매수가"], index=None)
+                q5 = st.radio("Q5. '무릎에 사서 어깨에 팔라'는 격언의 의미는?", ["추세 추종", "최저가 매수", "최고가 매도", "단타 매매"], index=None)
+                q6 = st.radio("Q6. 골든 크로스란?", ["단기선이 장기선을 상향 돌파", "주가가 금값처럼 오름", "거래량이 줄어듬", "장기선이 단기선을 돌파"], index=None)
+                q7 = st.radio("Q7. 데드 크로스 발생 시 대응은?", ["매도 혹은 관망", "적극 매수", "추가 매수", "방관"], index=None)
+                q8 = st.radio("Q8. 호가창에서 매수 잔량이 매도 잔량보다 많으면 보통 어떻게 되나?", ["주가가 하락하기 쉽다", "주가가 폭등한다", "변동 없다", "거래 정지"], index=None)
+                q9 = st.radio("Q9. '손절'의 진정한 의미는?", ["리스크 관리 및 생존", "패배 인정", "자산 포기", "실패"], index=None)
+                q10 = st.radio("Q10. 주식 투자의 주체 3요소는?", ["개인, 외국인, 기관", "대통령, 장관, 은행", "증권사, 거래소, 정부", "나, 너, 우리"], index=None)
 
-                if score >= 13:
+                st.info("Part 2: 본데의 전술 철학 (10문항)")
+                q11 = st.radio("Q11. 본데 전략의 핵심 키워드는?", ["모멘텀과 돌파", "가치 투자", "배당주 투자", "역발상 투자"], index=None)
+                q12 = st.radio("Q12. TI65 지표가 의미하는 것은?", ["65일 가격 모멘텀 강도", "65일 거래량 평균", "65세 이상 은퇴 자금", "6.5% 수익률"], index=None)
+                q13 = st.radio("Q13. 본데의 '4% Momentum Burst'의 필수 조건은?", ["거래량 동반 4% 이상 상승", "4일 연속 하락", "4% 배당 지급", "오전 10시 매수"], index=None)
+                q14 = st.radio("Q14. Episodic Pivot(EP)의 발생 원인은?", ["강력한 펀더멘털의 변화", "개미들의 집단 매수", "단순한 가격 조정", "기관의 물량 투하"], index=None)
+                q15 = st.radio("Q15. 본데가 말하는 가장 안전한 매수 시점은?", ["박스권 돌파 초기", "낙폭 과대 시점", "고점 형성 후 조정", "상장 당일"], index=None)
+                q16 = st.radio("Q16. 3일 연속 상승한 종목을 사지 않는 이유는?", ["추격 매수 위험(Laggard)", "더 오를 것이기 때문", "돈이 없어서", "규정 때문"], index=None)
+                q17 = st.radio("Q17. 주식 시장의 4단계 중 매매해야 하는 단계는?", ["2단계 (Mark-up)", "1단계 (Accumulation)", "3단계 (Distribution)", "4단계 (Capitulation)"], index=None)
+                q18 = st.radio("Q18. Gap Up(갭 상승)이 중요한 이유는?", ["강력한 기관 수급의 증거", "가격이 비싸서", "팔기 좋아서", "세금 때문"], index=None)
+                q19 = st.radio("Q19. 본데 전략에서 매도의 1순위 기준은?", ["매수가(LOD) 이탈", "10% 수익", "목표가 도달", "지루할 때"], index=None)
+                q20 = st.radio("Q20. ROE가 마이너스인 기업을 배제하는 이유는?", ["펀더멘털 결함 및 부실", "세금이 많아서", "이름이 안 예뻐서", "유행이 지나서"], index=None)
+
+                st.info("Part 3: 고등 전략 및 심리 (10문항)")
+                q21 = st.radio("Q21. 트레일링 스탑이란?", ["수익에 따라 익절선을 올림", "손절을 포기함", "매도 대기", "천천히 멈춤"], index=None)
+                q22 = st.radio("Q22. 시장 심리(Fear & Greed)가 공포(Fear)일 때 대응은?", ["보수적 운용/기회 포착", "전량 투매", "무조건 매수", "휴식"], index=None)
+                q23 = st.radio("Q23. 주식 매매에서 가장 큰 적은?", ["자기 자신의 감정", "외국인", "세력", "정부"], index=None)
+                q24 = st.radio("Q24. 분할 매수의 장점은?", ["평단가 조절 및 리스크 분산", "수익 극대화", "빠른 매매", "수수료 절감"], index=None)
+                q25 = st.radio("Q25. RSI 지표가 30 이하일 때의 의미는?", ["과매도 구간(반등 가능성)", "과매수 구간", "정상 가격", "매도 적기"], index=None)
+                q26 = st.radio("Q26. 전술적 인내란?", ["타점이 올 때까지 기다림", "물린 후 버팀", "무한 대기", "매매 포기"], index=None)
+                q27 = st.radio("Q27. 주도주란?", ["시장의 상승을 이끄는 핵심주", "가장 싼 주식", "가장 비싼 주식", "거래 정지주"], index=None)
+                q28 = st.radio("Q28. VCP(변동성 축적 패턴)의 끝은?", ["돌파와 강력한 시세", "가격 하락", "상장 폐지", "거래 중단"], index=None)
+                q29 = st.radio("Q29. 사령부의 최종 목표는?", ["기계적 절차에 의한 수익", "일확천금", "도박", "유명해지기"], index=None)
+                q30 = st.radio("Q30. 당신은 기계처럼 손절 원칙을 지킬 것인가?", ["네, 반드시 지킵니다", "아니오, 상황 봐서요", "모르겠습니다", "지키기 싫습니다"], index=None)
+
+            if st.button("[ SUBMIT ] 자격 시험 제출 및 가입 신청"):
+                ans_list = [q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14, q15, q16, q17, q18, q19, q20, q21, q22, q23, q24, q25, q26, q27, q28, q29, q30]
+                score = 0
+                for a in ans_list:
+                    if a and ("상승" in a or "하락" in a or "수급" in a or "평균" in a or "추세" in a or "상향" in a or "매도" in a or "하락하기" in a or "생존" in a or "기관" in a or "모멘텀" in a or "65일" in a or "4%" in a or "변화" in a or "돌파" in a or "Laggard" in a or "2단계" in a or "강력한" in a or "이탈" in a or "펀더멘털" in a or "익절선" in a or "보수적" in a or "감정" in a or "평단가" in a or "과매도" in a or "타점" in a or "이끄는" in a or "강력한" in a or "절차" in a or "지킵니다" in a):
+                        score += 1
+                
+                if score >= 25:
                     users = load_users()
                     if new_id in users: st.error("❌ 이미 존재하는 대원 코드(ID)입니다.")
                     else:
@@ -1235,36 +1272,42 @@ with st.sidebar:
     # [NEW] 금주의 우수 요원 랭킹 (전술 지표 포함)
     with st.expander("[ TOP ] COMMANDER RANKING (WEEKLY)", expanded=True):
         ranking_data = [
+            {"name": "[ AI ] Pure", "pts": 1120, "win": 65, "balance": 11450000, "pick": "NVDA", "entry": 128.5, "exit_p": 144.5, "roi": "+12.4%", "exit": "04/19 23:50"},
             {"name": "[ AI ] minsu", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"},
-            {"name": "[ AI ] Olive", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"},
-            {"name": "[ AI ] Pure", "pts": 1120, "win": 65, "balance": 11450000, "pick": "NVDA", "entry": 128.5, "exit_p": 144.5, "roi": "+12.4%", "exit": "04/19 23:50"}
+            {"name": "[ AI ] Olive", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"}
         ]
-        for r_item in ranking_data:
-            roi_color = "#00FF00" if "+" in r_item['roi'] else "#FF4B4B"
-            # [ ACTION ] 한국 주식명 매팅 및 가격 포맷팅 (원 표시)
+        
+        # 메달 설정
+        medals = {0: ("🥇 GOLD", "#FFD700"), 1: ("🥈 SILVER", "#C0C0C0"), 2: ("🥉 BRONZE", "#CD7F32")}
+        
+        for idx, r_item in enumerate(ranking_data):
+            m_text, m_color = medals.get(idx, ("", "#888"))
+            roi_color = "#00FF00" if "+" in r_item['roi'] else ("#FF4B4B" if "-" in r_item['roi'] else "#888")
+            
+            # [ ACTION ] 한국 주식명 매칭 및 가격 포맷팅
             disp_ticker = TICKER_NAME_MAP.get(r_item['pick'], r_item['pick'])
             is_kr = ".KS" in r_item['pick'] or ".KQ" in r_item['pick']
             
-            # 진입가/판매가 포맷
             in_p = f"{int(r_item['entry']):,} 원" if is_kr else f"${r_item['entry']:,.1f}"
             out_p = f"{int(r_item['exit_p']):,} 원" if is_kr else f"${r_item['exit_p']:,.1f}"
             
             st.markdown(f"""
-            <div style='margin-bottom: 15px; padding: 15px; background: rgba(255,215,0,0.03); border-radius: 12px; border: 1px solid rgba(255,215,0,0.1); border-left: 4px solid #FFD700;'>
-                <div style='display: flex; justify-content: space-between;'>
-                    <b style='color: #FFD700; font-size: 1rem;'>{r_item['name']}</b>
-                    <span style='color: #888; font-size: 0.8rem;'>{r_item['pts']:,} pts</span>
+            <div style='margin-bottom: 15px; padding: 15px; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px solid {m_color}44; border-left: 4px solid {m_color};'>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <b style='color: {m_color}; font-size: 0.9rem;'>{m_text}</b>
+                    <span style='color: #888; font-size: 0.7rem;'>{r_item['pts']:,} pts</span>
                 </div>
-                <div style='margin-top: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;'>
-                    <span style='color: #00FF00; font-size: 0.9rem; font-weight: 800;'>보유자산: {r_item['balance']:,} 원</span>
+                <div style='margin-top: 5px; display: flex; justify-content: space-between;'>
+                    <b style='color: #FFF; font-size: 1rem;'>{r_item['name']}</b>
+                    <span style='color: #00FF00; font-size: 0.8rem; font-weight: 800;'>{r_item['balance']:,} 원</span>
                 </div>
-                <div style='margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem;'>
-                    <span style='color: #555; white-space: nowrap;'>대상: <b style='color: #EEE;'>{disp_ticker}</b></span>
-                    <span style='color: #555; white-space: nowrap;'>승률: <b style='color: #00FFFF;'>{r_item['win']}%</b></span>
-                    <span style='color: #555; white-space: nowrap;'>진입가: <b style='color: #DDD;'>{in_p}</b></span>
-                    <span style='color: #555; white-space: nowrap;'>판매가: <b style='color: #DDD;'>{out_p}</b></span>
-                    <span style='color: #555; white-space: nowrap;'>수익률: <b style='color: {roi_color};'>{r_item['roi']}</b></span>
-                    <span style='color: #555; white-space: nowrap;'>판매시점: <b style='color: #888;'>{r_item['exit']}</b></span>
+                <div style='margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.75rem;'>
+                    <span style='color: #555;'>대상: <b style='color: #EEE;'>{disp_ticker}</b></span>
+                    <span style='color: #555;'>승률: <b style='color: #00FFFF;'>{r_item['win']}%</b></span>
+                    <span style='color: #555;'>진입: <b style='color: #DDD;'>{in_p}</b></span>
+                    <span style='color: #555;'>판매: <b style='color: #DDD;'>{out_p}</b></span>
+                    <span style='color: #555;'>수익: <b style='color: {roi_color}; font-weight:800;'>{r_item['roi']}</b></span>
+                    <span style='color: #555;'>시점: <b style='color: #888;'>{r_item['exit']}</b></span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
