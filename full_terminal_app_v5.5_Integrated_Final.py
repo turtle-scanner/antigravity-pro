@@ -127,11 +127,29 @@ def get_dynamic_ai_ranking():
     return sorted(results, key=lambda x: x["balance"], reverse=True)
 
 # [USER RULE: High Security] 민감한 정보는 환경 변수 또는 st.secrets로 처리하며 코드 내 노출하지 않습니다.
-KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", os.environ.get("KIS_APP_KEY", ""))
-KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", os.environ.get("KIS_APP_SECRET", ""))
-KIS_ACCOUNT = st.secrets.get("KIS_ACCOUNT", os.environ.get("KIS_ACCOUNT", "46289819-01"))
-# 실전 계좌 연동을 위해 Mock Trading을 False로 설정
-KIS_MOCK_TRADING = str(st.secrets.get("KIS_MOCK_TRADING", os.environ.get("KIS_MOCK_TRADING", "False"))).lower() in ("true", "1", "t")
+fallback_secrets = {}
+try:
+    s_path = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml")
+    if os.path.exists(s_path):
+        with open(s_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.split("#")[0].strip()
+                    if v.startswith('"') and v.endswith('"'): v = v[1:-1]
+                    elif v.startswith("'") and v.endswith("'"): v = v[1:-1]
+                    elif v.lower() == 'true': v = 'true'
+                    elif v.lower() == 'false': v = 'false'
+                    fallback_secrets[k] = v
+except Exception:
+    pass
+
+KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", os.environ.get("KIS_APP_KEY", fallback_secrets.get("KIS_APP_KEY", "")))
+KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", os.environ.get("KIS_APP_SECRET", fallback_secrets.get("KIS_APP_SECRET", "")))
+KIS_ACCOUNT = st.secrets.get("KIS_ACCOUNT", os.environ.get("KIS_ACCOUNT", fallback_secrets.get("KIS_ACCOUNT", "46289819-01")))
+KIS_MOCK_TRADING = str(st.secrets.get("KIS_MOCK_TRADING", os.environ.get("KIS_MOCK_TRADING", fallback_secrets.get("KIS_MOCK_TRADING", "False")))).lower() in ("true", "1", "t")
 
 def get_kis_access_token(app_key, app_secret, mock_trading):
     """한국투자증권 API 토큰 발급 (로컬 파일 캐싱 적용으로 KIS 1분 호출 제한 완벽 우회)"""
