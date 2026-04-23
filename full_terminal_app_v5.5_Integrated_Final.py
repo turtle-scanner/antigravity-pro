@@ -558,12 +558,27 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
     }
     try:
         res = requests.post(url, headers=headers, json=body, timeout=7)
-        if res.status_code == 200:
+        res_data = res.json()
+        if res.status_code == 200 and res_data.get('rt_cd') == '0':
             # [ AUDIO ] 교전 결과 사운드 보고 (매수: 북소리 / 매도: 종소리)
             play_tactical_sound("buy" if is_buy else "sell")
+            # 전투 로그 기록
+            log_type = "SUCCESS"
+            msg = f"{'🚀 매수' if is_buy else '🔔 매도'} 완료: {ticker} ({qty}주)"
+            st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": msg, "type": log_type})
             return True
+        else:
+            # 실패 사유 추출 및 한글화
+            err_msg = res_data.get('msg1', 'API 통신 오류')
+            if "잔고" in err_msg or "부족" in err_msg or "balance" in err_msg.lower():
+                err_msg = "❌ 계좌 잔액(증거금)이 부족하여 매수 불가능"
+            
+            log_msg = f"⚠️ {ticker} 주문 실패: {err_msg}"
+            st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": log_msg, "type": "ERROR"})
+            return False
+    except Exception as e:
+        st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": f"💣 시스템 오류: {str(e)}", "type": "ERROR"})
         return False
-    except: return False
 
 # --- [ SCANNER HELPERS: STOCKBEE STRICT EDITION ] ---
 @st.cache_data(ttl=3600)
@@ -3800,8 +3815,9 @@ elif page.startswith("7-c."):
                             st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
                             # 매수 성공 로그에 근거 포함
                             if execute_kis_market_order(t, 10, is_buy=True):
-                                last_log = st.session_state.combat_logs[-1]
-                                last_log["msg"] += f" (근거: {analysis['reason']})"
+                                # 마지막 로그에 근거 추가 (이미 execute_kis_market_order에서 로그를 남기므로 보완)
+                                if st.session_state.combat_logs:
+                                    st.session_state.combat_logs[-1]["msg"] += f" (근거: {analysis['reason']})"
                     
                     elif analysis["status"] == "REJECT":
                         st.write(f"   └ ❌ 탈락 사유: {analysis['reason']}")
