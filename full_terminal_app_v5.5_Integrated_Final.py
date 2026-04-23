@@ -129,26 +129,26 @@ KIS_ACCOUNT = st.secrets.get("KIS_ACCOUNT", os.environ.get("KIS_ACCOUNT", "46289
 # 실전 계좌 연동을 위해 Mock Trading을 False로 설정
 KIS_MOCK_TRADING = str(st.secrets.get("KIS_MOCK_TRADING", os.environ.get("KIS_MOCK_TRADING", "False"))).lower() in ("true", "1", "t")
 
-def get_kis_access_token():
-    """한국투자증권 API 토큰 발급 (예외 처리 철저)"""
-    if not KIS_APP_KEY or not KIS_APP_SECRET:
+@st.cache_data(ttl=40000)
+def get_kis_access_token(app_key, app_secret, mock_trading):
+    """한국투자증권 API 토큰 발급 (캐싱 적용으로 API 호출 제한 방지)"""
+    if not app_key or not app_secret:
         return None
     try:
-        # 모의투자와 실전투자 URL 구분
-        url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP" if not KIS_MOCK_TRADING else "https://openapivts.koreainvestment.com:29443/oauth2/tokenP"
+        url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP" if not mock_trading else "https://openapivts.koreainvestment.com:29443/oauth2/tokenP"
         headers = {"content-type": "application/json"}
         body = {
             "grant_type": "client_credentials",
-            "appkey": KIS_APP_KEY,
-            "appsecret": KIS_APP_SECRET
+            "appkey": app_key,
+            "appsecret": app_secret
         }
         res = requests.post(url, headers=headers, json=body, timeout=5)
         if res.status_code == 200:
             return res.json().get("access_token")
         else:
+            print(f"[ KIS API ERROR ] 토큰 발급 실패: {res.status_code} {res.text}")
             return None
     except Exception as e:
-        # [USER RULE: High Security] 예외 발생 시 로깅만 하고 시스템 중단 방지
         print(f"[ KIS API ERROR ] 토큰 발급 중 예외 발생: {e}")
         return None
 
@@ -216,7 +216,7 @@ def calculate_position_size(total_capital, risk_pct, entry_price, sl_price):
 def execute_kis_market_order(ticker, amount, is_buy=True):
     """한국투자증권 API 실전 시장가 주문 (주식)"""
     if not KIS_APP_KEY or not KIS_APP_SECRET or not KIS_ACCOUNT: return False, "API 키/계좌 미설정"
-    token = get_kis_access_token()
+    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
     if not token: return False, "접근 토큰 발급 실패"
     
     url_base = "https://openapi.koreainvestment.com:9443" if not KIS_MOCK_TRADING else "https://openapivts.koreainvestment.com:29443"
@@ -247,7 +247,7 @@ def execute_kis_market_order(ticker, amount, is_buy=True):
 def execute_kis_overseas_order(ticker, amount, is_buy=True):
     """한국투자증권 API 실전 시장가 주문 (해외/미국)"""
     if KIS_MOCK_TRADING: return False, "실전 모드가 아닙니다."
-    token = get_kis_access_token()
+    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
     if not token: return False, "접근 토큰 발급 실패"
     
     url = "https://openapi.koreainvestment.com:9443/uapi/overseas-stock/v1/trading/order"
@@ -559,6 +559,14 @@ def get_market_sentiment_score():
     except:
         return 50, 20.0, "✋ 관망 및 보유 구간 (그냥 가지고 있어라)"
 
+@st.cache_data(ttl=300)
+def cached_yf_download(tickers_tuple, period="5d", interval="1d"):
+    """반복적인 yf.download 호출로 인한 UI 멈춤 방지용 전역 캐시 함수"""
+    if not tickers_tuple: return pd.DataFrame()
+    try:
+        return yf.download(list(tickers_tuple), period=period, interval=interval, progress=False)
+    except:
+        return pd.DataFrame()
 @st.cache_data(ttl=3600)
 def get_benchmark_data(benchmark):
     try:
@@ -3801,9 +3809,9 @@ elif page.startswith("7-b."):
         with st.spinner("가상 사령부 나노-배치 데이터 동기화 중..."):
             tickers = list(set([t['ticker'] for t in user_trades]))
             if tickers:
-                # 🚀 성능 최적화: 현재가와 SMA10을 위한 20일치 데이터를 한 번에 가져옴
-                data_batch = yf.download(tickers, period="30d", progress=False)
-                close_batch = data_batch['Close']
+                # 🚀 성능 최적화: 현재가와 SMA10을 위한 20일치 데이터를 한 번에 가져옴 (캐싱 적용)
+                data_batch = cached_yf_download(tuple(tickers), period="30d")
+                close_batch = data_batch['Close'] if not data_batch.empty else pd.DataFrame()
                 if isinstance(close_batch, pd.Series): close_batch = pd.DataFrame(close_batch).T
                 
                 for i, t in enumerate(user_trades):
@@ -3966,7 +3974,7 @@ elif page.startswith("7-c."):
     st.divider()
 
     # --- [ REAL ACCOUNT STATUS BANNER v2.0 ] ---
-    token = get_kis_access_token()
+    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
     if token:
         real_total, real_cash, real_holdings = get_kis_balance(token)
         over_total, over_holdings = get_kis_overseas_balance(token)
@@ -4201,7 +4209,8 @@ elif page.startswith("7-d."):
     if auto_trades:
         with st.spinner("AI 요원 포트폴리오 실시간 평가 중..."):
             tickers = list(set([t['ticker'] for t in auto_trades]))
-            data_batch = yf.download(tickers, period="5d", progress=False)['Close']
+            # 성능 최적화: 캐싱된 다운로더 사용
+            data_batch = cached_yf_download(tuple(tickers), period="5d")['Close'] if not cached_yf_download(tuple(tickers), period="5d").empty else pd.DataFrame()
             if isinstance(data_batch, pd.Series): data_batch = pd.DataFrame(data_batch).T
             
             evaluated_list = []
@@ -4274,7 +4283,8 @@ elif page.startswith("7-e."):
             prices = {}
             if unique_tickers:
                 try:
-                    d_batch = yf.download(unique_tickers, period="1d", progress=False)['Close']
+                    d_batch_raw = cached_yf_download(tuple(unique_tickers), period="1d")
+                    d_batch = d_batch_raw['Close'] if not d_batch_raw.empty else pd.DataFrame()
                     if isinstance(d_batch, pd.Series): d_batch = pd.DataFrame(d_batch).T
                     for tick in unique_tickers:
                         prices[tick] = float(d_batch[tick].iloc[-1]) if tick in d_batch.columns else 0
@@ -4318,7 +4328,8 @@ elif page.startswith("7-e."):
         ai_tickers = list(ai_mission_map.values())
         ai_prices = {}
         try:
-            ai_data = yf.download(ai_tickers, period="1d", progress=False)['Close']
+            ai_data_raw = cached_yf_download(tuple(ai_tickers), period="1d")
+            ai_data = ai_data_raw['Close'] if not ai_data_raw.empty else pd.DataFrame()
             if isinstance(ai_data, pd.Series): ai_data = pd.DataFrame(ai_data).T
             for t in ai_tickers:
                 ai_prices[t] = float(ai_data[t].iloc[-1]) if t in ai_data.columns else 0
