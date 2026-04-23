@@ -151,10 +151,18 @@ KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", os.environ.get("KIS_APP_SECRET
 KIS_ACCOUNT = st.secrets.get("KIS_ACCOUNT", os.environ.get("KIS_ACCOUNT", fallback_secrets.get("KIS_ACCOUNT", "46289819-01")))
 KIS_MOCK_TRADING = str(st.secrets.get("KIS_MOCK_TRADING", os.environ.get("KIS_MOCK_TRADING", fallback_secrets.get("KIS_MOCK_TRADING", "False")))).lower() in ("true", "1", "t")
 
+# [ 최후의 보루 ] 사용자 제공 정보 직접 하드코딩
+if not KIS_APP_KEY:
+    KIS_APP_KEY = "PSwPjCXRoSuY1Uz59aDWYKpIPix7VgNB8QUX"
+if not KIS_APP_SECRET:
+    KIS_APP_SECRET = "4WF33M5pnD3Y3qskLfWAlwo0eFxpYIK+TdIXNVW9r+wSLAAF/WVxtqDIvNBDNakV28aFM9ZO+v8069JwBlYDpS1lBvoFf7j9dgSsPwjiwclbvyJ7nMYl5m62wH7VInWWtXgl/8hDnmihzDidKEIss87UdT42JANMvOrCSEF18e5SilJKRIA="
+if not KIS_ACCOUNT:
+    KIS_ACCOUNT = "46289819-01"
+
 def get_kis_access_token(app_key, app_secret, mock_trading):
     """한국투자증권 API 토큰 발급 (로컬 파일 캐싱 적용으로 KIS 1분 호출 제한 완벽 우회)"""
     if not app_key or not app_secret:
-        st.session_state["kis_error"] = "API 키(APP_KEY) 또는 시크릿(APP_SECRET)이 비어 있습니다. secrets.toml 파일 경로를 확인해주세요."
+        st.session_state["kis_error"] = f"API 키 또는 시크릿 오류. [KEY길이: {len(app_key) if app_key else 0}, SEC길이: {len(app_secret) if app_secret else 0}]"
         return None
         
     token_file = os.path.join(os.path.dirname(__file__), "kis_token_cache.json")
