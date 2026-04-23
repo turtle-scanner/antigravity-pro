@@ -136,11 +136,12 @@ def get_kis_access_token():
 
 def get_kis_balance(token):
     """실계좌 예수금 및 총 평가금액 실시간 연동 (자동 비중 조절용)"""
-    if not token or not KIS_ACCOUNT: return 10000000 # 기본값 1000만원
+    if not token or not KIS_ACCOUNT: return 10000000, 10000000, []
     url_base = "https://openapi.koreainvestment.com:9443" if not KIS_MOCK_TRADING else "https://openapivts.koreainvestment.com:29443"
     url = f"{url_base}/uapi/domestic-stock/v1/trading/inquire-balance"
     acc_no = KIS_ACCOUNT.split('-') if '-' in KIS_ACCOUNT else (KIS_ACCOUNT[:8], KIS_ACCOUNT[8:])
-    if len(acc_no) != 2: return 10000000
+    if len(acc_no) != 2: return 10000000, 10000000, []
+    
     headers = {
         "content-type": "application/json", "authorization": f"Bearer {token}",
         "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
@@ -155,9 +156,37 @@ def get_kis_balance(token):
     try:
         res = requests.get(url, headers=headers, params=params, timeout=5)
         if res.status_code == 200:
-            return float(res.json().get('output2', [{}])[0].get('tot_evlu_amt', 10000000))
+            data = res.json()
+            out1 = data.get('output1', []) # 종목 리스트
+            out2 = data.get('output2', [{}])[0] # 총 요약
+            total_eval = float(out2.get('tot_evlu_amt', 0))
+            cash = float(out2.get('dnca_tot_amt', 0))
+            return total_eval, cash, out1
     except: pass
-    return 10000000
+    return 10000000, 10000000, []
+
+def get_kis_overseas_balance(token):
+    """해외주식 실계좌 잔고 조회 (실전전용)"""
+    if KIS_MOCK_TRADING or not token or not KIS_ACCOUNT: return 0, []
+    url = "https://openapi.koreainvestment.com:9443/uapi/overseas-stock/v1/trading/inquire-balance"
+    acc_no = KIS_ACCOUNT.split('-') if '-' in KIS_ACCOUNT else (KIS_ACCOUNT[:8], KIS_ACCOUNT[8:])
+    
+    headers = {
+        "content-type": "application/json", "authorization": f"Bearer {token}",
+        "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
+        "tr_id": "JTTT8434R" # 해외주식 잔고조회
+    }
+    params = {
+        "CANO": acc_no[0], "ACNT_PRDT_CD": acc_no[1], "OVRS_EXCG_CD": "NASD", # 기본 나스닥
+        "TR_PBF_INTL_TP_CD": "02", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""
+    }
+    try:
+        res = requests.get(url, headers=headers, params=params, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            return float(data.get('output2', {}).get('tot_evlu_pamt', 0)), data.get('output1', [])
+    except: pass
+    return 0, []
 
 def calculate_position_size(total_capital, risk_pct, entry_price, sl_price):
     """[ RISK ] 1회 매매당 총 자본의 리스크%를 기준으로 매수 수량 자동 결정"""
@@ -189,9 +218,39 @@ def execute_kis_market_order(ticker, amount, is_buy=True):
     }
     try:
         res = requests.post(url, headers=headers, json=body, timeout=5)
-        if res.status_code == 200 and res.json().get("rt_cd") == "0": return True, "주문 성공"
+        if res.status_code == 200 and res.json().get("rt_cd") == "0":
+            # [ LOG ] 실전 매매 기록
+            msg = res.json().get("msg1", "주문 성공")
+            log_real_trade(ticker, TICKER_NAME_MAP.get(ticker, ticker), amount, 0, "BUY" if is_buy else "SELL", "KR")
+            return True, "주문 성공"
         else: return False, f"주문 실패: {res.json().get('msg1')}"
     except Exception as e: return False, f"API 오류: {e}"
+
+def execute_kis_overseas_order(ticker, amount, is_buy=True):
+    """한국투자증권 API 실전 시장가 주문 (해외/미국)"""
+    if KIS_MOCK_TRADING: return False, "실전 모드가 아닙니다."
+    token = get_kis_access_token()
+    if not token: return False, "접근 토큰 발급 실패"
+    
+    url = "https://openapi.koreainvestment.com:9443/uapi/overseas-stock/v1/trading/order"
+    acc_no = KIS_ACCOUNT.split('-') if '-' in KIS_ACCOUNT else (KIS_ACCOUNT[:8], KIS_ACCOUNT[8:])
+    
+    headers = {
+        "content-type": "application/json", "authorization": f"Bearer {token}",
+        "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
+        "tr_id": "TTTT1002U" if is_buy else "TTTT1006U" # 미국 매수/매도
+    }
+    body = {
+        "CANO": acc_no[0], "ACNT_PRDT_CD": acc_no[1], "OVRS_EXCG_CD": "NASD",
+        "PDNO": ticker, "ORD_QTY": str(amount), "ORD_DVSN": "00", "ORD_SVR_DVSN_CD": "00"
+    }
+    try:
+        res = requests.post(url, headers=headers, json=body, timeout=5)
+        if res.status_code == 200 and res.json().get("rt_cd") == "0":
+            log_real_trade(ticker, TICKER_NAME_MAP.get(ticker, ticker), amount, 0, "BUY" if is_buy else "SELL", "US")
+            return True, "해외 주문 성공"
+        else: return False, f"해외 주문 실패: {res.json().get('msg1')}"
+    except Exception as e: return False, f"해외 API 오류: {e}"
 
 @st.cache_data(ttl=3600)
 def get_ml_pattern_score(ticker):
@@ -446,7 +505,15 @@ def resolve_ticker(query):
     if query in REVERSE_TICKER_MAP: return REVERSE_TICKER_MAP[query]
     return query.upper()
 
-@st.cache_data(ttl=900)
+REAL_TRADE_LOG_FILE = get_db_path("real_trades_ledger.csv")
+
+def log_real_trade(ticker, name, amount, price, side="BUY", market="KR"):
+    """실전 매매 내역을 영구 보존용 LEDGER에 기록"""
+    now_kst = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d %H:%M:%S")
+    new_log = pd.DataFrame([[now_kst, ticker, name, amount, price, side, market]], 
+                           columns=["시간", "티커", "종목명", "수량", "체결가", "구분", "시장"])
+    safe_write_csv(new_log, REAL_TRADE_LOG_FILE, mode='a', header=not os.path.exists(REAL_TRADE_LOG_FILE))
+
 def get_market_sentiment_score():
     """VIX 및 나스닥 RSI 기반 IBD 스타일 시장 단계 산출"""
     try:
@@ -461,14 +528,14 @@ def get_market_sentiment_score():
         rsi = 100 - (100 / (1+rs.iloc[-1])) if not rs.empty else 50
         final_score = (vix_score * 0.6) + (rsi * 0.4)
         
-        # IBD 단계 매핑
-        if final_score > 65: stage = "Confirmed Uptrend (시장 우상향)"
-        elif final_score > 40: stage = "Uptrend Under Pressure (횡보/주의)"
-        else: stage = "Market in Correction (시장 우하향)"
+        # [ BON-DAE STYLE ] IBD 단계 매핑 (직설적 명령형)
+        if final_score > 65: stage = "🚀 적극 매수 구간 (지금 사라!)"
+        elif final_score > 40: stage = "✋ 관망 및 보유 구간 (그냥 가지고 있어라)"
+        else: stage = "🚨 위험 매도 구간 (당장 팔아라!)"
         
         return int(final_score), curr_vix, stage
     except:
-        return 50, 20.0, "Uptrend Under Pressure (횡보/주의)"
+        return 50, 20.0, "✋ 관망 및 보유 구간 (그냥 가지고 있어라)"
 
 @st.cache_data(ttl=3600)
 def get_rs_score(ticker, benchmark=None):
@@ -761,7 +828,7 @@ ZONE_CONFIG = {
     "[ RISK ] 4. 전략 및 리스크": ["4-a. [ REPORT ] 프로 분석 리포트", "4-b. [ CALC ] 리스크 계산기", "4-c. [ SHIELD ] 리스크 방패"],
     "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ WHOWS ] 본데는 누구인가?", "5-b. [ STUDY ] 주식공부방(차트)", "5-c. [ RADAR ] 나노바나나 레이더", "5-d. [ EXAM ] 정기 승급 시험 안내", "5-e. [ SUCCESS ] 실전 익절 자랑방", "5-f. [ REVIEW ] 손실 위로 및 복기방"],
     "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방", "6-c. [ VISIT ] 방문자 인사 신청", "6-d. [ HISTORY ] 누적 출석 기록부"],
-    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ EXEC ] 모의투자 매수테스트", "7-b. [ DASHBOARD ] 모의투자 현황/결과", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-d. [ REPORT ] 자동투자 성적표", "7-e. [ RANK ] 사령부 명예의 전당", "7-f. [ COOLAMAGIE ] [쿨라매기 엔진 적용]"]
+    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ EXEC ] 모의투자 매수테스트", "7-b. [ DASHBOARD ] 모의투자 현황/결과", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-d. [ REPORT ] 자동투자 성적표", "7-e. [ RANK ] 사령부 명예의 전당", "7-f. [ COOLAMAGIE ] [쿨라매기 엔진 적용]", "7-g. [ LEDGER ] 실전 매매 기록부"]
 }
 
 def load_trades():
@@ -1053,25 +1120,51 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # [ PRO ] 글로벌 마켓 세션 클락 (Sidebar Clock System)
+    # [ PRO ] 글로벌 마켓 세션 & 실시간 날씨 (Sidebar Clock & Weather)
+    def get_weather_info(city):
+        """wttr.in을 사용한 실시간 날씨 수집 (Temp, Humidity)"""
+        try:
+            res = requests.get(f"https://wttr.in/{city}?format=%t|%h", timeout=3)
+            if res.status_code == 200:
+                parts = res.text.split('|')
+                return parts[0], parts[1]
+        except: pass
+        return "N/A", "N/A"
+
     now_utc = datetime.utcnow()
     sessions = {
-        "SEOUL": {"tz": pytz.timezone('Asia/Seoul'), "open": 9, "close": 15.5},
-        "NEW YORK": {"tz": pytz.timezone('America/New_York'), "open": 9.5, "close": 16},
-        "LONDON": {"tz": pytz.timezone('Europe/London'), "open": 8, "close": 16.5}
+        "SEOUL": {"tz": pytz.timezone('Asia/Seoul'), "open": 9, "close": 15.5, "city": "Seoul"},
+        "NEW YORK": {"tz": pytz.timezone('America/New_York'), "open": 9.5, "close": 16, "city": "NewYork"},
     }
-    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#888; margin-top:20px;'>[ WORLD MARKET SESSIONS ]</p>", unsafe_allow_html=True)
-    for city, info in sessions.items():
+    
+    day_map = {"Monday": "월요일", "Tuesday": "화요일", "Wednesday": "수요일", "Thursday": "목요일", "Friday": "금요일", "Saturday": "토요일", "Sunday": "일요일"}
+    
+    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#888; margin-top:20px;'>[ GLOBAL OPS TIME & WEATHER ]</p>", unsafe_allow_html=True)
+    for city_label, info in sessions.items():
         city_now = datetime.now(info['tz'])
         h_dec = city_now.hour + city_now.minute / 60
         is_open = info['open'] <= h_dec < info['close']
         s_color = "#00FF00" if is_open else "#FF4B4B"
+        
+        # 날씨 정보 (캐싱 적용 고려 가능하지만 실시간성 위해 직접 호출)
+        temp, hum = get_weather_info(info['city'])
+        day_str = day_map.get(city_now.strftime('%A'), city_now.strftime('%A'))
+        
         st.markdown(f"""
-        <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 8px; border-left: 3px solid {s_color};'>
-            <span style='font-size: 0.75rem; color: #BBB;'>{city}</span>
-            <div style='text-align: right;'>
-                <b style='font-size: 0.85rem; color: #FFF;'>{city_now.strftime('%H:%M')}</b>
-                <span style='font-size: 0.6rem; color: {s_color}; margin-left: 5px;'>● {"OPEN" if is_open else "CLOSED"}</span>
+        <div style='background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; border-left: 4px solid {s_color}; margin-bottom: 10px;'>
+            <div style='display: flex; justify-content: space-between; margin-bottom: 5px;'>
+                <span style='font-size: 0.7rem; color: #888; font-weight: 800;'>{city_label}</span>
+                <span style='font-size: 0.6rem; color: {s_color}; font-weight: 800;'>● {"OPEN" if is_open else "CLOSED"}</span>
+            </div>
+            <div style='display: flex; justify-content: space-between; align-items: flex-end;'>
+                <div>
+                    <div style='font-size: 0.95rem; font-weight: 900; color: #FFF;'>{city_now.strftime('%H:%M:%S')}</div>
+                    <div style='font-size: 0.65rem; color: #AAA;'>{city_now.strftime('%m/%d')} ({day_str})</div>
+                </div>
+                <div style='text-align: right;'>
+                    <div style='font-size: 0.85rem; color: #FFD700; font-weight: 700;'>{temp}</div>
+                    <div style='font-size: 0.6rem; color: #666;'>💧 습도: {hum}</div>
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1313,7 +1406,7 @@ def get_urgent_news():
 news_flash = get_urgent_news()
 st.markdown(f"""
     <div style='background: #111; color: #FFF; padding: 5px 0; border-bottom: 2px solid #FF4B4B; overflow: hidden;'>
-        <div style='display: inline-block; white-space: nowrap; animation: marquee-news 45s linear infinite; font-size: 0.8rem; font-weight: 500; letter-spacing: 0.5px;'>
+        <div style='display: inline-block; white-space: nowrap; animation: marquee-news 45s linear infinite; font-size: 1.0rem; font-weight: 600; letter-spacing: 0.5px;'>
             <span style='color: #FF4B4B; font-weight: 900; margin-right: 20px;'>NEWS FLASH</span> {news_flash} &nbsp;&nbsp;&nbsp; <span style='color: #FF4B4B; font-weight: 900; margin-right: 20px;'>NEWS FLASH</span> {news_flash}
         </div>
     </div>
@@ -1336,16 +1429,16 @@ st.markdown(f"""
     100% {{ transform: scale(1); opacity: 1; }}
 }}
 .ops-active-dot {{
-    width: 10px; height: 10px; background: #00FF00; border-radius: 50%;
-    animation: pulse-heart 1.2s infinite; box-shadow: 0 0 10px #00FF00;
+    width: 14px; height: 14px; background: #00FF00; border-radius: 50%;
+    animation: pulse-heart 1.2s infinite; box-shadow: 0 0 12px #00FF00;
 }}
 </style>
 <div style='background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05);'>
     <div style='display: flex; align-items: center; gap: 15px;'>
         <div class='ops-active-dot'></div>
-        <b style='color: #FFD700; letter-spacing: 2px; font-size: 0.9rem; white-space: nowrap;'>TACTICAL OPS CENTER ACTIVE</b>
+        <b style='color: #FFD700; letter-spacing: 2px; font-size: 1.1rem; white-space: nowrap;'>TACTICAL OPS CENTER ACTIVE</b>
         <span style='color: #555;'>|</span>
-        <marquee scrollamount='5' style='color: #00FF00; font-size: 0.85rem; font-family: monospace;'>
+        <marquee scrollamount='5' style='color: #00FF00; font-size: 1.0rem; font-family: monospace;'>
             {macro_str} &nbsp;&nbsp;&nbsp; [BREAKING] NVDA VCP Phase 3 Detection... &nbsp;&nbsp; [HQ] minsu 요원 코스피 주도 수급 분석 중... &nbsp;&nbsp; [ALERT] RS 상위 10% 종목 실시간 응축 확인...
         </marquee>
     </div>
@@ -2189,6 +2282,47 @@ elif page.startswith("3-e."):
                 """, unsafe_allow_html=True)
             else: st.info("현재 로드된 RS 강도 데이터가 없습니다.")
         except Exception as e: st.error(f"[ ERROR ] RS 강도 로드 실패: {e}")
+
+elif page.startswith("7-g."):
+    st.header("📋 [ LEDGER ] 실전 매매 기록부 (Live Trading Log)")
+    st.markdown("<div class='glass-card'>2026년 4월 23일부터 집행된 모든 실제 매매 내역을 영구 보존합니다.</div>", unsafe_allow_html=True)
+    
+    if os.path.exists(REAL_TRADE_LOG_FILE):
+        ledger_df = pd.read_csv(REAL_TRADE_LOG_FILE, encoding="utf-8-sig")
+        
+        # 필터 섹션
+        f1, f2 = st.columns(2)
+        search_q = f1.text_input("🔍 종목명/티커 검색", placeholder="삼성전자, NVDA 등")
+        market_f = f2.selectbox("🌐 시장 필터", ["전체", "KR (국내)", "US (해외)"])
+        
+        filtered_df = ledger_df.copy()
+        if search_q:
+            filtered_df = filtered_df[filtered_df["종목명"].str.contains(search_q, case=False) | filtered_df["티커"].str.contains(search_q, case=False)]
+        if market_f != "전체":
+            m_code = "KR" if "KR" in market_f else "US"
+            filtered_df = filtered_df[filtered_df["시장"] == m_code]
+            
+        st.divider()
+        
+        # 통계 요약
+        st.markdown(f"**총 {len(filtered_df)}건**의 매매 기록이 검색되었습니다.")
+        
+        if not filtered_df.empty:
+            # 카드형 리스트 또는 테이블
+            st.dataframe(filtered_df.sort_values("시간", ascending=False), use_container_width=True)
+            
+            # CSV 다운로드 버튼
+            csv_data = filtered_df.to_csv(index=False, encoding="utf-8-sig")
+            st.download_button(
+                label="📥 매매 내역 CSV 다운로드",
+                data=csv_data,
+                file_name=f"Dragonfly_Real_Trade_Ledger_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info("조건에 맞는 매매 기록이 없습니다.")
+    else:
+        st.info("아직 기록된 실전 매매 내역이 없습니다. 첫 매매가 발생하면 이곳에 기록됩니다.")
 
 elif page.startswith("1-a."):
     st.header("[ ADMIN ] 관리자 승인 센터 (HQ Member Approval)")
@@ -3439,6 +3573,55 @@ elif page.startswith("7-b."):
         <b style='color: #FFD700; font-size: 1.2rem; margin-left: 10px;'>{trades['wallets'][uid]:,.0f} KRW</b>
     </div>
     """, unsafe_allow_html=True)
+    
+    # --- [ REAL ACCOUNT SECTION ] ---
+    st.divider()
+    st.subheader("🏦 [ REAL ] 한국투자증권 실전 계좌 현황")
+    token = get_kis_access_token()
+    if not token:
+        st.warning("API 토큰을 발급받을 수 없습니다. Secrets 설정을 확인해 주세요.")
+    else:
+        real_total, real_cash, real_holdings = get_kis_balance(token)
+        over_total, over_holdings = get_kis_overseas_balance(token)
+        
+        full_real_total = real_total + over_total
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("총 평가금액", f"{full_real_total:,.0f}원")
+        c2.metric("예수금", f"{real_cash:,.0f}원")
+        
+        if full_real_total > 0:
+            # 실전 보유 종목 리스트 출력
+            if real_holdings or over_holdings:
+                st.markdown("#### [ HOLDINGS ] 실전 보유 종목")
+                combined_real = []
+                # 국내주식 정리
+                for h in real_holdings:
+                    if int(h.get('hldg_qty', 0)) > 0:
+                        combined_real.append({
+                            "구분": "국내", "종목": h.get('prdt_name'), "수량": h.get('hldg_qty'),
+                            "매입가": f"{float(h.get('pchs_avg_pric', 0)):,.0f}원",
+                            "현재가": f"{float(h.get('prpr', 0)):,.0f}원",
+                            "수익률": f"{float(h.get('evlu_pfls_rt', 0)):+.2f}%"
+                        })
+                # 해외주식 정리
+                for h in over_holdings:
+                    if int(float(h.get('ovrs_cblc_qty', 0))) > 0:
+                        combined_real.append({
+                            "구분": "해외", "종목": h.get('ovrs_item_name'), "수량": h.get('ovrs_cblc_qty'),
+                            "매입가": f"${float(h.get('pchs_avg_pric', 0)):,.2f}",
+                            "현재가": f"${float(h.get('now_pric2', 0)):,.2f}",
+                            "수익률": f"{float(h.get('evlu_pfls_rt', 0)):+.2f}%"
+                        })
+                
+                if combined_real:
+                    st.table(pd.DataFrame(combined_real))
+                else:
+                    st.info("실전 계좌에 보유 중인 종목이 없습니다.")
+            else:
+                st.info("실전 계좌에 보유 중인 종목이 없습니다.")
+        else:
+            st.info("실전 계좌 잔고가 0원이거나 연동 중입니다.")
 
     st.subheader("[ PORTFOLIO ] 현재 보유 중인 가상 포트폴리오")
     if not user_trades:
@@ -3574,7 +3757,7 @@ elif page.startswith("7-b."):
             df_sector['Sector'] = df_sector['Ticker'].apply(lambda x: sector_map.get(x, "기타/혼합"))
             
             fig_pie = px.pie(df_sector, values='Value(KRW)', names='Sector', title='섹터별 투자 비중',
-                             hole=.4, color_discrete_sequence=px.colors.sequential.Gold)
+                             hole=.4, color_discrete_sequence=px.colors.sequential.YlOrBr)
             fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
             st.plotly_chart(fig_pie, use_container_width=True)
 
