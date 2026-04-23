@@ -455,31 +455,70 @@ def get_kis_overseas_balance(token):
     except: pass
     return 0, []
 
-# --- [ KIS: REAL-TIME RISK MONITORING ] ---
+# --- [ KIS: REAL-TIME RISK MONITORING (PRO EDITION) ] ---
 def execute_kis_auto_cut(token):
     """
-    [ BONDE SYSTEM ] 보유 종목 실시간 LOD(당일 저점) 이탈 감시 및 강제 청산 엔진
-    본데의 철학: LOD 이탈 시 묻지도 따지지도 않고 시장가 전량 매도
+    [ SUPREME RISK ENGINE ] 사용자의 엄격한 교전 수칙 집행
+    1. 고정 -3% 손절 (Hard Stop)
+    2. 20% 수익 달성 시 최고가 대비 -3% 트레일링 스탑 (Trailing Stop)
     """
     try:
         _, kr_holdings = get_kis_balance(token)
         _, us_holdings = get_kis_overseas_balance(token)
         watch_targets = []
-        for h in kr_holdings: watch_targets.append({"ticker": h.get('pdno'), "qty": int(h.get('hldg_qty', 0))})
-        for u in us_holdings: watch_targets.append({"ticker": u.get('ovrs_pdno'), "qty": int(u.get('hldg_qty', 0))})
+        for h in kr_holdings: watch_targets.append({"ticker": h.get('pdno'), "qty": int(h.get('hldg_qty', 0)), "buy_p": float(h.get('pchs_avg_pric', 0))})
+        for u in us_holdings: watch_targets.append({"ticker": u.get('ovrs_pdno'), "qty": int(u.get('hldg_qty', 0)), "buy_p": float(u.get('pchs_avg_pric', 0))})
         
         for item in watch_targets:
-            ticker, qty = item["ticker"], item["qty"]
-            if not ticker or qty <= 0: continue
-            hist = yf.Ticker(ticker).history(period="1d")
-            if not hist.empty:
-                curr_p, lod_p = hist['Close'].iloc[-1], hist['Low'].iloc[-1]
-                if curr_p < lod_p:
-                    st.toast(f"💥 {ticker} LOD 이탈! 기계적 전량 매도 집행.", icon="🚨")
-                    execute_kis_market_order(ticker, qty, is_buy=False)
+            ticker, qty, buy_p = item["ticker"], item["qty"], item["buy_p"]
+            if not ticker or qty <= 0 or buy_p <= 0: continue
+            
+            hist = yf.Ticker(ticker).history(period="7d") # 최근 7일간의 최고가 추적용
+            if hist.empty: continue
+            
+            curr_p = hist['Close'].iloc[-1]
+            max_p = hist['High'].max() # 일주일 내 최고가
+            roi = (curr_p / buy_p - 1) * 100
+            
+            # --- 교전 수칙 1: 기본 -3% 손절 ---
+            stop_price = buy_p * 0.97
+            
+            # --- 교전 수칙 2: 20% 수익 달성 시 트레일링 스탑 ---
+            # 일주일 내 20% 수익(max_p 기준)이 났었다면, 손절가를 [최고가 - 3%]로 상향 조정
+            if (max_p / buy_p - 1) >= 0.20:
+                stop_price = max_p * 0.97
+                st.sidebar.warning(f"🛡️ {ticker}: 20% 수익 돌파! 익절선 상향({stop_price:,.0f})")
+            
+            # --- 최종 판정 및 집행 ---
+            if curr_p <= stop_price:
+                st.toast(f"🚨 [ RULE VIOLATION ] {ticker} 손절선 이탈! 기계적 즉시 매도.", icon="💥")
+                success = execute_kis_market_order(ticker, qty, is_buy=False)
+                if success:
+                    st.success(f"🏹 {ticker} 리스크 관리 완료 (Exit at {curr_p})")
                     return True
-    except: pass
+    except Exception as e:
+        print(f"DEBUG: Pro-Risk Engine Error: {e}")
     return False
+
+def play_tactical_sound(sound_type="buy"):
+    """전술 상황에 따른 오디오 알림 (매수: 북소리 / 매도: 종소리)"""
+    # [ ACTION ] 매수: Drum/Taiko, 매도: Bell/Chime
+    src = "https://www.soundjay.com/buttons/beep-07a.mp3" # Default
+    if sound_type == "buy": src = "https://www.soundjay.com/misc/sounds/drum-roll-1.mp3"
+    elif sound_type == "sell": src = "https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3"
+    
+    st.markdown(f"""
+    <audio autoplay>
+        <source src="{src}" type="audio/mpeg">
+    </audio>
+    """, unsafe_allow_html=True)
+
+def get_ticker_roe(ticker):
+    """종목의 실시간 ROE(자기자본이익률)를 획득 (yf 캐시 활용)"""
+    try:
+        info = yf.Ticker(ticker).info
+        return info.get('returnOnEquity', 0) * 100
+    except: return 0
 
 def execute_kis_market_order(ticker, qty, is_buy=True):
     """시장가 주문 실행 엔진 (KIS API 연동)"""
@@ -497,12 +536,22 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
             "PDNO": ticker.split('.')[0], "ORD_DVSN": "01", "ORD_QTY": str(qty), "ORD_UNPR": "0"
         }
     else:
+        # [ PRO ] 미국 거래소 판별 로직 고도화
+        exchange_code = "NASD" # 기본값
+        try:
+            info = yf.Ticker(ticker).info
+            ex_name = info.get('exchange', '').upper()
+            if 'NYE' in ex_name or 'NEW YORK' in ex_name: exchange_code = "NYSE"
+            elif 'ASE' in ex_name or 'AMERICAN' in ex_name: exchange_code = "AMEX"
+        except: pass
+        
         url = f"{base_url}/uapi/overseas-stock/v1/trading/order"
         tr_id = ("VTTW0801U" if is_buy else "VTTW0802U") if KIS_MOCK_TRADING else ("TTTW0801U" if is_buy else "TTTW0802U")
+        # 미국 시장가 주문 대용 (ORD_DVSN 00 지정가, 가격 0 전송 시 KIS 내부적 처리 가능성 고려)
         body = {
             "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
-            "OVRS_EXCG_CD": "NASD" if ticker.isalpha() else "NYSE", # 간소화된 시장 판별
-            "PDNO": ticker, "ORD_QTY": str(qty), "ORD_OVRS_P deliverance": "0", "ORD_DVSN": "00"
+            "OVRS_EXCG_CD": exchange_code, "PDNO": ticker, "ORD_QTY": str(qty), 
+            "ORD_OVRS_P deliverance": "0", "ORD_DVSN": "00"
         }
 
     headers = {
@@ -511,7 +560,11 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
     }
     try:
         res = requests.post(url, headers=headers, json=body, timeout=7)
-        return res.status_code == 200
+        if res.status_code == 200:
+            # [ AUDIO ] 교전 결과 사운드 보고 (매수: 북소리 / 매도: 종소리)
+            play_tactical_sound("buy" if is_buy else "sell")
+            return True
+        return False
     except: return False
 
 # --- [ SCANNER HELPERS: STOCKBEE STRICT EDITION ] ---
@@ -528,17 +581,36 @@ def get_bonde_top_50():
 
 def analyze_stockbee_setup(ticker):
     """
-    본데(Stockbee) 실전 스캐너: TI65, 4% Burst, Classic EP, 9M EP 정밀 판독
+    본데(Stockbee) 실전 스캐너: TI65, 4% Burst, EP 판독 및 ROE 필터링
     """
     try:
-        end_date = datetime.today()
-        start_date = end_date - timedelta(days=100)
-        df = yf.download(ticker, start=start_date, end=end_date, progress=False)
-        if len(df) < 65: return None
+        # 1. ROE 필터 (적자 기업 제외 원칙)
+        roe = get_ticker_roe(ticker)
+        if roe <= 0: return None
         
-        # 지표 계산
-        df['C1'] = df['Close'].shift(1)
-        df['V1'] = df['Volume'].shift(1)
+        hist = yf.Ticker(ticker).history(period="70d")
+        if len(hist) < 65: return None
+        
+        # 2. 본데의 핵심 지표 TI65 (65일 가격 모멘텀)
+        ti65 = (hist['Close'].iloc[-1] / hist['Close'].iloc[-65]) * 100
+        
+        # 3. 셋업 판정 (4% Burst & Volume Catalyst)
+        latest_close = hist['Close'].iloc[-1]
+        prev_close = hist['Close'].iloc[-2]
+        pct = (latest_close / prev_close - 1) * 100
+        vol_ratio = hist['Volume'].iloc[-1] / hist['Volume'].rolling(20).mean().iloc[-2]
+        
+        is_mb = (pct >= 4.0 and vol_ratio >= 1.5 and ti65 > 105)
+        is_ep = (pct >= 8.0 and vol_ratio >= 2.5) # Episodic Pivot
+        
+        if is_mb or is_ep:
+            return {
+                "ticker": ticker, "close": latest_close, "pct": round(pct, 2), 
+                "ti65": round(ti65, 1), "roe": round(roe, 1), "lod": hist['Low'].iloc[-1],
+                "setups": ["4% Burst"] if is_mb else ["Episodic Pivot"]
+            }
+    except: pass
+    return None
         df['Pct_Change'] = ((df['Close'] - df['C1']) / df['C1']) * 100
         df['SMA_7'] = df['Close'].rolling(window=7).mean()
         df['SMA_65'] = df['Close'].rolling(window=65).mean()
@@ -3676,8 +3748,14 @@ elif page.startswith("7-c."):
                         setup_data["ticker"] = t
                         setup_data["name"] = name
                         new_results.append(setup_data)
+                        
+                        # [ AUTO_EXECUTION ] 포착 즉시 실전 매수 집행
+                        if st.session_state.get("live_toggle_v6_pro"):
+                            st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
+                            # 본데의 제안대로 10주씩 시장가 매수 (조절 가능)
+                            execute_kis_market_order(t, 10, is_buy=True)
                 
-                status.update(label="[ SUCCESS ] 본데의 전략 자동매매 엔진 분석 완료!", state="complete")
+                status.update(label="[ SUCCESS ] 본데의 전략 자동매매 엔진 분석 및 자동 집행 완료!", state="complete")
             st.session_state.scanning_results = new_results
 
     with col_btn2:
