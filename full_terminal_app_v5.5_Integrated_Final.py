@@ -228,7 +228,7 @@ def execute_kis_market_order(ticker, amount, is_buy=True):
     headers = {
         "content-type": "application/json", "authorization": f"Bearer {token}",
         "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
-        "tr_id": "VTTC0802U" if is_buy else "VTTC0801U" if KIS_MOCK_TRADING else "TTTC0802U" if is_buy else "TTTC0801U"
+        "tr_id": ("VTTC0802U" if is_buy else "VTTC0801U") if KIS_MOCK_TRADING else ("TTTC0802U" if is_buy else "TTTC0801U")
     }
     body = {
         "CANO": acc_no[0], "ACNT_PRDT_CD": acc_no[1], "PDNO": stock_code,
@@ -3754,7 +3754,7 @@ elif page.startswith("7-b."):
     # --- [ REAL ACCOUNT SECTION ] ---
     st.divider()
     st.subheader("🏦 [ REAL ] 한국투자증권 실전 계좌 현황")
-    token = get_kis_access_token()
+    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
     if not token:
         st.warning("API 토큰을 발급받을 수 없습니다. Secrets 설정을 확인해 주세요.")
     else:
@@ -4435,7 +4435,7 @@ elif page.startswith("7-a.") or page.startswith("7-b.") or page.startswith("7-c.
     else:
         st.success("API 토큰 발급 대기 및 통신 회선 정상.")
         
-    kis_token = get_kis_access_token()
+    kis_token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
     capital = get_kis_balance(kis_token) if kis_token else 10000000
     
     st.markdown(f"<div class='glass-card neon-glow'>💰 실시간 사령부 작전 자본금: <b>{capital/10000:,.2f} 만원</b></div>", unsafe_allow_html=True)
