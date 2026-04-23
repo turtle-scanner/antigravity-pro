@@ -4025,13 +4025,35 @@ elif page.startswith("7-c."):
     # --- [ AUTOMATED TRADING STATUS BANNER ] ---
     kr_open = is_market_open("KR")
     us_open = is_market_open("US")
-    st.markdown("### 🚦 시스템 자동매매 상태 (스케줄링)")
+    
+    # 현재 시각 구하기
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    st.markdown(f"### 🚦 시스템 자동매매 상태 (현재 시각: {now_str})")
     c1, c2 = st.columns(2)
+    
     kr_status = "🟢 가동중 (RUNNING)" if kr_open else "🔴 정지 (STOPPED) - 정규장 아님"
     us_status = "🟢 가동중 (RUNNING)" if us_open else "🔴 정지 (STOPPED) - 정규장 아님"
     
-    c1.markdown(f"<div class='glass-card' style='text-align:center;'><h4>🇰🇷 KOREA (국내장)</h4><h3 style='color: {'#00FF00' if kr_open else '#FF4B4B'};'>{kr_status}</h3><p style='color:#888;font-size:0.8rem;'>한국주식 정규장 매매만 허용</p></div>", unsafe_allow_html=True)
-    c2.markdown(f"<div class='glass-card' style='text-align:center;'><h4>🇺🇸 USA (미국장)</h4><h3 style='color: {'#00FF00' if us_open else '#FF4B4B'};'>{us_status}</h3><p style='color:#888;font-size:0.8rem;'>미국주식 정규장 매매만 허용</p></div>", unsafe_allow_html=True)
+    # 한국장 카드 (09:00 ~ 15:30)
+    c1.markdown(f"""
+    <div class='glass-card' style='text-align:center;'>
+        <h4>🇰🇷 KOREA (국내장)</h4>
+        <h3 style='color: {'#00FF00' if kr_open else '#FF4B4B'};'>{kr_status}</h3>
+        <p style='color:#AAA; font-size:0.9rem; margin-bottom:5px;'>정규장 시간: <b>09:00 ~ 15:30</b></p>
+        <p style='color:#888; font-size:0.8rem;'>한국 주식 정규장 매매만 허용</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 미국장 카드 (22:30 ~ 05:00 서머타임 기준)
+    c2.markdown(f"""
+    <div class='glass-card' style='text-align:center;'>
+        <h4>🇺🇸 USA (미국장)</h4>
+        <h3 style='color: {'#00FF00' if us_open else '#FF4B4B'};'>{us_status}</h3>
+        <p style='color:#AAA; font-size:0.9rem; margin-bottom:5px;'>정규장 시간: <b>22:30 ~ 05:00</b> (서머타임)</p>
+        <p style='color:#888; font-size:0.8rem;'>미국 주식 정규장 매매만 허용</p>
+    </div>
+    """, unsafe_allow_html=True)
     st.divider()
 
     # --- [ REAL ACCOUNT STATUS BANNER v2.0 ] ---
