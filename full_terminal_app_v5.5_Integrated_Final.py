@@ -590,80 +590,89 @@ def get_bonde_top_50():
         tickers = df.iloc[:50, 0].dropna().unique().tolist()
         return [str(t).strip().upper() for t in tickers if len(str(t)) < 6]
     except:
-        return ["NVDA", "TSLA", "AAPL", "MSFT", "PLTR", "SMCI", "AMD", "META", "GOOGL", "AVGO"]
+        return ["NVDA", "TSLA", "AAPL", "MSFT", "PLTR", "SMCI", "AMD", "META", "GOOGL", "AVGO", "MSTR", "COIN", "MARA"]
 
 def analyze_stockbee_setup(ticker, hist_df=None):
     """
-    [ BONDE ELITE ENGINE ] 본데 전략 조건 완화 버전 (Aggressive Mode)
+    [ BONDE ELITE ENGINE ] 프라딥 본데의 확장된 셋업 (4종)
+    - 9 Million EP
+    - Story-based EP
+    - Delayed Reaction EP
+    - 4% Momentum Burst
     """
     try:
         is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
-        if hist_df is None:
-            hist = yf.Ticker(ticker).history(period="1y")
-        else:
-            hist = hist_df
-        if len(hist) < 200: return {"status": "REJECT", "stage": "INIT", "reason": "데이터 부족"}
+        hist = hist_df if hist_df is not None else yf.Ticker(ticker).history(period="1y")
+        if len(hist) < 30: return {"status": "REJECT", "stage": "INIT", "reason": "데이터 부족"}
         
-        # --- [ STEP 1. UNIVERSE FILTER ] ---
-        latest_close = hist['Close'].iloc[-1]
-        min_price = 3000 if is_kr else 3 # 5000->3000원 완화
-        if latest_close < min_price:
-            return {"status": "REJECT", "stage": "UNIVERSE", "reason": f"저가주 제외"}
+        # [ PREPARE DATA ] 기초 데이터 계산
+        df = hist.copy()
+        df['C1'] = df['Close'].shift(1) # 전일 종가
+        df['C2'] = df['Close'].shift(2) # 2일 전 종가
+        df['V1'] = df['Volume'].shift(1) # 전일 거래량
         
-        avg_vol_3m = hist['Volume'].iloc[-60:].mean()
-        if (avg_vol_3m * latest_close) < (1000000000 if is_kr else 1000000): # 20억->10억 완화
-            return {"status": "REJECT", "stage": "UNIVERSE", "reason": f"거래대금 부족"}
+        df['Close_Pct_Change'] = (df['Close'] / df['C1'] - 1) * 100
+        df['Open_Pct_Gap'] = (df['Open'] / df['C1'] - 1) * 100
+        
+        # 최근 20일 이내 900만주 이상 터진 날이 있는지 확인 (오늘 제외)
+        df['Is_9M_Event'] = (df['Volume'] >= 9000000) & (df['Close_Pct_Change'] >= 4.0)
+        df['Recent_9M_Event'] = df['Is_9M_Event'].shift(1).rolling(window=20, min_periods=1).max()
+        
+        # 현재 값 추출
+        row = df.iloc[-1]
+        c = row['Close']
+        o = row['Open']
+        v = row['Volume']
+        p_c = row['C1']
+        p_c2 = row['C2']
+        p_v = row['V1']
+        day_pct = row['Close_Pct_Change']
+        gap_pct = row['Open_Pct_Gap']
+        recent_9m = row['Recent_9M_Event']
+        
+        setups = []
+        
+        # 1. 9 Million EP (가장 추천)
+        min_p = 3000 if is_kr else 3.0
+        if v >= 9000000 and (day_pct >= 4.0 or gap_pct >= 4.0) and c >= min_p:
+            setups.append("9 Million EP")
             
-        sma50 = hist['Close'].rolling(50).mean().iloc[-1]
-        sma150 = hist['Close'].rolling(150).mean().iloc[-1]
-        sma200 = hist['Close'].rolling(200).mean().iloc[-1]
-        # 이평선 정배열 조건은 유지하되 200일선 각도 체크 삭제
-        if not (latest_close > sma50 and latest_close > sma200): # 단순 정배열보다 완화 (주가 > 50, 200만 확인)
-            return {"status": "REJECT", "stage": "UNIVERSE", "reason": "이평선 정배열 미달"}
+        # 2. Story-based EP
+        story_list = get_bonde_top_50() # 본데 TOP 50 리스트를 스토리 리스트로 활용
+        if ticker in story_list:
+            if v >= 2000000 and gap_pct >= 4.0:
+                setups.append("Story-based EP")
+                
+        # 3. Delayed Reaction EP
+        # Red-to-Green: 시가는 전일 종가보다 낮게 출발했으나, 장중 상승하여 양전
+        cond_r2g = (o < p_c) and (c > p_c) and (c > o)
+        # 2차 돌파: 4% 이상의 돌파 & 거래량 증가
+        cond_sec_brk = (day_pct >= 4.0) and (v > p_v)
+        if recent_9m == 1.0 and (cond_r2g or cond_sec_brk):
+            setups.append("Delayed Reaction EP")
+            
+        # 4. 4% Momentum Burst (단기 스윙)
+        # 전일 주가 변동폭 2% 이내 (Tightness)
+        cond_tight_yesterday = abs(p_c / p_c2 - 1) * 100 <= 2.0
+        if day_pct >= 4.0 and v >= 100000 and v > p_v and cond_tight_yesterday:
+            setups.append("4% Momentum Burst")
 
-        # --- [ STEP 2. RS FOCUS ] ---
-        ret_6m = (hist['Close'].iloc[-1] / hist['Close'].iloc[-126]) - 1
-        ret_3m = (hist['Close'].iloc[-1] / hist['Close'].iloc[-63]) - 1
-        rs_score = (ret_6m * 0.7 + ret_3m * 0.3) * 100
-        
-        high_52w = hist['High'].max()
-        dist_from_high = (latest_close / high_52w - 1) * 100
-        
-        # RS 점수 20점 이상, 신고가 대비 -35%까지 허용 (기존 30점, -25%)
-        if rs_score < 20 or dist_from_high < -35:
-            return {"status": "PASS", "stage": "UNIVERSE", "ticker": ticker, "close": latest_close, "rs": rs_score, "reason": "기본 유니버스 충족"}
+        if not setups:
+            return {"status": "PASS", "stage": "SCAN", "reason": "조건 미충족", "close": c}
 
-        # --- [ STEP 3. EXECUTION (VCP & PIVOT) ] ---
-        prev_high = hist['High'].iloc[-2]
-        is_pivot_break = latest_close > (prev_high * 0.99) # 전일 고점 1% 근처만 와도 돌파 준비로 간주
+        # RS Score 및 TI65 계산
+        rs = round(((c / df['Close'].iloc[-126]) * 0.7 + (c / df['Close'].iloc[-63]) * 0.3) * 100, 1) if len(df) >= 126 else 50
+        sma50 = df['Close'].rolling(50).mean().iloc[-1] if len(df) >= 50 else c
+        sma65 = df['Close'].rolling(65).mean().iloc[-1] if len(df) >= 65 else c
         
-        vol_avg_20 = hist['Volume'].iloc[-25:-5].mean()
-        recent_5d = hist.iloc[-5:]
-        # EP 조건 완화: 수익률 3%↑, 거래량 2배↑ (기존 4%, 3배)
-        ep_detected = any((recent_5d['Close'].iloc[i]/hist['Close'].iloc[-(5-i+1)]-1)*100 >= 3.0 and (recent_5d['Volume'].iloc[i]/vol_avg_20) >= 2.0 for i in range(5))
-        
-        last_3d_range = (hist['High'].iloc[-3:].max() - hist['Low'].iloc[-3:].min()) / hist['Low'].iloc[-3:].min() * 100
-        is_tight = last_3d_range < 8.0 # 응축폭 8%까지 확대 (기존 5%)
-        
-        day_pct = round(((latest_close / hist['Close'].iloc[-2]) - 1) * 100, 2)
-
-        if not (ep_detected and is_tight):
-            return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "day_pct": day_pct, "range_3d": last_3d_range, "reason": "핵심 타겟 확보 (조건 대기)"}
-
-        # 피벗 포인트 돌파 확인
-        if not is_pivot_break:
-             return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "day_pct": day_pct, "range_3d": last_3d_range, "reason": f"응축 완료, 피벗 근접"}
-
         return {
-            "status": "SUCCESS", "stage": "EXECUTION", "ticker": ticker, "close": latest_close, 
-            "rs": round(rs_score, 1), "day_pct": day_pct, "range_3d": round(last_3d_range, 2),
-            "reason": f"🔥 전술적 돌파! (RS:{rs_score:.1f}, Pivot 근접)",
-            "setups": ["Pivot Break", "VCP Tightness"]
+            "status": "SUCCESS", "stage": "EXECUTION", "ticker": ticker, "close": c, 
+            "rs": rs, "day_pct": round(day_pct, 2), "reason": f"🚀 {setups[0]} 포착!",
+            "setups": setups, "lod": round(df['Low'].iloc[-1], 2), "pct": round(day_pct, 2), 
+            "ti65": round(c / sma65, 3) # 본데의 TI65 (65일선 대비 주가 비율)
         }
     except Exception as e:
-        return {"status": "ERROR", "stage": "ERROR", "reason": f"오류: {str(e)}"}
-    except Exception as e:
-        return {"status": "ERROR", "stage": "ERROR", "reason": f"오류: {str(e)}"}
+        return {"status": "ERROR", "stage": "ERROR", "reason": str(e)}
 
 # --- [ SCANNER HELPERS: STOCKBEE STRICT EDITION ] ---
         
@@ -1902,68 +1911,45 @@ elif page.startswith("3-a."):
             # 1년치 일봉 데이터 일괄 수집
             data_full = yf.download(full_list, period="1y", interval="1d", progress=False)
             
-            final_results = {"Burst": [], "EP": [], "Anticipation": []}
+            final_results = {"9M_EP": [], "Burst": [], "Story_EP": [], "Delayed_EP": []}
+            story_list = get_bonde_top_50()
             
             for tic in full_list:
                 try:
-                    # 멀티인덱스 대응 및 데이터 추출
                     if isinstance(data_full.columns, pd.MultiIndex):
                         df = data_full.xs(tic, axis=1, level=1).dropna()
-                    else:
-                        df = data_full.copy().dropna() # 단일 종목 케이스
+                    else: df = data_full.copy().dropna()
                     
-                    if len(df) < 105: continue # 지표 계산을 위한 최소 봉수
+                    if len(df) < 30: continue
 
-                    # --- [ 안티그래비티 검색식 로직 적용 ] ---
-                    df['c_prev'] = df['Close'].shift(1)
-                    df['v_prev'] = df['Volume'].shift(1)
-                    df['sma7'] = df['Close'].rolling(window=7).mean()
-                    df['sma50_v'] = df['Volume'].rolling(window=50).mean()
-                    df['sma65'] = df['Close'].rolling(window=65).mean()
-                    df['sma100_v'] = df['Volume'].rolling(window=100).mean()
-
-                    curr = df.iloc[-1]
-                    prev = df.iloc[-2]
+                    c, p_c, p_c2, o, v, p_v = df['Close'].iloc[-1], df['Close'].iloc[-2], df['Close'].iloc[-3], df['Open'].iloc[-1], df['Volume'].iloc[-1], df['Volume'].iloc[-2]
+                    day_pct, gap_pct = (c / p_c - 1) * 100, (o / p_c - 1) * 100
+                    avg_v50 = df['Volume'].rolling(50).mean().iloc[-1] if len(df) >= 50 else v
                     
-                    # 1. 4% 모멘텀 버스트 파트
-                    cond_1 = (curr['Close'] >= curr['c_prev'] * 1.04) & \
-                             (curr['Volume'] > curr['v_prev']) & \
-                             (curr['Volume'] >= 100000) & \
-                             (curr['sma7'] >= curr['sma65'] * 1.05) & \
-                             (curr['Close'] - curr['c_prev'] >= 0.25)
+                    res_entry = {"T": TICKER_NAME_MAP.get(tic, tic), "TIC": tic, "P": c, "CH": day_pct, "V": v}
                     
-                    # 2. 에피소딕 피벗 (EP) 파트
-                    ep_large = (curr['Close'] - curr['c_prev'] >= 5) & (curr['Close'] >= 62.50) & (curr['Volume'] >= 1000000)
-                    ep_small = (curr['Close'] >= 1) & (curr['Close'] >= curr['c_prev'] * 1.08) & (curr['Volume'] >= curr['sma100_v'] * 3)
-                    ep_9m = (curr['Volume'] >= 9000000)
-                    cond_2 = ep_large | ep_small | ep_9m
-
-                    # 3. 예측 매매 (Anticipation) 파트
-                    max_h10 = df['High'].rolling(window=10).max().iloc[-1]
-                    min_l10 = df['Low'].rolling(window=10).min().iloc[-1]
-                    min_v3 = df['Volume'].rolling(window=3).min().iloc[-1]
+                    # 1. 9 Million EP
+                    min_p = 3000 if (".KS" in tic or ".KQ" in tic) else 3.0
+                    if v >= 9000000 and (day_pct >= 4.0 or gap_pct >= 4.0) and c >= min_p:
+                        final_results["9M_EP"].append(res_entry)
                     
-                    cond_3 = ((max_h10 - min_l10) / curr['Close'] <= 0.10) & \
-                             (curr['Volume'] < curr['sma50_v']) & \
-                             (abs(curr['Close'] / curr['c_prev'] - 1) <= 0.01) & \
-                             (curr['sma7'] >= curr['sma65'] * 1.05) & \
-                             (min_v3 >= 100000)
-
-                    # 등락률 안전 계산
-                    ch_val = 0.0
-                    if curr['c_prev'] > 0:
-                        ch_val = (curr['Close'] / curr['c_prev'] - 1) * 100
-
-                    # 결과 분류
-                    res_entry = {
-                        "T": TICKER_NAME_MAP.get(tic, tic), "TIC": tic, 
-                        "P": curr['Close'], "CH": ch_val,
-                        "V": curr['Volume']
-                    }
+                    # 2. Story-based EP
+                    if tic in story_list:
+                        if v >= 2000000 and gap_pct >= 4.0:
+                            final_results["Story_EP"].append(res_entry)
                     
-                    if cond_1: final_results["Burst"].append(res_entry)
-                    if cond_2: final_results["EP"].append(res_entry)
-                    if cond_3: final_results["Anticipation"].append(res_entry)
+                    # 3. Delayed Reaction EP
+                    recent_20 = df.tail(21).iloc[:-1]
+                    has_recent_9m = any((recent_20['Volume'] >= 9000000) & ((recent_20['Close'] / recent_20['Close'].shift(1) - 1) * 100 >= 4.0))
+                    cond_r2g = (o < p_c) and (c > p_c) and (c > o)
+                    cond_sec_brk = (day_pct >= 4.0) and (v > p_v)
+                    if has_recent_9m and (cond_r2g or cond_sec_brk):
+                        final_results["Delayed_EP"].append(res_entry)
+                    
+                    # 4. 4% Momentum Burst
+                    cond_tight = abs(p_c / p_c2 - 1) * 100 <= 2.0
+                    if day_pct >= 4.0 and v >= 100000 and v > p_v and cond_tight:
+                        final_results["Burst"].append(res_entry)
                     
                 except: continue
 
@@ -1980,62 +1966,76 @@ elif page.startswith("3-a."):
     if "antigravity_scan" in st.session_state:
         res = st.session_state.antigravity_scan
         
-        # --- PART 1. MOMENTUM BURST ---
-        st.subheader("🚀 PART 1. 모멘텀 버스트 (Momentum Burst)")
-        if not res["Burst"]:
-            st.info("현재 버스트 조건을 충족하는 종목이 없습니다.")
+        # --- PART 1. 9 Million EP ---
+        st.subheader("🚀 PART 1. 9 Million EP (압도적 기관 수급)")
+        if not res["9M_EP"]: st.info("현재 900만주 이상 터진 종목이 없습니다.")
+        else:
+            cols = st.columns(3)
+            for i, stock in enumerate(res["9M_EP"][:9]):
+                with cols[i % 3]:
+                    st.markdown(f"""
+                    <div class='glass-card' style='border-left: 5px solid #00FFFF; margin-bottom: 15px; padding: 15px;'>
+                        <div style='font-size: 0.8rem; color: #888;'>HIT: 9 MILLION EP</div>
+                        <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
+                        <span style='color: #00FFFF; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
+                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        # --- PART 2. 4% Momentum Burst ---
+        st.divider()
+        st.subheader("💥 PART 2. 4% 모멘텀 버스트 (단기 스윙)")
+        if not res["Burst"]: st.info("현재 4% 돌파 조건을 충족하는 종목이 없습니다.")
         else:
             cols = st.columns(3)
             for i, stock in enumerate(res["Burst"][:9]):
                 with cols[i % 3]:
                     st.markdown(f"""
                     <div class='glass-card' style='border-left: 5px solid #00FF00; margin-bottom: 15px; padding: 15px;'>
-                        <div style='font-size: 0.8rem; color: #888;'>HIT: MOMENTUM BURST</div>
+                        <div style='font-size: 0.8rem; color: #888;'>HIT: 4% MOMENTUM BURST</div>
                         <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
                         <span style='color: #00FF00; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
                         <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
-        # --- PART 2. EPISODIC PIVOT ---
+        # --- PART 3. Story-based EP ---
         st.divider()
-        st.subheader("💥 PART 2. 에피소딕 피벗 (EP)")
-        if not res["EP"]:
-            st.info("현재 EP 조건을 충족하는 종목이 없습니다.")
+        st.subheader("🎯 PART 3. 스토리 기반 EP (강력한 갭상승)")
+        if not res["Story_EP"]: st.info("현재 강력한 갭상승(Story EP) 종목이 없습니다.")
         else:
             cols = st.columns(3)
-            for i, stock in enumerate(res["EP"][:9]):
+            for i, stock in enumerate(res["Story_EP"][:9]):
                 with cols[i % 3]:
                     st.markdown(f"""
                     <div class='glass-card' style='border-left: 5px solid #FFD700; margin-bottom: 15px; padding: 15px;'>
-                        <div style='font-size: 0.8rem; color: #888;'>HIT: EPISODIC PIVOT</div>
+                        <div style='font-size: 0.8rem; color: #888;'>HIT: STORY-BASED EP</div>
                         <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
                         <span style='color: #FFD700; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
                         <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
-        # --- PART 3. ANTICIPATION ---
+        # --- PART 4. Delayed Reaction EP ---
         st.divider()
-        st.subheader("🎯 PART 3. 예측 매매 (Anticipation & Coiling)")
-        if not res["Anticipation"]:
-            st.info("현재 변동성 축소(Coiling) 조건을 충족하는 종목이 없습니다.")
+        st.subheader("⏳ PART 4. 지연 반응 EP (급등 후 응축)")
+        if not res["Delayed_EP"]: st.info("현재 지연 반응(Delayed EP) 조건을 충족하는 종목이 없습니다.")
         else:
             cols = st.columns(3)
-            for i, stock in enumerate(res["Anticipation"][:9]):
+            for i, stock in enumerate(res["Delayed_EP"][:9]):
                 with cols[i % 3]:
                     st.markdown(f"""
-                    <div class='glass-card' style='border-left: 5px solid #00FFFF; margin-bottom: 15px; padding: 15px;'>
-                        <div style='font-size: 0.8rem; color: #888;'>HIT: COILING / DRY-UP</div>
+                    <div class='glass-card' style='border-left: 5px solid #FF4B4B; margin-bottom: 15px; padding: 15px;'>
+                        <div style='font-size: 0.8rem; color: #888;'>HIT: DELAYED REACTION</div>
                         <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
-                        <span style='color: #00FFFF; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
+                        <span style='color: #FF4B4B; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
                         <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
                     </div>
                     """, unsafe_allow_html=True)
         
         st.divider()
-        # 차트 분석을 위한 통합 리스트 생성 (NameError: combined_top 해결)
-        all_hits = res["Burst"] + res["EP"] + res["Anticipation"]
+        # 차트 분석을 위한 통합 리스트 생성
+        all_hits = res["9M_EP"] + res["Burst"] + res["Story_EP"] + res["Delayed_EP"]
         
         # 중복 티커 제거 및 포맷팅
         unique_hits = []
@@ -4087,71 +4087,116 @@ elif page.startswith("7-c."):
     """, unsafe_allow_html=True)
 
     st.subheader("[ SCAN ] Stockbee 기계적 스캔 (EP/VCP/TI65)")
+    
+    col_ctrl_a, col_ctrl_b = st.columns([1, 1])
+    with col_ctrl_a:
+        loop_active = st.toggle("🔄 연속 스캐닝 루프 가동", value=False, key="loop_v6_pro")
+    with col_ctrl_b:
+        if st.session_state.scanning_active:
+            st.markdown("<span class='status-pulse' style='background:#00FF00;'></span> <b style='color:#00FF00;'>엔진 가동 중...</b>", unsafe_allow_html=True)
+        else:
+            st.markdown("<span class='status-pulse' style='background:#FF4B4B;'></span> <b style='color:#FF4B4B;'>대기 중</b>", unsafe_allow_html=True)
+
     col_btn1, col_btn2 = st.columns([1, 1])
     with col_btn1:
-        if st.button("🔍 엔진 가동 (Procedural Scan)", use_container_width=True):
+        if st.button("🔍 엔진 즉시 가동 (Procedural Scan)", use_container_width=True) or loop_active:
             st.session_state.scanning_active = True
             with st.status("본데(Stockbee) 절차적 스캐닝 가동 중...", expanded=True) as status:
                 st.write("> 구글 시트 및 글로벌 주도주 리스트 대조...")
+                # 주도주 리스트 확장
                 targets = get_bonde_top_50() + get_kospi_top_200()
+                # 중복 제거 및 셔플 (다양한 종목 탐색)
+                targets = list(set(targets))
                 random.shuffle(targets)
                 
                 new_results = []
-                # [ PERFORMANCE ] 렉 방지를 위한 배치 다운로드 (70일치 데이터 한 번에 수신)
+                # 배치 다운로드 (최근 75일치 데이터)
                 st.write("> 데이터 스트림 동기화 및 팩터 연산 중...")
-                try:
-                    all_hist = yf.download(targets[:15], period="75d", progress=False)
-                except: all_hist = None
-                
-                for t in targets[:15]: 
-                    st.write(f">> {t} 분석 중...")
-                    # 배치 데이터에서 해당 종목만 추출
-                    t_hist = None
-                    if all_hist is not None:
-                        try:
-                            t_hist = pd.DataFrame({
-                                "Close": all_hist["Close"][t],
-                                "High": all_hist["High"][t],
-                                "Low": all_hist["Low"][t],
-                                "Volume": all_hist["Volume"][t]
-                            }).dropna()
-                        except: t_hist = None
+                # 한 번에 너무 많이 받으면 오류 날 수 있으므로 20개씩 끊어서 처리
+                batch_size = 20
+                for i in range(0, min(len(targets), 40), batch_size):
+                    batch_targets = targets[i:i+batch_size]
+                    try:
+                        all_hist = yf.download(batch_targets, period="75d", progress=False)
+                    except: all_hist = None
                     
-                    analysis = analyze_stockbee_setup(t, hist_df=t_hist)
-                    
-                    if analysis["status"] == "SUCCESS":
-                        name = TICKER_NAME_MAP.get(t)
-                        if not name:
-                            try: name = yf.Ticker(t).info.get('shortName', t)
-                            except: name = t
+                    for t in batch_targets:
+                        st.write(f">> {t} 분석 중...")
+                        is_kr = t.endswith(".KS") or t.endswith(".KQ")
+                        t_hist = None
+                        if all_hist is not None:
+                            try:
+                                if isinstance(all_hist.columns, pd.MultiIndex):
+                                    t_hist = pd.DataFrame({
+                                        "Open": all_hist["Open"][t],
+                                        "High": all_hist["High"][t],
+                                        "Low": all_hist["Low"][t],
+                                        "Close": all_hist["Close"][t],
+                                        "Volume": all_hist["Volume"][t]
+                                    }).dropna()
+                                else:
+                                    # 단일 종목 결과일 경우
+                                    t_hist = all_hist.dropna()
+                            except: t_hist = None
                         
-                        st.success(f"✅ {name}({t}) 포착! 근거: {analysis['reason']}")
-                        setup_data = analysis
-                        setup_data["name"] = name
-                        new_results.append(setup_data)
+                        analysis = analyze_stockbee_setup(t, hist_df=t_hist)
                         
-                        # [ AUTO_EXECUTION ] 포착 즉시 실전 매수 집행
-                        if st.session_state.get("live_toggle_v6_pro"):
-                            st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
-                            # 매수 성공 로그에 근거 포함
-                            if execute_kis_market_order(t, 10, is_buy=True):
-                                # 마지막 로그에 근거 추가 (이미 execute_kis_market_order에서 로그를 남기므로 보완)
-                                if st.session_state.combat_logs:
-                                    st.session_state.combat_logs[-1]["msg"] += f" (근거: {analysis['reason']})"
-                    
-                    elif analysis["status"] == "REJECT":
-                        st.write(f"   └ ❌ 탈락 사유: {analysis['reason']}")
-                    else:
-                        st.error(f"   └ ⚠️ 오류: {analysis['reason']}")
+                        if analysis["status"] == "SUCCESS":
+                            name = TICKER_NAME_MAP.get(t)
+                            if not name:
+                                try: name = yf.Ticker(t).info.get('shortName', t)
+                                except: name = t
+                            
+                            st.success(f"✅ {name}({t}) 포착! 근거: {analysis['reason']}")
+                            setup_data = analysis
+                            setup_data["name"] = name
+                            new_results.append(setup_data)
+                            
+                            # [ AUTO_EXECUTION ] 포착 즉시 실전 매수 집행
+                            if st.session_state.get("live_toggle_v6_pro"):
+                                # 이미 보유 중인지 확인 (중복 매수 방지)
+                                already_held = any(h.get('pdno') == t.split('.')[0] or h.get('ovrs_pdno') == t for h in real_holdings + over_holdings)
+                                if not already_held:
+                                    st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
+                                    # 적정 수량 계산 (예: 자산의 10% 또는 100만원 어치)
+                                    invest_amt = 1000000 
+                                    qty = max(1, int(invest_amt / analysis['close'])) if is_kr else 5
+                                    
+                                    if execute_kis_market_order(t, qty, is_buy=True):
+                                        if st.session_state.combat_logs:
+                                            st.session_state.combat_logs[-1]["msg"] += f" (근거: {analysis['reason']})"
+                                        # trades_db에도 기록
+                                        trades = load_trades()
+                                        new_trade = {
+                                            "id": str(int(time.time())) + f"_{t}", 
+                                            "user": st.session_state.current_user, 
+                                            "ticker": t, 
+                                            "buy_price": analysis['close'], 
+                                            "amount": qty, 
+                                            "strategy": analysis['reason'], 
+                                            "date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
+                                            "is_kr": is_kr, 
+                                            "is_real_api": True
+                                        }
+                                        trades["auto"].append(new_trade)
+                                        save_trades(trades)
+                        
+                        elif analysis["status"] == "REJECT": pass # 너무 많은 출력 방지
                 
-                status.update(label="[ SUCCESS ] 본데의 전략 자동매매 엔진 분석 및 자동 집행 완료!", state="complete")
+                status.update(label="[ SUCCESS ] 분석 완료. 다음 사이클 대기 중...", state="complete")
+            
             st.session_state.scanning_results = new_results
+            
+            if loop_active:
+                time.sleep(60) # 1분 대기 후 루프
+                st.rerun()
 
     with col_btn2:
         if st.button("🛑 중단", use_container_width=True):
             st.session_state.scanning_active = False
             st.session_state.scanning_results = []
             st.rerun()
+
 
     if st.session_state.scanning_active:
         st.markdown("""<style>@keyframes blinker { 50% { opacity: 0; } } .live-blink { color: #FF0000; font-weight: 900; animation: blinker 1s linear infinite; border: 2px solid #FF0000; padding: 2px 8px; border-radius: 5px; margin-right: 10px; }</style>""", unsafe_allow_html=True)
