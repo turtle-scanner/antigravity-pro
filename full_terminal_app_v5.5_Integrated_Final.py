@@ -458,9 +458,7 @@ def get_kis_overseas_balance(token):
 # --- [ KIS: REAL-TIME RISK MONITORING (PRO EDITION) ] ---
 def execute_kis_auto_cut(token):
     """
-    [ SUPREME RISK ENGINE ] 사용자의 엄격한 교전 수칙 집행
-    1. 고정 -3% 손절 (Hard Stop)
-    2. 20% 수익 달성 시 최고가 대비 -3% 트레일링 스탑 (Trailing Stop)
+    [ SUPREME RISK ENGINE ] 최적화 버전 (배치 다운로드 적용)
     """
     try:
         _, kr_holdings = get_kis_balance(token)
@@ -469,35 +467,34 @@ def execute_kis_auto_cut(token):
         for h in kr_holdings: watch_targets.append({"ticker": h.get('pdno'), "qty": int(h.get('hldg_qty', 0)), "buy_p": float(h.get('pchs_avg_pric', 0))})
         for u in us_holdings: watch_targets.append({"ticker": u.get('ovrs_pdno'), "qty": int(u.get('hldg_qty', 0)), "buy_p": float(u.get('pchs_avg_pric', 0))})
         
+        if not watch_targets: return False
+        
+        # [ PERFORMANCE ] 감시 대상 종목 일괄 시세 다운로드
+        tickers = [item["ticker"] for item in watch_targets]
+        all_hists = yf.download(tickers, period="7d", progress=False)
+        
         for item in watch_targets:
             ticker, qty, buy_p = item["ticker"], item["qty"], item["buy_p"]
-            if not ticker or qty <= 0 or buy_p <= 0: continue
+            try:
+                hist = pd.DataFrame({
+                    "Close": all_hists["Close"][ticker],
+                    "High": all_hists["High"][ticker],
+                    "Low": all_hists["Low"][ticker]
+                }).dropna()
+            except: continue
             
-            hist = yf.Ticker(ticker).history(period="7d") # 최근 7일간의 최고가 추적용
             if hist.empty: continue
-            
-            curr_p = hist['Close'].iloc[-1]
-            max_p = hist['High'].max() # 일주일 내 최고가
-            roi = (curr_p / buy_p - 1) * 100
-            
-            # --- 교전 수칙 1: 기본 -3% 손절 ---
+            curr_p, max_p = hist['Close'].iloc[-1], hist['High'].max()
             stop_price = buy_p * 0.97
             
-            # --- 교전 수칙 2: 20% 수익 달성 시 트레일링 스탑 ---
-            # 일주일 내 20% 수익(max_p 기준)이 났었다면, 손절가를 [최고가 - 3%]로 상향 조정
             if (max_p / buy_p - 1) >= 0.20:
                 stop_price = max_p * 0.97
-                st.sidebar.warning(f"🛡️ {ticker}: 20% 수익 돌파! 익절선 상향({stop_price:,.0f})")
             
-            # --- 최종 판정 및 집행 ---
             if curr_p <= stop_price:
-                st.toast(f"🚨 [ RULE VIOLATION ] {ticker} 손절선 이탈! 기계적 즉시 매도.", icon="💥")
-                success = execute_kis_market_order(ticker, qty, is_buy=False)
-                if success:
-                    st.success(f"🏹 {ticker} 리스크 관리 완료 (Exit at {curr_p})")
+                st.toast(f"🚨 [ STOP ] {ticker} 이탈!", icon="💥")
+                if execute_kis_market_order(ticker, qty, is_buy=False):
                     return True
-    except Exception as e:
-        print(f"DEBUG: Pro-Risk Engine Error: {e}")
+    except: pass
     return False
 
 def play_tactical_sound(sound_type="buy"):
@@ -513,8 +510,9 @@ def play_tactical_sound(sound_type="buy"):
     </audio>
     """, unsafe_allow_html=True)
 
+@st.cache_data(ttl=43200) # 12시간 캐싱 (ROE는 자주 변하지 않음)
 def get_ticker_roe(ticker):
-    """종목의 실시간 ROE(자기자본이익률)를 획득 (yf 캐시 활용)"""
+    """종목의 실시간 ROE(자기자본이익률)를 획득 (캐시 활용으로 렉 방지)"""
     try:
         info = yf.Ticker(ticker).info
         return info.get('returnOnEquity', 0) * 100
@@ -579,22 +577,28 @@ def get_bonde_top_50():
     except:
         return ["NVDA", "TSLA", "AAPL", "MSFT", "PLTR", "SMCI", "AMD", "META", "GOOGL", "AVGO"]
 
-def analyze_stockbee_setup(ticker):
+def analyze_stockbee_setup(ticker, hist_df=None):
     """
     본데(Stockbee) 실전 스캐너: TI65, 4% Burst, EP 판독 및 ROE 필터링
+    성능 최적화: 외부에서 배치 데이터를 전달받아 연산만 수행
     """
     try:
-        # 1. ROE 필터 (적자 기업 제외 원칙)
+        # 1. ROE 필터 (캐시 활용)
         roe = get_ticker_roe(ticker)
         if roe <= 0: return None
         
-        hist = yf.Ticker(ticker).history(period="70d")
+        # 2. 히스토리 데이터 확보
+        if hist_df is None:
+            hist = yf.Ticker(ticker).history(period="70d")
+        else:
+            hist = hist_df # 배치 데이터에서 해당 티커 부분만 추출된 데이터
+            
         if len(hist) < 65: return None
         
-        # 2. 본데의 핵심 지표 TI65 (65일 가격 모멘텀)
+        # 3. 본데의 핵심 지표 TI65 (65일 가격 모멘텀)
         ti65 = (hist['Close'].iloc[-1] / hist['Close'].iloc[-65]) * 100
         
-        # 3. 셋업 판정 (4% Burst & Volume Catalyst)
+        # 4. 셋업 판정 (4% Burst & Volume Catalyst)
         latest_close = hist['Close'].iloc[-1]
         prev_close = hist['Close'].iloc[-2]
         pct = (latest_close / prev_close - 1) * 100
@@ -611,42 +615,9 @@ def analyze_stockbee_setup(ticker):
             }
     except: pass
     return None
-        df['Pct_Change'] = ((df['Close'] - df['C1']) / df['C1']) * 100
-        df['SMA_7'] = df['Close'].rolling(window=7).mean()
-        df['SMA_65'] = df['Close'].rolling(window=65).mean()
-        df['TI65'] = df['SMA_7'] / df['SMA_65']
-        df['AvgV_50'] = df['Volume'].rolling(window=50).mean()
+
+# --- [ SCANNER HELPERS: STOCKBEE STRICT EDITION ] ---
         
-        latest = df.iloc[-1]
-        prev_3d = df.iloc[-4:-1]
-        
-        # [ RULE ] AVOID_BAGHOLDER: 3일 연속 상승 종목 제외
-        is_3d_up = all(prev_3d['Pct_Change'] > 0)
-        if is_3d_up: return "AVOID_BAGHOLDER"
-        
-        setups = []
-        # 1. 4% 모멘텀 버스트
-        if (latest['Pct_Change'] >= 4.0) and (latest['Volume'] > latest['V1']) and (latest['TI65'] >= 1.05):
-            setups.append("4% Momentum Burst")
-        
-        # 2. 클래식 EP
-        if (latest['Pct_Change'] >= 10.0) and (latest['Volume'] >= 3 * latest['AvgV_50']):
-            setups.append("Classic EP")
-            
-        # 3. 9 Million EP
-        if (latest['Volume'] >= 9000000):
-            setups.append("9 Million EP")
-            
-        if setups:
-            return {
-                "setups": setups,
-                "ti65": round(latest['TI65'], 3),
-                "lod": round(latest['Low'], 2),
-                "pct": round(latest['Pct_Change'], 2),
-                "close": round(latest['Close'], 2)
-            }
-    except: pass
-    return None
 
 @st.cache_data(ttl=3600)
 def get_kospi_top_200():
@@ -3731,14 +3702,28 @@ elif page.startswith("7-c."):
                 random.shuffle(targets)
                 
                 new_results = []
+                # [ PERFORMANCE ] 렉 방지를 위한 배치 다운로드 (70일치 데이터 한 번에 수신)
+                st.write("> 데이터 스트림 동기화 및 팩터 연산 중...")
+                try:
+                    all_hist = yf.download(targets[:15], period="75d", progress=False)
+                except: all_hist = None
+                
                 for t in targets[:15]: 
-                    st.write(f">> {t} 분석 중 (TI65 & Volume Catalyst)...")
-                    setup_data = analyze_stockbee_setup(t)
+                    st.write(f">> {t} 전술 타점 분석 중...")
+                    # 배치 데이터에서 해당 종목만 추출
+                    t_hist = None
+                    if all_hist is not None:
+                        try:
+                            t_hist = pd.DataFrame({
+                                "Close": all_hist["Close"][t],
+                                "High": all_hist["High"][t],
+                                "Low": all_hist["Low"][t],
+                                "Volume": all_hist["Volume"][t]
+                            }).dropna()
+                        except: t_hist = None
                     
-                    if setup_data == "AVOID_BAGHOLDER":
-                        st.warning(f"⚠️ {t}: 추격 매수 금지 (AVOID_BAGHOLDER)")
-                        continue
-                        
+                    setup_data = analyze_stockbee_setup(t, hist_df=t_hist)
+                    
                     if setup_data:
                         name = TICKER_NAME_MAP.get(t)
                         if not name:
@@ -3752,7 +3737,6 @@ elif page.startswith("7-c."):
                         # [ AUTO_EXECUTION ] 포착 즉시 실전 매수 집행
                         if st.session_state.get("live_toggle_v6_pro"):
                             st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
-                            # 본데의 제안대로 10주씩 시장가 매수 (조절 가능)
                             execute_kis_market_order(t, 10, is_buy=True)
                 
                 status.update(label="[ SUCCESS ] 본데의 전략 자동매매 엔진 분석 및 자동 집행 완료!", state="complete")
