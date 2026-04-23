@@ -579,42 +579,46 @@ def get_bonde_top_50():
 
 def analyze_stockbee_setup(ticker, hist_df=None):
     """
-    본데(Stockbee) 실전 스캐너: TI65, 4% Burst, EP 판독 및 ROE 필터링
-    성능 최적화: 외부에서 배치 데이터를 전달받아 연산만 수행
+    설명 가능한 본데 스캐너: 탈락 사유(Reason)와 매수 근거를 함께 제공
     """
     try:
-        # 1. ROE 필터 (캐시 활용)
+        # 1. ROE 필터
         roe = get_ticker_roe(ticker)
-        if roe <= 0: return None
+        if roe <= 0: return {"status": "REJECT", "reason": f"ROE({roe:.1f})가 마이너스인 적자 기업 (본데 원칙 위배)"}
         
-        # 2. 히스토리 데이터 확보
         if hist_df is None:
-            hist = yf.Ticker(ticker).history(period="70d")
+            hist = yf.Ticker(ticker).history(period="75d")
         else:
-            hist = hist_df # 배치 데이터에서 해당 티커 부분만 추출된 데이터
+            hist = hist_df
             
-        if len(hist) < 65: return None
+        if len(hist) < 65: return {"status": "REJECT", "reason": "최근 상장주 혹은 데이터 부족 (TI65 산출 불가)"}
         
-        # 3. 본데의 핵심 지표 TI65 (65일 가격 모멘텀)
+        # 2. 지표 계산
         ti65 = (hist['Close'].iloc[-1] / hist['Close'].iloc[-65]) * 100
-        
-        # 4. 셋업 판정 (4% Burst & Volume Catalyst)
         latest_close = hist['Close'].iloc[-1]
         prev_close = hist['Close'].iloc[-2]
         pct = (latest_close / prev_close - 1) * 100
         vol_ratio = hist['Volume'].iloc[-1] / hist['Volume'].rolling(20).mean().iloc[-2]
         
+        # 3. 상세 탈락 사유 분석
+        if ti65 <= 105: return {"status": "REJECT", "reason": f"추세 강도 TI65({ti65:.1f})가 기준치(105) 미달 (모멘텀 부족)"}
+        if pct < 4.0: return {"status": "REJECT", "reason": f"당일 상승폭({pct:.1f}%)이 본데의 최소 기준(4%)에 미달"}
+        if vol_ratio < 1.5: return {"status": "REJECT", "reason": f"거래량 촉매제({vol_ratio:.1f}x) 부족 (기관 수급 부재)"}
+        
         is_mb = (pct >= 4.0 and vol_ratio >= 1.5 and ti65 > 105)
-        is_ep = (pct >= 8.0 and vol_ratio >= 2.5) # Episodic Pivot
+        is_ep = (pct >= 8.0 and vol_ratio >= 2.5)
         
         if is_mb or is_ep:
+            reason = "4% 모멘텀 버스트 포착" if is_mb else "강력한 에피소딕 피벗(EP) 발생"
             return {
-                "ticker": ticker, "close": latest_close, "pct": round(pct, 2), 
+                "status": "SUCCESS", "ticker": ticker, "close": latest_close, "pct": round(pct, 2), 
                 "ti65": round(ti65, 1), "roe": round(roe, 1), "lod": hist['Low'].iloc[-1],
-                "setups": ["4% Burst"] if is_mb else ["Episodic Pivot"]
+                "setups": ["4% Burst"] if is_mb else ["Episodic Pivot"],
+                "reason": f"{reason} (TI65:{ti65:.1f}, Vol:{vol_ratio:.1f}x)"
             }
-    except: pass
-    return None
+    except Exception as e:
+        return {"status": "ERROR", "reason": f"데이터 분석 중 오류 발생: {str(e)}"}
+    return {"status": "REJECT", "reason": "알 수 없는 기술적 조건 미달"}
 
 # --- [ SCANNER HELPERS: STOCKBEE STRICT EDITION ] ---
         
@@ -3722,7 +3726,7 @@ elif page.startswith("7-c."):
                 except: all_hist = None
                 
                 for t in targets[:15]: 
-                    st.write(f">> {t} 전술 타점 분석 중...")
+                    st.write(f">> {t} 분석 중...")
                     # 배치 데이터에서 해당 종목만 추출
                     t_hist = None
                     if all_hist is not None:
@@ -3735,22 +3739,31 @@ elif page.startswith("7-c."):
                             }).dropna()
                         except: t_hist = None
                     
-                    setup_data = analyze_stockbee_setup(t, hist_df=t_hist)
+                    analysis = analyze_stockbee_setup(t, hist_df=t_hist)
                     
-                    if setup_data:
+                    if analysis["status"] == "SUCCESS":
                         name = TICKER_NAME_MAP.get(t)
                         if not name:
                             try: name = yf.Ticker(t).info.get('shortName', t)
                             except: name = t
                         
-                        setup_data["ticker"] = t
+                        st.success(f"✅ {name}({t}) 포착! 근거: {analysis['reason']}")
+                        setup_data = analysis
                         setup_data["name"] = name
                         new_results.append(setup_data)
                         
                         # [ AUTO_EXECUTION ] 포착 즉시 실전 매수 집행
                         if st.session_state.get("live_toggle_v6_pro"):
                             st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
-                            execute_kis_market_order(t, 10, is_buy=True)
+                            # 매수 성공 로그에 근거 포함
+                            if execute_kis_market_order(t, 10, is_buy=True):
+                                last_log = st.session_state.combat_logs[-1]
+                                last_log["msg"] += f" (근거: {analysis['reason']})"
+                    
+                    elif analysis["status"] == "REJECT":
+                        st.write(f"   └ ❌ 탈락 사유: {analysis['reason']}")
+                    else:
+                        st.error(f"   └ ⚠️ 오류: {analysis['reason']}")
                 
                 status.update(label="[ SUCCESS ] 본데의 전략 자동매매 엔진 분석 및 자동 집행 완료!", state="complete")
             st.session_state.scanning_results = new_results
