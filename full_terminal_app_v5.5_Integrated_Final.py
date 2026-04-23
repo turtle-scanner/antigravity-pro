@@ -455,6 +455,32 @@ def get_kis_overseas_balance(token):
     except: pass
     return 0, []
 
+# --- [ KIS: REAL-TIME RISK MONITORING ] ---
+def execute_kis_auto_cut(token):
+    """
+    [ BONDE SYSTEM ] 보유 종목 실시간 LOD(당일 저점) 이탈 감시 및 강제 청산 엔진
+    본데의 철학: LOD 이탈 시 묻지도 따지지도 않고 시장가 전량 매도
+    """
+    try:
+        _, kr_holdings = get_kis_balance(token)
+        _, us_holdings = get_kis_overseas_balance(token)
+        watch_targets = []
+        for h in kr_holdings: watch_targets.append({"ticker": h.get('pdno'), "qty": int(h.get('hldg_qty', 0))})
+        for u in us_holdings: watch_targets.append({"ticker": u.get('ovrs_pdno'), "qty": int(u.get('hldg_qty', 0))})
+        
+        for item in watch_targets:
+            ticker, qty = item["ticker"], item["qty"]
+            if not ticker or qty <= 0: continue
+            hist = yf.Ticker(ticker).history(period="1d")
+            if not hist.empty:
+                curr_p, lod_p = hist['Close'].iloc[-1], hist['Low'].iloc[-1]
+                if curr_p < lod_p:
+                    st.toast(f"💥 {ticker} LOD 이탈! 기계적 전량 매도 집행.", icon="🚨")
+                    execute_kis_market_order(ticker, qty, is_buy=False)
+                    return True
+    except: pass
+    return False
+
 def execute_kis_market_order(ticker, qty, is_buy=True):
     """시장가 주문 실행 엔진 (KIS API 연동)"""
     token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
@@ -3568,13 +3594,13 @@ elif page.startswith("7-c."):
     with col_btn1:
         if st.button("🔍 엔진 가동", use_container_width=True):
             st.session_state.scanning_active = True
-            with st.status("전략 필터링 중...", expanded=False) as status:
-                st.write("1. [ KOSPI ] 반도체 섹터 주도주 RS 강도 분석 중...")
+            with st.status("본데(Stockbee) 전술 타점 분석 중...", expanded=False) as status:
+                st.write("1. [ RS ] 글로벌 주도주 상대강도 랭킹 산출 중...")
                 time.sleep(0.5)
-                st.write("2. [ MINSU ] 본데 VCP(변동성 축소) 최종 단계 스캔...")
+                st.write("2. [ BONDE ] VCP(변동성 축소) 최종 단계 및 EP 감지...")
                 time.sleep(0.5)
-                st.write("3. [ 펀더멘털 ] ROE 15% 이상 우량 반도체 필터링...")
-                status.update(label="[ SUCCESS ] 요원 민수의 전략 스캔 완료!", state="complete")
+                st.write("3. [ ACTION ] 기계적 손절(LOD) 가이드라인 생성 중...")
+                status.update(label="[ SUCCESS ] 본데의 전략 자동매매 스캔 완료!", state="complete")
 elif page.startswith("7-c."):
     st.title("🛰️ STOCKBEE PROCEDURAL ENGINE")
     st.markdown("""
@@ -3592,6 +3618,14 @@ elif page.startswith("7-c."):
     if "scanning_active" not in st.session_state: st.session_state.scanning_active = False
 
     token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+    
+    # [ BONDE RISK ENGINE ] 실시간 LOD(당일 저점) 이탈 감시 및 자동 청산
+    if st.session_state.get("live_toggle_v6_pro"):
+        with st.sidebar:
+            with st.status("🚨 리스크 감시 엔진 가동 중 (LOD Cut)...", expanded=False):
+                if execute_kis_auto_cut(token):
+                    st.toast("🏹 기계적 손절(LOD Cut)이 사령부에 의해 집행되었습니다.")
+    
     real_total, real_cash, real_holdings = get_kis_balance(token)
     over_total, over_holdings = get_kis_overseas_balance(token)
     full_balance = real_total + over_total
@@ -3620,17 +3654,17 @@ elif page.startswith("7-c."):
         if st.button("🔍 엔진 가동 (Procedural Scan)", use_container_width=True):
             st.session_state.scanning_active = True
             with st.status("본데(Stockbee) 절차적 스캐닝 가동 중...", expanded=True) as status:
-                st.write("> 구글 시트 및 KOSPI 상위 종목 리스트 로드...")
+                st.write("> 구글 시트 및 글로벌 주도주 리스트 대조...")
                 targets = get_bonde_top_50() + get_kospi_top_200()
                 random.shuffle(targets)
                 
                 new_results = []
-                for t in targets[:15]: # 정밀 분석을 위해 개수 제한
+                for t in targets[:15]: 
                     st.write(f">> {t} 분석 중 (TI65 & Volume Catalyst)...")
                     setup_data = analyze_stockbee_setup(t)
                     
                     if setup_data == "AVOID_BAGHOLDER":
-                        st.warning(f"⚠️ {t}: 3일 연속 상승으로 인한 추격 매수 금지 (AVOID_BAGHOLDER)")
+                        st.warning(f"⚠️ {t}: 추격 매수 금지 (AVOID_BAGHOLDER)")
                         continue
                         
                     if setup_data:
@@ -3643,7 +3677,7 @@ elif page.startswith("7-c."):
                         setup_data["name"] = name
                         new_results.append(setup_data)
                 
-                status.update(label=f"[ SUCCESS ] {len(new_results)}개의 기계적 타점 포착!", state="complete")
+                status.update(label="[ SUCCESS ] 본데의 전략 자동매매 엔진 분석 완료!", state="complete")
             st.session_state.scanning_results = new_results
 
     with col_btn2:
