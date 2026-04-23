@@ -3598,7 +3598,9 @@ elif page.startswith("7-c."):
                     <b style='color: {status_color}; font-size: 1.2rem;'>{"ENGINE ACTIVE" if st.session_state.scanning_active else "STANDBY"}</b>
                 </div>
                 <div style='text-align: right;'>
-                    <span style='color: #888; font-size: 0.8rem; font-family:"Orbitron";'>COMMANDER EQUITY</span><br>
+                    <span style='color: #888; font-size: 0.8rem; font-family:"Orbitron";'>COMMANDER STATUS</span><br>
+                    <b style='color: #FFD700; font-size: 1.1rem;'>{len(real_holdings) + len(over_holdings)} POSITIONS</b>
+                    <span style='color: #555;'> | </span>
                     <b style='color: #FFD700; font-size: 1.2rem;'>{full_balance:,.0f} KRW</b>
                 </div>
             </div>
