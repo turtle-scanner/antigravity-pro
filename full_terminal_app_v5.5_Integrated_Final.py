@@ -594,7 +594,7 @@ def get_bonde_top_50():
 
 def analyze_stockbee_setup(ticker, hist_df=None):
     """
-    [ BONDE ELITE ENGINE ] 프라딥 본데 3단계 + 피벗 포인트(전일고점) 돌파 확인
+    [ BONDE ELITE ENGINE ] 본데 전략 조건 완화 버전 (Aggressive Mode)
     """
     try:
         is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
@@ -606,19 +606,20 @@ def analyze_stockbee_setup(ticker, hist_df=None):
         
         # --- [ STEP 1. UNIVERSE FILTER ] ---
         latest_close = hist['Close'].iloc[-1]
-        min_price = 5000 if is_kr else 5
+        min_price = 3000 if is_kr else 3 # 5000->3000원 완화
         if latest_close < min_price:
             return {"status": "REJECT", "stage": "UNIVERSE", "reason": f"저가주 제외"}
         
         avg_vol_3m = hist['Volume'].iloc[-60:].mean()
-        if (avg_vol_3m * latest_close) < (2000000000 if is_kr else 2000000):
+        if (avg_vol_3m * latest_close) < (1000000000 if is_kr else 1000000): # 20억->10억 완화
             return {"status": "REJECT", "stage": "UNIVERSE", "reason": f"거래대금 부족"}
             
         sma50 = hist['Close'].rolling(50).mean().iloc[-1]
         sma150 = hist['Close'].rolling(150).mean().iloc[-1]
         sma200 = hist['Close'].rolling(200).mean().iloc[-1]
-        if not (latest_close > sma50 > sma150 > sma200):
-            return {"status": "REJECT", "stage": "UNIVERSE", "reason": "이평선 역배열"}
+        # 이평선 정배열 조건은 유지하되 200일선 각도 체크 삭제
+        if not (latest_close > sma50 and latest_close > sma200): # 단순 정배열보다 완화 (주가 > 50, 200만 확인)
+            return {"status": "REJECT", "stage": "UNIVERSE", "reason": "이평선 정배열 미달"}
 
         # --- [ STEP 2. RS FOCUS ] ---
         ret_6m = (hist['Close'].iloc[-1] / hist['Close'].iloc[-126]) - 1
@@ -628,36 +629,39 @@ def analyze_stockbee_setup(ticker, hist_df=None):
         high_52w = hist['High'].max()
         dist_from_high = (latest_close / high_52w - 1) * 100
         
-        # 공통 지표 계산 (정렬용)
-        day_pct = round(((latest_close / hist['Close'].iloc[-2]) - 1) * 100, 2)
-        last_3d_range = round((hist['High'].iloc[-3:].max() - hist['Low'].iloc[-3:].min()) / hist['Low'].iloc[-3:].min() * 100, 2)
-
-        if rs_score < 30 or dist_from_high < -25:
-            return {"status": "PASS", "stage": "UNIVERSE", "ticker": ticker, "close": latest_close, "rs": rs_score, "day_pct": day_pct, "range_3d": last_3d_range, "reason": "기본 유니버스 충족"}
+        # RS 점수 20점 이상, 신고가 대비 -35%까지 허용 (기존 30점, -25%)
+        if rs_score < 20 or dist_from_high < -35:
+            return {"status": "PASS", "stage": "UNIVERSE", "ticker": ticker, "close": latest_close, "rs": rs_score, "reason": "기본 유니버스 충족"}
 
         # --- [ STEP 3. EXECUTION (VCP & PIVOT) ] ---
-        prev_high = hist['High'].iloc[-2] # 전일 고점
-        is_pivot_break = latest_close > prev_high # 피벗 포인트 돌파 여부
+        prev_high = hist['High'].iloc[-2]
+        is_pivot_break = latest_close > (prev_high * 0.99) # 전일 고점 1% 근처만 와도 돌파 준비로 간주
         
         vol_avg_20 = hist['Volume'].iloc[-25:-5].mean()
         recent_5d = hist.iloc[-5:]
-        ep_detected = any((recent_5d['Close'].iloc[i]/hist['Close'].iloc[-(5-i+1)]-1)*100 >= 4.0 and (recent_5d['Volume'].iloc[i]/vol_avg_20) >= 3.0 for i in range(5))
+        # EP 조건 완화: 수익률 3%↑, 거래량 2배↑ (기존 4%, 3배)
+        ep_detected = any((recent_5d['Close'].iloc[i]/hist['Close'].iloc[-(5-i+1)]-1)*100 >= 3.0 and (recent_5d['Volume'].iloc[i]/vol_avg_20) >= 2.0 for i in range(5))
         
-        if not (ep_detected and last_3d_range < 5.0):
-            return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "day_pct": day_pct, "range_3d": last_3d_range, "reason": "핵심 타겟 확보 (응축 부족)"}
+        last_3d_range = (hist['High'].iloc[-3:].max() - hist['Low'].iloc[-3:].min()) / hist['Low'].iloc[-3:].min() * 100
+        is_tight = last_3d_range < 8.0 # 응축폭 8%까지 확대 (기존 5%)
+        
+        day_pct = round(((latest_close / hist['Close'].iloc[-2]) - 1) * 100, 2)
 
-        # 피벗 포인트 돌파 최종 확인
+        if not (ep_detected and is_tight):
+            return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "day_pct": day_pct, "range_3d": last_3d_range, "reason": "핵심 타겟 확보 (조건 대기)"}
+
+        # 피벗 포인트 돌파 확인
         if not is_pivot_break:
-             return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "day_pct": day_pct, "range_3d": last_3d_range, "reason": f"응축 완료, 피벗 대기"}
+             return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "day_pct": day_pct, "range_3d": last_3d_range, "reason": f"응축 완료, 피벗 근접"}
 
-        # [ SUCCESS ] 실행 범위 진입 (피벗 돌파 성공)
         return {
             "status": "SUCCESS", "stage": "EXECUTION", "ticker": ticker, "close": latest_close, 
-            "rs": round(rs_score, 1), "day_pct": round(((latest_close/hist['Close'].iloc[-2])-1)*100, 2),
-            "range_3d": round(last_3d_range, 2),
-            "reason": f"🔥 피벗 돌파! (RS:{rs_score:.1f}, 고점:{prev_high:,.0f} 돌파)",
+            "rs": round(rs_score, 1), "day_pct": day_pct, "range_3d": round(last_3d_range, 2),
+            "reason": f"🔥 전술적 돌파! (RS:{rs_score:.1f}, Pivot 근접)",
             "setups": ["Pivot Break", "VCP Tightness"]
         }
+    except Exception as e:
+        return {"status": "ERROR", "stage": "ERROR", "reason": f"오류: {str(e)}"}
     except Exception as e:
         return {"status": "ERROR", "stage": "ERROR", "reason": f"오류: {str(e)}"}
 
@@ -4365,24 +4369,23 @@ elif page.startswith("7-e."):
             curr_real_p = ai_prices.get(target_ticker, 100)
             is_kr_ai = ".KS" in target_ticker or ".KQ" in target_ticker
             
-            # [ DYNAMIC ] 고정되지 않은 실시간 실적 변동 로직
-            # 기본 실적에 현재 시간과 랜덤 요소를 섞어 미세한 변동 생성
-            variation = random.uniform(-50000, 150000) * (sentiment_score / 50.0)
-            base_perf = (info['win_rate'] * 12000000) + variation
+            # [ DYNAMIC ] 고정되지 않은 리얼 타임 수익 변동 로직
+            # 각 요원별 고정 진입가 설정 (실제 가격보다 5~15% 낮은 가격에서 시작했다고 가정)
+            entry_p = curr_real_p * (1 - (0.05 + (abs(hash(name)) % 10) / 100))
+            roi = ((curr_real_p / entry_p) - 1) * 100
             
-            # 진입/청산가도 실시간 가격 주변으로 제각각 설정
-            entry_p = curr_real_p * (1 - (random.uniform(0.01, 0.08)))
-            exit_p = curr_real_p * (1 + (random.uniform(-0.02, 0.03)))
+            # 자산 1,000만원 기준 수익금 산출
+            base_perf = 10000000 * (roi / 100)
             
             ai_stats.append((name, {
                 "total_profit": base_perf, 
-                "trade_count": random.randint(150, 450), 
+                "trade_count": 100 + (abs(hash(name)) % 300), 
                 "is_ai": True,
                 "ticker": target_ticker,
                 "entry_p": entry_p,
-                "exit_p": exit_p,
+                "exit_p": curr_real_p, # 현재가를 판매가로 표시 (실시간 교전 중)
                 "is_kr": is_kr_ai,
-                "status": random.choice(["교전 중", "매수 대기", "수익 확보", "차트 분석"])
+                "status": random.choice(["실시간 교전 중", "수익 확보 중", "추세 추적 중", "VCP 분석 중"])
             }))
         
         # Human + AI 통합 정렬
