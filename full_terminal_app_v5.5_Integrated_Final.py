@@ -688,7 +688,8 @@ def analyze_stockbee_setup(ticker, hist_df=None):
             "status": "SUCCESS", "stage": "EXECUTION", "ticker": ticker, "close": c, 
             "rs": rs, "day_pct": round(day_pct, 2), "reason": f"🚀 {setups[0]} 포착!",
             "setups": setups, "lod": round(df['Low'].iloc[-1], 2), "pct": round(day_pct, 2), 
-            "ti65": round(c / sma65, 3), "adr": adr_20, "tight": tight_score, "market": market_regime
+            "ti65": round(c / sma65, 3), "adr": adr_20, "tight": tight_score, "market": market_regime,
+            "volume": v, "prev_volume": p_v
         }
 
     except Exception as e:
@@ -1083,17 +1084,35 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
+# --- 🔴 상단 브랜드 헤더 (초정밀 밀착 레이아웃) ---
+col_head1, col_head2, col_head3 = st.columns([1, 4, 1])
+
+with col_head3:
+    if st.session_state.get("password_correct"):
+        if st.button("🔓 LOGOUT", use_container_width=True, key="global_logout"):
+            st.session_state["password_correct"] = False
+            st.session_state.current_user = None
+            st.rerun()
+    else:
+        if st.button("🔒 LOGIN", use_container_width=True, key="global_login"):
+            st.rerun()
+
+with col_head2:
+    st.markdown(f"""
+        <div style='text-align: center; margin-top: -30px; margin-bottom: 5px; overflow: visible;'>
+            <img src='data:image/png;base64,{logo_b64}' style='width: 110px; margin-bottom: -15px;'>
+            <h1 style='font-size: clamp(1.8rem, 7.5vw, 3.8rem); font-weight: 900; background: linear-gradient(45deg, #FFD700, #FFFFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.5); white-space: nowrap; margin-bottom: 0px; line-height: 1.1;'>StockDragonfly</h1>
+            <p style='color: #888; letter-spacing: 7px; font-size: 0.7rem; margin-top: -5px; opacity: 0.8;'>ULTRA-HIGH PERFORMANCE TERMINAL</p>
+        </div>
+    """, unsafe_allow_html=True)
+
 # --- 인증 & 사이드바 ---
 if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 if not st.session_state["password_correct"]:
     # 모바일에서는 컬럼 비율 조정
     c1, m, c2 = st.columns([0.1, 0.8, 0.1]) if st.session_state.get("is_mobile", False) else st.columns([1, 2, 1])
     with m:
-        st.markdown("<div class='main-title'>StockDragonfly</div>", unsafe_allow_html=True)
-        if logo_b64:
-            st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:15px; margin-bottom:20px;">', unsafe_allow_html=True)
-        elif os.path.exists("StockDragonfly.png"): 
-            st.image("StockDragonfly.png", use_container_width=True)
+        # (Global Header가 상단에 위치하므로 중복 로고/타이틀 제거)
         if "show_notice" not in st.session_state: st.session_state["show_notice"] = True
         
         if st.session_state["show_notice"]:
@@ -1495,14 +1514,7 @@ now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
 # 최종 선택된 미션을 page 변수에 할당하여 본문 렌더링
 page = st.session_state.get("page", "6-a. [ CHECK ] 출석체크(오늘한줄)")
 
-# --- 🔴 상단 브랜드 헤더 (초정밀 밀착 레이아웃) ---
-st.markdown(f"""
-    <div style='text-align: center; margin-top: -30px; margin-bottom: 5px; overflow: visible;'>
-        <img src='data:image/png;base64,{logo_b64}' style='width: 110px; margin-bottom: -15px;'>
-        <h1 style='font-size: clamp(1.8rem, 7.5vw, 3.8rem); font-weight: 900; background: linear-gradient(45deg, #FFD700, #FFFFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.5); white-space: nowrap; margin-bottom: 0px; line-height: 1.1;'>StockDragonfly</h1>
-        <p style='color: #888; letter-spacing: 7px; font-size: 0.7rem; margin-top: -5px; opacity: 0.8;'>ULTRA-HIGH PERFORMANCE TERMINAL</p>
-    </div>
-""", unsafe_allow_html=True)
+# (상단으로 이동됨)
 
 # --- 🐉 글로벌 매크로 애니메이션 티커 테이프 ---
 @st.cache_data(ttl=600)
@@ -3897,10 +3909,15 @@ elif page.startswith("7-c."):
     """, unsafe_allow_html=True)
 
     st.subheader("[ SCAN ] 실시간 전략 스캐닝 현황")
-    col_btn1, col_btn2 = st.columns([1, 3])
+    col_btn1, col_btn2 = st.columns([1, 1])
     with col_btn1:
-        if st.button("🔍 엔진 가동", use_container_width=True):
+        if st.button("🔍 엔진 가동 (Start)", use_container_width=True):
             st.session_state.scanning_active = True
+            st.rerun()
+    with col_btn2:
+        if st.button("🛑 가동 중단 (Stop)", use_container_width=True):
+            st.session_state.scanning_active = False
+            st.session_state.live_toggle_v6_pro = False # 실전 매매도 강제 중단
             st.rerun()
 
     # --- [ AUTO-SCANNING LOOP ] ---
@@ -4031,18 +4048,49 @@ elif page.startswith("7-c."):
             with reason_col2:
                 st.markdown("<h4 style='color:#FF4B4B;'>❌ WHY NOT? (보류/탈락 사유)</h4>", unsafe_allow_html=True)
                 # 탈락 사유 중 의미 있는 것 3개 추출
-                reject_reasons = []
-                if current_holdings_count >= 4:
-                    reject_reasons.append("⚠️ **포트폴리오 제한**: 현재 4종목 풀가동 중으로 신규 진입을 차단했습니다.")
-                
-                # 상위 10개 중 SUCCESS가 아닌 것들의 사유
-                for res in top_10_pool:
-                    if res["status"] != "SUCCESS":
-                        reject_reasons.append(f"📍 **{res['name']}**: {res['reason']}")
-                
-                for r in reject_reasons[:5]:
-                    st.error(r)
+                reject_pool = [r for r in scanned_pool if r["status"] in ["REJECT", "PASS"] and r.get("reason")][:5]
+                for res in reject_pool:
+                    st.error(f"🚩 **{res['name']}**: {res['reason']}")
 
+            # --- [ DETAILED SCAN RESULTS ] ---
+            st.markdown("---")
+            st.markdown("### 📊 [ ANALYTICS ] Scanned Stocks Deep-Dive")
+            
+            # 표시할 종목 선정 (실행 대상 + 고RS 종목)
+            detail_pool = st.session_state.execution_list + sorted([r for r in scanned_pool if r['status'] != 'ERROR'], key=lambda x: x.get('rs', 0), reverse=True)[:5]
+            seen = set()
+            unique_details = []
+            for r in detail_pool:
+                if r['ticker'] not in seen:
+                    unique_details.append(r)
+                    seen.add(r['ticker'])
+            
+            for res in unique_details[:6]:
+                with st.expander(f"📈 {res['name']} ({res['ticker']}) - RS: {res.get('rs')} / ADR: {res.get('adr')}%", expanded=False):
+                    d_col1, d_col2 = st.columns([2, 1])
+                    with d_col1:
+                        symbol = res['ticker'].split('.')[0]
+                        exchange = "KRX" if res['ticker'].endswith(".KS") or res['ticker'].endswith(".KQ") else "NASDAQ"
+                        tv_url = f"https://s.tradingview.com/widgetembed/?frameElementId=tradingview_76d4d&symbol={exchange}%3A{symbol}&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=%5B%5D&theme=dark&style=1&timezone=Asia%2FSeoul"
+                        st.components.v1.iframe(tv_url, height=350)
+                    
+                    with d_col2:
+                        roe = get_ticker_roe(res['ticker'])
+                        vol_ratio = (res['volume'] / res['prev_volume'] * 100) if res.get('prev_volume', 0) > 0 else 0
+                        
+                        st.metric("ROE (연환산)", f"{roe:.1f}%")
+                        st.metric("RS Score (본데)", f"{res.get('rs', 0)}")
+                        st.metric("Vol Ratio (vs Yesterday)", f"{vol_ratio:.1f}%", delta=f"{vol_ratio-100:.1f}%" if vol_ratio > 0 else None)
+                        
+                        st.markdown(f"""
+                        <div style='background:rgba(0,255,255,0.05); padding:10px; border-radius:10px; border:1px solid #00FFFF33;'>
+                            <small style='color:#00FFFF;'>TACTICAL NOTE</small><br>
+                            <b style='font-size:0.9rem;'>{res.get('reason', 'N/A')}</b><br>
+                            <span style='font-size:0.7rem; color:#888;'>TI65: {res.get('ti65')} / Tight: {res.get('tight')}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            # --- [ LOOP CONTROL ] ---
             time.sleep(60) 
             if not st.session_state.scanning_active: break
             st.rerun()
@@ -4214,6 +4262,7 @@ elif page.startswith("7-c."):
     with col_btn2:
         if st.button("🛑 중단", use_container_width=True):
             st.session_state.scanning_active = False
+            st.session_state.live_toggle_v6_pro = False # 실전 매매도 강제 중단
             st.session_state.scanning_results = []
             st.rerun()
 
