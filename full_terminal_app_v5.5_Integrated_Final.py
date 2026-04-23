@@ -104,12 +104,12 @@ def get_dynamic_ai_ranking():
     
     return sorted(results, key=lambda x: x["balance"], reverse=True)
 
-# --- [ API SETUP ] 한국투자증권 (KIS) API 연동 ---
-# [USER RULE: High Security] 민감한 정보는 환경 변수로 처리하고 절대 코드 내 하드코딩하지 않습니다.
-KIS_APP_KEY = os.environ.get("KIS_APP_KEY", "")
-KIS_APP_SECRET = os.environ.get("KIS_APP_SECRET", "")
-KIS_ACCOUNT = os.environ.get("KIS_ACCOUNT", "")
-KIS_MOCK_TRADING = os.environ.get("KIS_MOCK_TRADING", "True").lower() in ("true", "1", "t")
+# [USER RULE: High Security] 민감한 정보는 환경 변수 또는 st.secrets로 처리하며 코드 내 노출하지 않습니다.
+KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", os.environ.get("KIS_APP_KEY", ""))
+KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", os.environ.get("KIS_APP_SECRET", ""))
+KIS_ACCOUNT = st.secrets.get("KIS_ACCOUNT", os.environ.get("KIS_ACCOUNT", "46289819-01"))
+# 실전 계좌 연동을 위해 Mock Trading을 False로 설정
+KIS_MOCK_TRADING = st.secrets.get("KIS_MOCK_TRADING", os.environ.get("KIS_MOCK_TRADING", "False")).lower() in ("true", "1", "t")
 
 def get_kis_access_token():
     """한국투자증권 API 토큰 발급 (예외 처리 철저)"""
@@ -1099,13 +1099,14 @@ if not st.session_state["password_correct"]:
 
 with st.sidebar:
     # [ GLOBAL SESSIONS & WEATHER CONFIG ]
-    sessions = {
+    # 1. 먼저 사용할 변수들을 완벽하게 정의합니다.
+    sessions_data = {
         "SEOUL": {"tz": pytz.timezone('Asia/Seoul'), "open": 9, "close": 15.5, "city": "Seoul"},
         "NEW YORK": {"tz": pytz.timezone('America/New_York'), "open": 9.5, "close": 16, "city": "NewYork"},
     }
-    day_map = {"Monday": "월요일", "Tuesday": "화요일", "Wednesday": "수요일", "Thursday": "목요일", "Friday": "금요일", "Saturday": "토요일", "Sunday": "일요일"}
+    day_map_sidebar = {"Monday": "월요일", "Tuesday": "화요일", "Wednesday": "수요일", "Thursday": "목요일", "Friday": "금요일", "Saturday": "토요일", "Sunday": "일요일"}
     
-    def get_weather_info(city):
+    def get_weather_info_sidebar(city):
         """wttr.in을 사용한 실시간 날씨 수집 (Temp, Humidity) - 섭씨(m) 강제"""
         try:
             res = requests.get(f"https://wttr.in/{city}?m&format=%t|%h", timeout=3)
@@ -1119,13 +1120,13 @@ with st.sidebar:
     with st.expander("🛰️ [ OPS ] 실시간 글로벌 상황실 & 요원 랭킹", expanded=False):
         # 1. 글로벌 시간 & 날씨
         st.markdown("<p style='font-weight:bold; font-size:0.7rem; color:#888; margin-top:5px;'>[ GLOBAL TIME & WEATHER ]</p>", unsafe_allow_html=True)
-        for city_label, info in sessions.items():
+        for city_label, info in sessions_data.items():
             city_now = datetime.now(info['tz'])
             h_dec = city_now.hour + city_now.minute / 60
             is_open = info['open'] <= h_dec < info['close']
             s_color = "#00FF00" if is_open else "#FF4B4B"
-            temp, hum = get_weather_info(info['city'])
-            day_str = day_map.get(city_now.strftime('%A'), city_now.strftime('%A'))
+            temp, hum = get_weather_info_sidebar(info['city'])
+            day_str = day_map_sidebar.get(city_now.strftime('%A'), city_now.strftime('%A'))
             st.markdown(f"""
             <div style='background: rgba(255,255,255,0.03); padding: 8px; border-radius: 8px; border-left: 3px solid {s_color}; margin-bottom: 8px;'>
                 <div style='display: flex; justify-content: space-between; margin-bottom: 2px;'>
