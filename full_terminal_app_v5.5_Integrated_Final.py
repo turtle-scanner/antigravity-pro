@@ -313,29 +313,46 @@ def resolve_ticker(query):
     return query.upper()
 
 @st.cache_data(ttl=900)
-def get_market_sentiment_score():
-    """VIX 및 나스닥 RSI 기반 실전 공포/탐욕 점수 산출"""
+def get_market_sentiment_v2():
+    """VIX 및 나스닥 RSI 기반 실전 공포/탐욕 점수 산출 (v2: 안정성 강화)"""
     try:
-        # VIX(^VIX)는 공포의 지수
-        m_data = yf.download(["^VIX", "^IXIC"], period="14d", interval="1d", progress=False)['Close']
-        curr_vix = float(m_data["^VIX"].dropna().iloc[-1]) if "^VIX" in m_data.columns else 20.0
+        # VIX(^VIX)는 공포의 지수, ^IXIC는 나스닥
+        # [ FIX ] 멀티인덱스 대응 및 에러 방지
+        m_data = yf.download(["^VIX", "^IXIC"], period="20d", interval="1d", progress=False)
+        
+        if m_data.empty or 'Close' not in m_data.columns:
+            return 50, 20.0, "NEUTRAL"
+            
+        close_df = m_data['Close']
+        
+        # VIX 값 추출
+        curr_vix = 20.0
+        if "^VIX" in close_df.columns:
+            vix_series = close_df["^VIX"].dropna()
+            if not vix_series.empty:
+                curr_vix = float(vix_series.iloc[-1])
         
         # 기본 점수: VIX가 낮을수록 탐욕(높음), 높을수록 공포(낮음)
-        # VIX 15 -> 85점, VIX 40 -> 10점 정도의 보간
         vix_score = max(5, min(95, 100 - (curr_vix * 2.2)))
         
         # 나스닥 RSI로 보정
-        ndx = m_data["^IXIC"].dropna()
-        delta = ndx.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1+rs.iloc[-1])) if not rs.empty else 50
+        rsi = 50.0
+        if "^IXIC" in close_df.columns:
+            ndx = close_df["^IXIC"].dropna()
+            if len(ndx) > 14:
+                delta = ndx.diff()
+                gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                if not loss.empty and loss.iloc[-1] != 0:
+                    rs = gain.iloc[-1] / loss.iloc[-1]
+                    rsi = 100 - (100 / (1 + rs))
         
         final_score = (vix_score * 0.6) + (rsi * 0.4)
-        return int(final_score), curr_vix
-    except:
-        return 50, 20.0
+        label = "GREED" if final_score > 65 else ("FEAR" if final_score < 35 else "NEUTRAL")
+        return int(final_score), float(curr_vix), label
+    except Exception as e:
+        print(f"DEBUG: Sentiment Error: {e}")
+        return 50, 20.0, "NEUTRAL"
 
 # --- [ MACRO ] 거시지표 매크로 바 ---
 @st.cache_data(ttl=600)
@@ -889,7 +906,7 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge)
-    sentiment_score, _, _ = get_market_sentiment_score()
+    sentiment_score, _, _ = get_market_sentiment_v2()
     s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
     st.markdown(f"""
     <div class='glass-card' style='padding: 15px; border-top: 3px solid {s_color};'>
@@ -2660,7 +2677,7 @@ elif page.startswith("2-b."):
 elif page.startswith("2-c."):
     st.header("[ SENTIMENT ] 시장 심리 게이지 (Market Sentiment Tracker)")
     st.markdown("<div class='glass-card'>글로벌 투자자들의 공포와 탐욕 및 주요 지수 심리를 실시간 추적합니다.</div>", unsafe_allow_html=True)
-    val, curr_vix = get_market_sentiment_score()
+    val, curr_vix, label = get_market_sentiment_v2()
     
     st.info(f"[ ADVICE ] 현재 시장 변동성 지수(VIX): **{curr_vix:.1f}** | 수치가 낮을수록 시장은 안정적(탐욕), 높을수록 불안정(공포) 상태입니다.")
 
@@ -3523,7 +3540,7 @@ elif page.startswith("7-e."):
                 ai_prices[t] = float(ai_data[t].iloc[-1]) if t in ai_data.columns else 0
         except: pass
 
-        sentiment_score, _, _ = get_market_sentiment_score()
+        sentiment_score, _, _ = get_market_sentiment_v2()
         market_multiplier = (sentiment_score / 50.0)
 
         for name, info in AI_OPERATIVES.items():
@@ -3626,7 +3643,7 @@ elif page.startswith("7-f."):
         </div></div>
         """, unsafe_allow_html=True)
     with c_feel2:
-        sentiment_score, curr_vix, _ = get_market_sentiment_score()
+        sentiment_score, curr_vix, _ = get_market_sentiment_v2()
         s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
         
         with st.popover(f"[ STATUS ] 탐욕 지수 판독: {sentiment_score}", use_container_width=True):
@@ -3691,10 +3708,13 @@ elif page.startswith("7-f."):
         
         with st.spinner(f"[ SCAN ] {len(tickers)}개 종목의 쿨라매기 나노 엔진 가동 중..."):
             # (A) Daily Data for Patterns
-            data_d = yf.download(tickers, period="3mo", interval="1d", progress=False)
-            close_d = data_d['Close']
-            high_d = data_d['High']
-            low_d = data_d['Low']
+            try:
+                data_d = yf.download(tickers, period="3mo", interval="1d", progress=False)
+                if data_d.empty: return results
+                close_d = data_d['Close']
+                high_d = data_d['High']
+                low_d = data_d['Low']
+            except: return results
             
             # (B) 15m Data for ORB (Opening Range Breakout)
             # 최근 2거래일 15분 데이터 수집 (오늘 장 초반 고점 파악용)
@@ -3834,7 +3854,7 @@ elif page.startswith("7-f."):
             # [ AI ] 요원의 실시간 필드 리포트
             st.markdown("---")
             top_ai = f"[ AI ] {list(AI_OPERATIVES.keys())[0]}"
-            sentiment_score, _ = get_market_sentiment_score()
+            sentiment_score, _, _ = get_market_sentiment_v2()
             st.markdown(f"""
             <div class='glass-card' style='border-top: 3px solid #00FFFF; background: rgba(0,255,255,0.02);'>
                 <p style='color: #00FFFF; margin: 0; font-weight: 700;'>[ FIELD-AI ] FIELD REPORT: {top_ai}</p>
