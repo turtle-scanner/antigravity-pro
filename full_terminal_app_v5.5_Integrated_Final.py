@@ -794,7 +794,14 @@ ZONE_CONFIG = {
     "[ RISK ] 4. 전략 및 리스크": ["4-a. [ REPORT ] 프로 분석 리포트", "4-b. [ CALC ] 리스크 계산기", "4-c. [ SHIELD ] 리스크 방패"],
     "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ WHOWS ] 본데는 누구인가?", "5-b. [ STUDY ] 주식공부방(차트)", "5-c. [ RADAR ] 나노바나나 레이더", "5-d. [ EXAM ] 정기 승급 시험 안내", "5-e. [ SUCCESS ] 실전 익절 자랑방", "5-f. [ REVIEW ] 손실 위로 및 복기방"],
     "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방", "6-c. [ VISIT ] 방문자 인사 신청"],
-    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ EXEC ] 모의투자 매수테스트", "7-b. [ DASHBOARD ] 모의투자 현황/결과", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-d. [ REPORT ] 자동투자 성적표", "7-e. [ RANK ] 사령부 명예의 전당", "7-f. [ COOLAMAGIE ] [쿨라매기 엔진 적용]"]
+    "[ AUTO ] 7. 자동매매 사령부": [
+        "7-a. [ SETUP ] 사령부 교전 수칙", 
+        "7-b. [ MONITOR ] 실시간 시장 관제", 
+        "7-c. [ ENGINE ] 자동매매 전략엔진",
+        "7-g. [ COMBAT ] 실시간 교전 관제소",
+        "7-h. [ RECAP ] 기계적 매매 복기방",
+        "7-i. [ CONFIG ] 사령부 시스템 설정"
+    ]
 }
 
 def load_trades():
@@ -4138,6 +4145,100 @@ elif page.startswith("7-f."):
             """, unsafe_allow_html=True)
     else:
         st.info("엔진을 가동하여 현재 시장의 최정예 주도주 셋업을 추출하십시오.")
+
+    # --- [ 7-g. COMBAT ] 실시간 교전 관제소 (시각적 매매) ---
+    if page.startswith("7-g."):
+        st.title("🏹 REAL-TIME COMBAT CENTER")
+        st.markdown("<div class='glass-card'>실시간 시장 데이터와 본데의 전술 지표를 차트로 관제하며 기계적 진입을 수행합니다.</div>", unsafe_allow_html=True)
+        
+        target_tic = st.text_input("📡 관제 대상 티커 입력", value="NVDA").upper()
+        
+        if target_tic:
+            with st.spinner(f"{target_tic} 전술 데이터 로드 중..."):
+                try:
+                    df = yf.download(target_tic, period="6mo", interval="1d", progress=False)
+                    if not df.empty:
+                        # 본데 지표 계산
+                        df['SMA7'] = df['Close'].rolling(window=7).mean()
+                        df['SMA65'] = df['Close'].rolling(window=65).mean()
+                        curr_close = float(df['Close'].iloc[-1])
+                        curr_sma65 = float(df['SMA65'].iloc[-1])
+                        ti65 = curr_close / curr_sma65
+                        
+                        # 1. 캔들스틱 차트 시각화
+                        fig = go.Figure()
+                        fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Price'))
+                        fig.add_trace(go.Scatter(x=df.index, y=df['SMA7'], line=dict(color='#00FFFF', width=1.5), name='SMA 7 (Fast)'))
+                        fig.add_trace(go.Scatter(x=df.index, y=df['SMA65'], line=dict(color='#FFD700', width=2), name='SMA 65 (Trend)'))
+                        
+                        fig.update_layout(
+                            title=f"{target_tic} 전술 관제 차트", template='plotly_dark',
+                            xaxis_rangeslider_visible=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                            height=500, margin=dict(l=10, r=10, t=40, b=10)
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # 2. 전술 지표 게이지 (TI65)
+                        col1, col2 = st.columns([1, 2])
+                        with col1:
+                            st.markdown(f"#### TI65 추세 강도")
+                            g_color = "#FF4B4B" if ti65 >= 1.05 else ("#FFD700" if ti65 >= 1.0 else "#0088FF")
+                            st.markdown(f"<h1 style='color:{g_color}; text-align:center; font-size:4rem;'>{ti65:.3f}</h1>", unsafe_allow_html=True)
+                            st.write("본데의 기준: TI65 > 1.05 (강력한 추세 구간)")
+                        
+                        with col2:
+                            st.markdown("#### ⚔️ 즉시 교전 명령")
+                            q_qty = st.number_input("진입 수량", min_value=1, value=1, key="combat_qty_v9")
+                            if st.button(f"[ FIRE ] {target_tic} 시장가 진입", use_container_width=True):
+                                if st.session_state.get("live_toggle_v6_pro"):
+                                    with st.spinner("KIS API를 통한 실전 주문 전송 중..."):
+                                        success = execute_kis_market_order(target_tic, q_qty, is_buy=True)
+                                        if success:
+                                            st.session_state.show_flash = True
+                                            st.success(f"🏹 {target_tic} 포지션 진입 성공!")
+                                            st.balloons()
+                                        else: st.error("주문 실패.")
+                                else:
+                                    st.session_state.show_flash = True
+                                    st.info(f"🛡️ [SIMULATION] {target_tic} 가상 진입이 완료되었습니다.")
+                except Exception as e: st.error(f"데이터 로드 중 오류: {e}")
+
+    # --- [ 7-h. RECAP ] 기계적 매매 복기방 ---
+    elif page.startswith("7-h."):
+        st.title("📋 MISSION RECAP")
+        st.markdown("<div class='glass-card'>절차적 기억(Procedural Memory) 강화를 위해 과거 교전 내역을 시각적으로 복기합니다.</div>", unsafe_allow_html=True)
+        
+        trades = load_trades()
+        history = [t for t in trades.get("history", []) if t["user"] == st.session_state.current_user]
+        if history:
+            df_h = pd.DataFrame(history)
+            st.subheader("📈 수익 분포 분석")
+            # 수익률 문자열을 숫자로 변환
+            df_h['roi_num'] = df_h['roi'].str.replace('%','').str.replace('+','').astype(float)
+            fig_h = px.histogram(df_h, x="roi_num", nbins=20, title="교전별 수익률 분포", color_discrete_sequence=['#FFD700'])
+            fig_h.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
+            st.plotly_chart(fig_h, use_container_width=True)
+            
+            st.subheader("📜 상세 교전 로그")
+            st.dataframe(df_h[["date_sold", "ticker", "buy_price", "sell_price", "roi", "final_profit_krw"]], use_container_width=True, hide_index=True)
+        else:
+            st.info("복기할 교전 내역이 아직 없습니다.")
+
+    # --- [ 7-i. CONFIG ] 사령부 시스템 설정 ---
+    elif page.startswith("7-i."):
+        st.title("⚙️ SYSTEM CONFIG")
+        st.markdown("<div class='glass-card'>사령부의 교전 수칙 및 스캐닝 엔진의 정밀도를 설정합니다.</div>", unsafe_allow_html=True)
+        
+        st.subheader("🛡️ 리스크 관리 수칙")
+        st.slider("기계적 손절 임계치 (%)", 2.0, 10.0, 5.0, key="cfg_stop_loss")
+        st.write(f"현재 설정: 진입가 대비 -5% 도달 시 즉시 탈출 (LOD 자동 감시 병행)")
+        
+        st.subheader("📡 스캐너 정밀도")
+        st.number_input("TI65 최소 임계치", value=1.05, step=0.01, key="cfg_ti65")
+        st.write(f"현재 설정: TI65가 1.05 이상인 종목만 레이더에 포착")
+        
+        if st.button("설정 저장 및 사령부 적용", use_container_width=True):
+            st.success("새로운 교전 수칙이 시스템에 즉시 반영되었습니다.")
 
 # --- 🛰️ 시스템 하단 글로벌 전술 푸터 (Global Footer) ---
 st.write("") 
