@@ -3827,22 +3827,24 @@ elif page.startswith("7-e."):
             curr_real_p = ai_prices.get(target_ticker, 100)
             is_kr_ai = ".KS" in target_ticker or ".KQ" in target_ticker
             
-            # [ LOGIC ] 실제 가격 기반의 가상 실적 생성
-            # 승률과 시장 심리에 따라 현재가 주변으로 진입/판매가 설정
-            entry_p = curr_real_p * (1 - (random.uniform(0.05, 0.15) * info['win_rate']))
-            exit_p = curr_real_p # 현재가를 최종 판매가(혹은 진행가)로 가정
+            # [ DYNAMIC ] 고정되지 않은 실시간 실적 변동 로직
+            # 기본 실적에 현재 시간과 랜덤 요소를 섞어 미세한 변동 생성
+            variation = random.uniform(-50000, 150000) * (sentiment_score / 50.0)
+            base_perf = (info['win_rate'] * 12000000) + variation
             
-            # 누적 수익 시뮬레이션 (1,000만원 기준)
-            rand_perf = (info['win_rate'] * 15000000 * market_multiplier) + (random.randint(-100000, 500000))
+            # 진입/청산가도 실시간 가격 주변으로 제각각 설정
+            entry_p = curr_real_p * (1 - (random.uniform(0.01, 0.08)))
+            exit_p = curr_real_p * (1 + (random.uniform(-0.02, 0.03)))
             
             ai_stats.append((name, {
-                "total_profit": rand_perf, 
-                "trade_count": random.randint(30, 100), 
+                "total_profit": base_perf, 
+                "trade_count": random.randint(150, 450), 
                 "is_ai": True,
                 "ticker": target_ticker,
                 "entry_p": entry_p,
                 "exit_p": exit_p,
-                "is_kr": is_kr_ai
+                "is_kr": is_kr_ai,
+                "status": random.choice(["교전 중", "매수 대기", "수익 확보", "차트 분석"])
             }))
         
         # Human + AI 통합 정렬
@@ -3860,25 +3862,24 @@ elif page.startswith("7-e."):
                 initial_seed = 10000000
                 total_asset = initial_seed + stats['total_profit']
                 
-                with st.expander(f"{medal} {uid} {label}", expanded=(i==0)):
+                status_txt = stats.get("status", "분무 대기")
+                with st.expander(f"{medal} {uid} {label} - [ {status_txt} ]", expanded=(i==0)):
                     col_info1, col_info2 = st.columns([2, 1])
                     with col_info1:
                         st.markdown(f"""
                         <div style='padding: 5px;'>
-                            <p style='margin:0; font-size: 0.8rem; color: #888;'>초기 운용 자산: 10,000,000 KRW</p>
-                            <h3 style='margin:5px 0; color: #00FF00;'>보유자산: {total_asset:,.0f} 원</h3>
-                            <p style='margin:0; font-size: 0.85rem; color: {"#00FF00" if stats["total_profit"] > 0 else "#FF4B4B"};'>
-                                누적 수익금: {stats['total_profit']:+,.0f} 원
+                            <p style='margin:0; font-size: 0.8rem; color: #888;'>운용 전략: {AI_OPERATIVES.get(uid, {}).get('strategy', 'HTF Breakout')}</p>
+                            <h3 style='margin:5px 0; color: {"#FF4B4B" if stats["total_profit"] > 0 else "#0088FF"}; font-family: "Orbitron";'>
+                                자산: {total_asset:,.0f} 원
+                            </h3>
+                            <p style='margin:0; font-size: 0.85rem; color: {"#FF4B4B" if stats["total_profit"] > 0 else "#0088FF"};'>
+                                누적 성과: {stats['total_profit']:+,.0f} 원 ({ (stats['total_profit']/10000000)*100 :+.2f}%)
                             </p>
                         </div>
                         """, unsafe_allow_html=True)
                     with col_info2:
-                        if is_ai:
-                            ai_info = AI_OPERATIVES.get(uid, {})
-                            st.metric("승률", f"{ai_info.get('win_rate', 0)*100:.0f}%")
-                            st.caption(f"Strategy: {ai_info.get('strategy', 'N/A')}")
-                        else:
-                            st.metric("총 매매", f"{stats['trade_count']}회")
+                        st.metric("Total Trades", f"{stats['trade_count']}회")
+                        st.caption(f"Current Target: {stats.get('ticker', 'N/A')}")
                     
                     if is_ai:
                         # [ REAL-TIME LOG ] 실제 가격을 반영한 AI 전술 로그
