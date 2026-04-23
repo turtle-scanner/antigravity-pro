@@ -136,6 +136,7 @@ KIS_MOCK_TRADING = str(st.secrets.get("KIS_MOCK_TRADING", os.environ.get("KIS_MO
 def get_kis_access_token(app_key, app_secret, mock_trading):
     """한국투자증권 API 토큰 발급 (로컬 파일 캐싱 적용으로 KIS 1분 호출 제한 완벽 우회)"""
     if not app_key or not app_secret:
+        st.session_state["kis_error"] = "API 키(APP_KEY) 또는 시크릿(APP_SECRET)이 비어 있습니다. secrets.toml 파일 경로를 확인해주세요."
         return None
         
     token_file = os.path.join(os.path.dirname(__file__), "kis_token_cache.json")
@@ -179,8 +180,10 @@ def get_kis_access_token(app_key, app_secret, mock_trading):
                     with open(token_file, "r") as f:
                         return json.load(f).get("token")
                 except: pass
+            st.session_state["kis_error"] = f"서버 거부 (상태: {res.status_code}) - {res.text}"
             return None
     except Exception as e:
+        st.session_state["kis_error"] = f"네트워크/파이썬 시스템 예외: {str(e)}"
         print(f"[ KIS API ERROR ] 토큰 발급 중 예외 발생: {e}")
         return None
 
@@ -4108,6 +4111,8 @@ elif page.startswith("7-c."):
         st.markdown("</div></div>", unsafe_allow_html=True)
     else:
         st.warning("실전 계좌 정보를 불러오려면 API 토큰 발급이 필요합니다.")
+        err_msg = st.session_state.get("kis_error", "로컬 토큰 캐시 파일(kis_token_cache.json)이 없거나 API 호출에 실패했습니다.")
+        st.error(f"🔴 상세 오류 원인: {err_msg}")
 
     st.markdown("<div class='glass-card'>시스템이 실시간 데이터를 스캔하여 최적의 타점을 자동으로 포착합니다.</div>", unsafe_allow_html=True)
     
