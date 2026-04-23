@@ -1038,7 +1038,7 @@ with st.sidebar:
     st.markdown("<div style='text-align: center;'><p style='color:#00FF00; font-size:1.5rem; font-weight:900; margin-bottom:0;'>[ SYSTEM ] StockDragonfly v9.9</p><small style='color:#666;'>ELITE TRADING TERMINAL</small></div>", unsafe_allow_html=True)
     
     # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge)
-    sentiment_score, _ = get_market_sentiment_score()
+    sentiment_score, _, _ = get_market_sentiment_score()
     s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
     st.markdown(f"""
     <div class='glass-card' style='padding: 15px; margin-bottom: 20px; border-top: 3px solid {s_color};'>
