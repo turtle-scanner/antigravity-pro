@@ -3674,6 +3674,19 @@ elif page.startswith("7-c."):
     full_balance = real_total + over_total
 
     status_color = "#00FF00" if st.session_state.scanning_active else "#FF4B4B"
+    
+    # [ NEW ] 실시간 교전 관제 모니터 (눈으로 보는 매매 중계)
+    if st.session_state.get("combat_logs"):
+        with st.container():
+            st.markdown(f"""
+            <div class='glass-card' style='border: 1px solid #00FFFF33; background: rgba(0,255,255,0.02);'>
+                <p style='color: #00FFFF; font-size: 0.75rem; letter-spacing: 2px; margin-bottom: 10px; font-family: "Orbitron";'>[ LIVE COMBAT MONITOR ]</p>
+                <div style='max-height: 120px; overflow-y: auto; font-family: "Courier New", monospace;'>
+                    {"".join([f"<div style='color: {'#00FF00' if log['type']=='buy' else '#FF4B4B'}; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 3px;'>[{log['time']}] {log['msg']} 📡 집행 완료</div>" for log in reversed(st.session_state.combat_logs[-5:])])}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
     st.markdown(f"""
         <div class='glass-card' style='border-left: 5px solid {status_color};'>
             <div style='display: flex; justify-content: space-between; align-items: center;'>
