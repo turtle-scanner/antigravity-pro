@@ -28,6 +28,24 @@ except ImportError:
             return pd.DataFrame(columns=['Code', 'Name', 'Marcap'])
     fdr = DummyFDR()
 
+def is_market_open(market="KR"):
+    kst = pytz.timezone('Asia/Seoul')
+    est = pytz.timezone('US/Eastern')
+    now_kst = datetime.now(kst)
+    now_est = datetime.now(est)
+    
+    if market == "KR":
+        if now_kst.weekday() >= 5: return False
+        m_open = now_kst.replace(hour=9, minute=0, second=0, microsecond=0)
+        m_close = now_kst.replace(hour=15, minute=30, second=0, microsecond=0)
+        return m_open <= now_kst <= m_close
+    elif market == "US":
+        if now_est.weekday() >= 5: return False
+        m_open = now_est.replace(hour=9, minute=30, second=0, microsecond=0)
+        m_close = now_est.replace(hour=16, minute=0, second=0, microsecond=0)
+        return m_open <= now_est <= m_close
+    return False
+
 @st.cache_data(ttl=3600)
 def get_kospi_top_200():
     try:
@@ -3799,6 +3817,18 @@ elif page.startswith("7-b."):
 elif page.startswith("7-c."):
     st.header("[ AUTO ] 자동매매 전략 엔진 (Autonomous Engine)")
     
+    # --- [ AUTOMATED TRADING STATUS BANNER ] ---
+    kr_open = is_market_open("KR")
+    us_open = is_market_open("US")
+    st.markdown("### 🚦 시스템 자동매매 상태 (스케줄링)")
+    c1, c2 = st.columns(2)
+    kr_status = "🟢 가동중 (RUNNING)" if kr_open else "🔴 정지 (STOPPED) - 정규장 아님"
+    us_status = "🟢 가동중 (RUNNING)" if us_open else "🔴 정지 (STOPPED) - 정규장 아님"
+    
+    c1.markdown(f"<div class='glass-card' style='text-align:center;'><h4>🇰🇷 KOREA (국내장)</h4><h3 style='color: {'#00FF00' if kr_open else '#FF4B4B'};'>{kr_status}</h3><p style='color:#888;font-size:0.8rem;'>한국주식 정규장 매매만 허용</p></div>", unsafe_allow_html=True)
+    c2.markdown(f"<div class='glass-card' style='text-align:center;'><h4>🇺🇸 USA (미국장)</h4><h3 style='color: {'#00FF00' if us_open else '#FF4B4B'};'>{us_status}</h3><p style='color:#888;font-size:0.8rem;'>미국주식 정규장 매매만 허용</p></div>", unsafe_allow_html=True)
+    st.divider()
+
     # --- [ REAL ACCOUNT STATUS BANNER v2.0 ] ---
     token = get_kis_access_token()
     if token:
@@ -3845,8 +3875,37 @@ elif page.startswith("7-c."):
         if combined_rows:
             st.markdown("".join(combined_rows), unsafe_allow_html=True)
         else:
-            st.markdown("<p style='color: #555; font-size: 0.8rem;'>현재 보유 중인 포지션이 없습니다.</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color: #555; font-size: 0.8rem;'>현재 매수(보유) 중인 종목이 없습니다.</p>", unsafe_allow_html=True)
             
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # 매도 내역 (실시간 수익률 표시)
+        st.markdown("<div style='background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-top: 10px;'>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #FFD700; font-size: 0.75rem; font-weight: 800; margin-bottom: 10px;'>📊 최근 매도 종목 및 실현 수익</p>", unsafe_allow_html=True)
+        
+        try:
+            trades_data = load_trades()
+            sold_history = trades_data.get("history", [])
+            my_sells = [t for t in sold_history if t.get("is_real_api") == True]
+            if my_sells:
+                sell_rows = []
+                for s in my_sells[-5:]: # 최근 5개
+                    tic_name = s.get("ticker", "Unknown")
+                    profit = s.get("final_profit_krw", 0)
+                    roi = (s.get("sell_price", 1) / s.get("buy_price", 1) - 1) * 100
+                    color = "#00FF00" if profit > 0 else "#FF4B4B"
+                    sell_rows.append(f"""
+                    <div style='display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 3px;'>
+                        <span style='color: #EEE;'><b>{tic_name}</b> <small style='color: #666;'>{s.get("date_sold")}</small></span>
+                        <span style='color: {color};'><b>{profit:+,.0f}원 ({roi:+.2f}%)</b></span>
+                    </div>
+                    """)
+                st.markdown("".join(sell_rows), unsafe_allow_html=True)
+            else:
+                st.markdown("<p style='color: #555; font-size: 0.8rem;'>최근 매도한 실전 종목이 없습니다.</p>", unsafe_allow_html=True)
+        except:
+            st.markdown("<p style='color: #555; font-size: 0.8rem;'>매도 기록을 불러올 수 없습니다.</p>", unsafe_allow_html=True)
+
         st.markdown("</div></div>", unsafe_allow_html=True)
     else:
         st.warning("실전 계좌 정보를 불러오려면 API 토큰 발급이 필요합니다.")
@@ -3869,6 +3928,11 @@ elif page.startswith("7-c."):
         st.markdown(f"#### 🤖 AI 요원 민수의 [ KOSPI ] 추천")
         live_trade_allowed = st.toggle("[ LIVE ] KIS 실전 API 계좌 매수/매도 자동 연동 허용", value=False)
         st.info("💡 팁: 본 시스템은 사용자 요청에 따라 모든 종목에 대해 '손실 -3% 시 손절', '수익 +25% 시 익절' 알고리즘이 기본 탑재되어 동작합니다.")
+        
+        if not kr_open and live_trade_allowed:
+            st.error("🚨 현재 한국 정규장이 아니므로, KOSPI 종목 자동매매 연동(LIVE) 매수가 차단됩니다.")
+            live_trade_allowed = False
+            
         semi_tickers = get_kospi_top_200() # 코스피 1위~200위 스캔
         
         # 실제 데이터 기반 필터링 루프
