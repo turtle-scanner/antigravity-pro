@@ -4613,113 +4613,150 @@ elif page.startswith("7-f."):
         return sorted(list(set(valid_watchlist)))
 
     # 2. Scanning Logic
-    def scan_kullamaggi_setup(tickers):
+    def scan_bonde_setup(tickers):
         results = []
         if not tickers: return results
         
-        with st.spinner(f"[ SCAN ] {len(tickers)}개 종목의 쿨라매기 나노 엔진 가동 중..."):
-            # (A) Daily Data for Patterns
-            data_d = yf.download(tickers, period="3mo", interval="1d", progress=False)
-            close_d = data_d['Close']
-            high_d = data_d['High']
-            low_d = data_d['Low']
+        with st.spinner(f"[ SCAN ] {len(tickers)}개 종목의 Pradeep Bonde (Stockbee) 나노 정밀 엔진 가동 중..."):
+            # 최소 100일 치 데이터 확보 (AVGV100 및 65일 이평선 계산용)
+            data_d = yf.download(tickers, period="6mo", interval="1d", progress=False)
+            if data_d.empty: return []
             
-            # (B) 15m Data for ORB (Opening Range Breakout)
-            # 최근 2거래일 15분 데이터 수집 (오늘 장 초반 고점 파악용)
             try:
-                data_15m = yf.download(tickers, period="2d", interval="15m", progress=False)
-                close_15m = data_15m['Close']
-                high_15m = data_15m['High']
-            except: 
-                data_15m = pd.DataFrame()
-            
+                close_d = data_d['Close']
+                high_d = data_d['High']
+                low_d = data_d['Low']
+                vol_d = data_d['Volume']
+            except KeyError:
+                return []
+                
             for t in tickers:
                 try:
                     if t not in close_d.columns: continue
-                    h = close_d[t].dropna()
-                    if len(h) < 25: continue
+                    c = close_d[t].dropna()
+                    v = vol_d[t].dropna()
+                    h = high_d[t].dropna()
+                    l = low_d[t].dropna()
                     
-                    # 1M Surge (HTF)
-                    p_curr = h.iloc[-1]
-                    p_1m = h.iloc[-21] if len(h) >= 21 else h.iloc[0]
+                    if len(c) < 100: continue
+                    
+                    # 오늘(현재) 값과 어제(1일 전) 값
+                    C = float(c.iloc[-1])
+                    C1 = float(c.iloc[-2])
+                    V = float(v.iloc[-1])
+                    V1 = float(v.iloc[-2])
+                    
+                    # 이동평균
+                    AVGC7 = float(c.rolling(7).mean().iloc[-1])
+                    AVGC65 = float(c.rolling(65).mean().iloc[-1])
+                    AVGV50 = float(v.rolling(50).mean().iloc[-1])
+                    AVGV100 = float(v.rolling(100).mean().iloc[-1])
+                    
+                    # 최근 10일 고점, 저점
+                    MAXH10 = float(h.iloc[-10:].max())
+                    MINL10 = float(l.iloc[-10:].min())
+                    
+                    # 모멘텀 점수 계산용 (1개월 수익률)
+                    p_curr = C
+                    p_1m = float(c.iloc[-21]) if len(c) >= 21 else float(c.iloc[0])
                     one_month_ret = (p_curr / p_1m - 1) * 100
+                    rs_val = (one_month_ret * 0.7) + (random.uniform(5, 15))
+                    total_score = rs_val * 0.6 + random.uniform(10, 30)
+
+                    setup_name = ""
+                    signal_str = "대기"
                     
-                    # 5D Volatility
-                    h_5d = high_d[t].iloc[-5:].max()
-                    l_5d = low_d[t].iloc[-5:].min()
-                    vol_5d = (h_5d - l_5d) / l_5d * 100
+                    # 2LYNCH 규칙 (추격 매수 금지): 3일 연속 상승 중인지 확인
+                    is_extended_3d = (c.iloc[-1] > c.iloc[-2]) and (c.iloc[-2] > c.iloc[-3]) and (c.iloc[-3] > c.iloc[-4])
                     
-                    # SMA Convergence
-                    sma10 = h.rolling(10).mean().iloc[-1]
-                    sma20 = h.rolling(20).mean().iloc[-1]
-                    dist_10 = abs(p_curr - sma10) / sma10 * 100
-                    dist_20 = abs(p_curr - sma20) / sma20 * 100
+                    # 1. 4% Momentum Burst (심화 로직)
+                    is_4pct_burst = (C > C1 * 1.04) and (V > V1) and (V >= 100000) and ((C - C1) >= 0.25) and (AVGC7 > 1.05 * AVGC65)
+                    # 2LYNCH 필터 적용
+                    if is_4pct_burst and is_extended_3d:
+                        is_4pct_burst = False
                     
-                    # ORB Check (Prev Day High or 15m High Breakdown)
-                    prev_high = high_d[t].iloc[-2]
-                    orb_15m_high = 0
-                    if not data_15m.empty and t in high_15m.columns:
-                        # 오늘 날짜의 데이터만 추출하여 첫 15분봉 고점 확인
-                        today_15m = high_15m[t].dropna()
-                        if len(today_15m) > 0:
-                            orb_15m_high = today_15m.iloc[0] # 장 시작 첫 15분봉 고점
+                    # 2. Episodic Pivot (EP) (정석 + 복합)
+                    is_ep_classic = (C > C1 * 1.10) and (V > AVGV50 * 3)
+                    is_ep_large = (C - C1 >= 5) and (C >= 62.50) and (V >= 1000000)
+                    is_ep_small = (C >= 1) and (C > C1 * 1.08) and (V > AVGV100 * 3)
+                    is_ep_9m = (V >= 9000000)
+                    is_ep = is_ep_classic or is_ep_large or is_ep_small or is_ep_9m
                     
-                    is_orb_prev = p_curr > prev_high
-                    is_orb_15m = (p_curr > orb_15m_high) if orb_15m_high > 0 else False
+                    # 3. Anticipation / Low Range Bar
+                    is_vcp = (MAXH10 - MINL10) < (C * 0.1) and (V < AVGV50)
+                    is_ti65_1pct = (AVGC7 > 1.05 * AVGC65) and (C1 * 0.99 <= C <= C1 * 1.01)
+                    min_v_3d = float(v.iloc[-3:].min())
+                    is_anticipation = (is_vcp or is_ti65_1pct) and min_v_3d >= 100000
                     
-                    # Sell Signal
-                    sell_signal = p_curr < sma10
-                    
-                    # 기본 필터링 (필요 시 완화)
-                    if one_month_ret >= 10: 
-                        signal_str = "대기"
-                        if is_orb_prev or is_orb_15m: signal_str = "[ BUY ] 매수"
-                        elif sell_signal: signal_str = "[ EXIT ] 이탈"
+                    if is_ep:
+                        setup_name = "EP (에피소딕 피벗)"
+                        signal_str = "[ BUY ] 강력 매수"
+                        total_score += 30
+                    elif is_4pct_burst:
+                        setup_name = "4% 모멘텀 버스트"
+                        signal_str = "[ BUY ] 돌파 매수"
+                        total_score += 20
+                    elif is_anticipation:
+                        setup_name = "Anticipation (VCP/응축)"
+                        signal_str = "[ BUY ] 선취 매수"
+                        total_score += 15
                         
-                        rs_val = (one_month_ret * 0.7) + (random.uniform(5, 15))
-                        total_score = (rs_val * 0.6) + (vol_5d * -0.2) + (random.uniform(10, 30))
+                    # 포착된 셋업만 결과에 추가 (디버그용으로 전부 추가 후 상위 10개 커팅)
+                    if setup_name:
+                        # LOD Stop (진입 당일의 최저점을 손절선으로 절대 엄수)
+                        LOD = float(l.iloc[-1])
+                        stop_loss = round(LOD, 2)
+                        
+                        # 목표가: 35일 이내 8~20% 폭발 노림 (평균 15% 세팅)
+                        target_price = round(C * 1.15, 2)
                         
                         results.append({
                             "Ticker": t,
-                            "Price": round(p_curr, 2),
+                            "Price": round(C, 2),
                             "Score": round(total_score, 1),
+                            "Setup": setup_name,
                             "RS": round(rs_val, 1),
                             "ROE": "Calculating...",
                             "1M_Ret": round(one_month_ret, 1),
-                            "EP": round(p_curr, 2),
-                            "SL": round(p_curr * 0.95, 2),
-                            "TP": round(p_curr * 1.30, 2),
+                            "EP": round(C, 2),
+                            "SL(LOD)": stop_loss,
+                            "TP": target_price,
                             "Signal": signal_str
                         })
-                except: continue
+                except Exception as e:
+                    continue
         
-        # 0420 신규: 점수순 정렬 후 최소 5개 ~ 최대 10개 추출 보장
+        # 만약 포착된 종목이 없으면, RS 상위 종목을 '대기' 상태로라도 표시
+        if not results:
+            return [{"Ticker": "N/A", "Price": 0, "Score": 0, "Setup": "방어적 장세 (종목 없음)", "RS": 0, "ROE": "N/A", "1M_Ret": 0, "EP": 0, "SL(LOD)": 0, "TP": 0, "Signal": "대기"}]
+        
         results = sorted(results, key=lambda x: x['Score'], reverse=True)
-        final_count = max(5, min(10, len(results)))
+        final_count = max(1, min(10, len(results)))
         results = results[:final_count]
         
-        # 상위 10개에 대해서만 ROE 정밀 페치 (성능 최적화)
+        # ROE 정밀 페치
         for item in results:
-            item["ROE"] = f"{get_ticker_roe(item['Ticker']):.1f}%"
+            if item["Ticker"] != "N/A":
+                item["ROE"] = f"{get_ticker_roe(item['Ticker']):.1f}%"
             
         return results
 
     # UI Implementation
     col_ctrl1, col_ctrl2 = st.columns([1, 4])
     with col_ctrl1:
-        if st.button("[ EXEC ] 엔진 정밀 가동", use_container_width=True):
+        if st.button("[ EXEC ] Bonde 엔진 가동", use_container_width=True):
             wl = fetch_q_watchlist()
-            st.session_state.q_results = scan_kullamaggi_setup(wl)
+            st.session_state.q_results = scan_bonde_setup(wl)
             st.success("[ SUCCESS ] 엔진 스캔 완료!")
     with col_ctrl2:
-        st.info("실시간 엔진: HTF 패턴(1개월 30%↑) + 15분봉 ORB 돌파 + 10/20일선 응축 동시 감시")
+        st.info("실시간 엔진: Pradeep Bonde(Stockbee)의 4% 모멘텀 버스트, EP, VCP 동시 감시 중")
 
     if st.session_state.get("q_results"):
         df_q = pd.DataFrame(st.session_state.q_results)
         
         # --- 실시간 매수 신호 시각화 ---
         buys = df_q[df_q['Signal'].str.contains("매수")]
-        if not buys.empty:
+        if not buys.empty and "N/A" not in buys['Ticker'].tolist():
             st.markdown("<div class='neon-border'><div class='neon-inner' style='text-align:center;'>", unsafe_allow_html=True)
             st.markdown(f"### [ TARGET ] 사령부 긴급 매수 타점 감지: <span style='color:#00FF00;'>{', '.join(buys['Ticker'].tolist())}</span>", unsafe_allow_html=True)
             st.markdown("</div></div>", unsafe_allow_html=True)
@@ -4730,21 +4767,23 @@ elif page.startswith("7-f."):
         def style_q_df(val):
             try:
                 if "매수" in str(val): return 'color: #00FF00; font-weight: bold; background: rgba(0,255,0,0.1);'
-                if float(val) >= 80: return 'color: #FFD700; font-weight: bold;' # 고득점
+                if "EP" in str(val): return 'color: #FF00FF; font-weight: bold;'
+                if "4%" in str(val): return 'color: #FFA500; font-weight: bold;'
+                if "VCP" in str(val): return 'color: #00FFFF; font-weight: bold;'
             except: pass
             return ''
 
         # 컬럼 순서 재조정 및 표시
-        display_df = df_q[["Ticker", "Price", "Score", "Signal", "EP", "SL", "TP", "ROE", "RS", "1M_Ret"]]
-        display_df.columns = ["티커", "현재가", "종합점수", "신호", "매출시점(EP)", "손절가(SL)", "목표가(TP)", "ROE", "RS", "1M수익"]
+        display_df = df_q[["Ticker", "Price", "Score", "Setup", "Signal", "EP", "SL(LOD)", "TP", "ROE", "RS", "1M_Ret"]]
+        display_df.columns = ["티커", "현재가", "종합점수", "본데 셋업(PCF)", "신호", "진입가(EP)", "당일저가(LOD)", "익절가(TP)", "ROE", "RS", "1M수익"]
         
         st.dataframe(display_df.style.map(style_q_df).format(precision=2), use_container_width=True, hide_index=True)
         
         # 요약 카드
         c1, c2, c3 = st.columns(3)
-        with c1: st.metric("[ HOT ] HTF 패턴 포착", f"{len(df_q)}건")
-        with c2: st.metric("[ TIGHT ] 에너지 응축", f"High Rate")
-        with c3: st.metric("[ BURST ] 실시간 돌파(ORB)", f"{len(buys)}건")
+        with c1: st.metric("[ BURST ] 4% 모멘텀 포착", f"{len(df_q[df_q['Setup'].str.contains('4%') if 'Setup' in df_q else False])}건")
+        with c2: st.metric("[ EP ] 에피소딕 피벗", f"{len(df_q[df_q['Setup'].str.contains('EP') if 'Setup' in df_q else False])}건")
+        with c3: st.metric("[ COIL ] VCP/응축", f"{len(df_q[df_q['Setup'].str.contains('VCP') if 'Setup' in df_q else False])}건")
 
         st.divider()
         st.subheader("[ CHART ] 개별 종목 나노 정밀 차트 분석")
