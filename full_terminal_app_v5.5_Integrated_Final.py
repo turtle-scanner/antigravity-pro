@@ -3735,23 +3735,80 @@ elif page.startswith("7-c."):
         else: st.info("엔진 가동을 눌러 실시간 주도주를 스캔하십시오.")
     
     st.divider()
-    st.subheader("📊 [ ACCOUNT ] 실시간 포지션 수익률 현황")
+    st.subheader("📊 [ REAL-TIME PORTFOLIO ] 실시간 전술 포지션 현황")
     trades = load_trades()
     active_trades = trades.get("auto", []) + trades.get("mock", [])
+    
     if active_trades:
         unique_tickers = list(set([t['ticker'] for t in active_trades]))
         try:
+            # 실시간 가격 일괄 조회
             data_batch = cached_yf_download(tuple(unique_tickers), period="1d")['Close']
             if isinstance(data_batch, pd.Series): data_batch = pd.DataFrame(data_batch).T
         except: data_batch = pd.DataFrame()
-        cols = st.columns(3)
-        for i, t_info in enumerate(active_trades[-6:]):
-            tic, t_name, buy_p = t_info['ticker'], TICKER_NAME_MAP.get(t_info['ticker'], t_info['ticker']), t_info['buy_price']
+        
+        for t_info in active_trades:
+            tic = t_info['ticker']
+            t_name = TICKER_NAME_MAP.get(tic, tic)
+            buy_p = t_info['buy_price']
+            qty = t_info.get('amount', 0)
+            
+            # 실시간 데이터 계산
             curr_p = float(data_batch[tic].iloc[-1]) if tic in data_batch.columns else buy_p
             roi = ((curr_p / buy_p) - 1) * 100
-            with cols[i % 3]:
-                st.markdown(f"<div style='background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border-left: 4px solid {'#00FF00' if roi >= 0 else '#FF4B4B'};'><div style='font-size: 0.8rem; color: #AAA;'>{tic}</div><div style='font-weight: bold;'>{t_name}</div><div style='font-size: 1.1rem; color: {'#00FF00' if roi >= 0 else '#FF4B4B'};'>{roi:+.2f}%</div></div>", unsafe_allow_html=True)
-    else: st.info("현재 보유 중인 포지션이 없습니다.")
+            diff_val = (curr_p - buy_p) * qty
+            is_kr = t_info.get("is_kr", True)
+            
+            unit = "원" if is_kr else "$"
+            fmt_p = ":,.0f" if is_kr else ":,.2f"
+            profit_txt = f"{diff_val:+,.0f}원" if is_kr else f"${diff_val:+,.2f}"
+            
+            # --- 이미지와 동일한 프리미엄 레이아웃 렌더링 ---
+            with st.container():
+                st.markdown(f"""
+                <div style='background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 15px; margin-bottom: 10px;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <div style='flex: 1;'>
+                            <b style='color: #00FF00; font-size: 1.1rem;'>{tic}</b>
+                            <span style='color: #888; font-size: 0.85rem; margin-left: 10px;'>{t_name}</span>
+                        </div>
+                        <div style='flex: 1; text-align: center; font-family: "Orbitron";'>
+                            <b style='font-size: 1rem;'>{qty}주</b>
+                        </div>
+                        <div style='flex: 1; text-align: center;'>
+                            <span style='color: #CCC;'>{unit}{curr_p:{fmt_p.split(':')[-1]}}</span>
+                        </div>
+                        <div style='flex: 2; text-align: right;'>
+                            <b style='color: {"#FF4B4B" if roi >= 0 else "#0088FF"}; font-size: 1.1rem;'>
+                                {profit_txt} ({roi:+.2f}%)
+                            </b>
+                        </div>
+                        <div style='flex: 1; text-align: right; margin-left: 20px;'>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 매도 버튼은 Streamlit 고유 버튼으로 배치 (기능 연동을 위해)
+                btn_col1, btn_col2 = st.columns([5, 1])
+                if btn_col2.button(f"[ SELL ] 매도", key=f"sell_7c_{tic}_{t_info['id']}", use_container_width=True):
+                    if st.session_state.get("live_toggle_v6_pro"):
+                        with st.spinner(f"{tic} 기계적 탈출 집행 중..."):
+                            success = execute_kis_market_order(tic, qty, is_buy=False)
+                            if success:
+                                st.success(f"{tic} 전량 매도 완료.")
+                                # 잔고 업데이트 로직 (간소화)
+                                active_trades.remove(t_info)
+                                trades["auto"] = [t for t in trades["auto"] if t['id'] != t_info['id']]
+                                save_trades(trades)
+                                st.rerun()
+                    else:
+                        st.info(f"🛡️ [SIMULATION] {tic} 가상 매도가 완료되었습니다.")
+                        trades["auto"] = [t for t in trades["auto"] if t['id'] != t_info['id']]
+                        save_trades(trades)
+                        st.rerun()
+    else:
+        st.info("현재 사령부 관제하에 있는 실전 포지션이 없습니다.")
 
 elif page.startswith("7-d."):
     st.header("[ REPORT ] 자동투자 성적표 (Performance Report)")
