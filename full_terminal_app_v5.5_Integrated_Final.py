@@ -607,70 +607,90 @@ def analyze_stockbee_setup(ticker, hist_df=None):
         
         # [ PREPARE DATA ] 기초 데이터 계산
         df = hist.copy()
-        df['C1'] = df['Close'].shift(1) # 전일 종가
-        df['C2'] = df['Close'].shift(2) # 2일 전 종가
-        df['V1'] = df['Volume'].shift(1) # 전일 거래량
+        df['C1'] = df['Close'].shift(1)
+        df['C2'] = df['Close'].shift(2)
+        df['V1'] = df['Volume'].shift(1)
         
         df['Close_Pct_Change'] = (df['Close'] / df['C1'] - 1) * 100
         df['Open_Pct_Gap'] = (df['Open'] / df['C1'] - 1) * 100
         
-        # 최근 20일 이내 900만주 이상 터진 날이 있는지 확인 (오늘 제외)
+        # 1. ADR (Average Daily Range) - 최근 20일 평균 변동폭 (%)
+        # 본데는 ADR 4~5% 이상의 활발한 종목을 선호함
+        df['Day_Range'] = (df['High'] / df['Low'] - 1) * 100
+        adr_20 = round(df['Day_Range'].rolling(20).mean().iloc[-1], 2)
+        
+        # 2. VCP Tightness (3일 변동성 수렴도)
+        df['Tightness'] = (df['High'] - df['Low']).rolling(3).mean() / df['Close'] * 100
+        tight_score = round(df['Tightness'].iloc[-1], 2)
+        
+        # 3. Market Regime Check (시장 환경 필터)
+        # 지수가 10일 이평선 위에 있는지 확인하여 하락장 매매 방지
+        market_ticker = "^IXIC" if not is_kr else "^KS11"
+        try:
+            m_hist = yf.download(market_ticker, period="20d", progress=False)
+            m_close = m_hist['Close'].iloc[-1]
+            m_sma10 = m_hist['Close'].rolling(10).mean().iloc[-1]
+            market_regime = "BULL" if m_close > m_sma10 else "BEAR"
+        except: market_regime = "BULL" # 데이터 오류 시 보수적으로 통과
+        
+        # 최근 20일 이내 9M EP 이벤트
         df['Is_9M_Event'] = (df['Volume'] >= 9000000) & (df['Close_Pct_Change'] >= 4.0)
         df['Recent_9M_Event'] = df['Is_9M_Event'].shift(1).rolling(window=20, min_periods=1).max()
         
         # 현재 값 추출
         row = df.iloc[-1]
-        c = row['Close']
-        o = row['Open']
-        v = row['Volume']
-        p_c = row['C1']
-        p_c2 = row['C2']
-        p_v = row['V1']
-        day_pct = row['Close_Pct_Change']
-        gap_pct = row['Open_Pct_Gap']
+        c, o, v = row['Close'], row['Open'], row['Volume']
+        p_c, p_c2, p_v = row['C1'], row['C2'], row['V1']
+        day_pct, gap_pct = row['Close_Pct_Change'], row['Open_Pct_Gap']
         recent_9m = row['Recent_9M_Event']
         
         setups = []
         
-        # 1. 9 Million EP (가장 추천)
+        # [ REFINEMENT ] ADR 필터링 (너무 느린 종목 제외)
+        if adr_20 < 3.0: 
+            return {"status": "REJECT", "stage": "ADR_FILTER", "reason": f"낮은 변동성 (ADR: {adr_20}%)"}
+
+        # 1. 9 Million EP
         min_p = 3000 if is_kr else 3.0
         if v >= 9000000 and (day_pct >= 4.0 or gap_pct >= 4.0) and c >= min_p:
             setups.append("9 Million EP")
             
         # 2. Story-based EP
-        story_list = get_bonde_top_50() # 본데 TOP 50 리스트를 스토리 리스트로 활용
+        story_list = get_bonde_top_50()
         if ticker in story_list:
             if v >= 2000000 and gap_pct >= 4.0:
                 setups.append("Story-based EP")
                 
         # 3. Delayed Reaction EP
-        # Red-to-Green: 시가는 전일 종가보다 낮게 출발했으나, 장중 상승하여 양전
         cond_r2g = (o < p_c) and (c > p_c) and (c > o)
-        # 2차 돌파: 4% 이상의 돌파 & 거래량 증가
         cond_sec_brk = (day_pct >= 4.0) and (v > p_v)
         if recent_9m == 1.0 and (cond_r2g or cond_sec_brk):
             setups.append("Delayed Reaction EP")
             
-        # 4. 4% Momentum Burst (단기 스윙)
-        # 전일 주가 변동폭 2% 이내 (Tightness)
-        cond_tight_yesterday = abs(p_c / p_c2 - 1) * 100 <= 2.0
+        # 4. 4% Momentum Burst (Tightness 강화)
+        # 전일 2% 이내 응축 + 마켓 레짐이 BULL일 때 더 신뢰도 높음
+        cond_tight_yesterday = abs(p_c / p_c2 - 1) * 100 <= 2.5
         if day_pct >= 4.0 and v >= 100000 and v > p_v and cond_tight_yesterday:
             setups.append("4% Momentum Burst")
 
         if not setups:
             return {"status": "PASS", "stage": "SCAN", "reason": "조건 미충족", "close": c}
 
-        # RS Score 및 TI65 계산
+        # [ REFINEMENT ] 시장 하락장에서의 돌파는 50% 확률로 실패하므로 경고 또는 차단
+        if market_regime == "BEAR":
+            return {"status": "REJECT", "stage": "MARKET_FILTER", "reason": "시장 하락장(지수 SMA10 하향)"}
+
+        # RS Score 및 TI65
         rs = round(((c / df['Close'].iloc[-126]) * 0.7 + (c / df['Close'].iloc[-63]) * 0.3) * 100, 1) if len(df) >= 126 else 50
-        sma50 = df['Close'].rolling(50).mean().iloc[-1] if len(df) >= 50 else c
         sma65 = df['Close'].rolling(65).mean().iloc[-1] if len(df) >= 65 else c
         
         return {
             "status": "SUCCESS", "stage": "EXECUTION", "ticker": ticker, "close": c, 
             "rs": rs, "day_pct": round(day_pct, 2), "reason": f"🚀 {setups[0]} 포착!",
             "setups": setups, "lod": round(df['Low'].iloc[-1], 2), "pct": round(day_pct, 2), 
-            "ti65": round(c / sma65, 3) # 본데의 TI65 (65일선 대비 주가 비율)
+            "ti65": round(c / sma65, 3), "adr": adr_20, "tight": tight_score, "market": market_regime
         }
+
     except Exception as e:
         return {"status": "ERROR", "stage": "ERROR", "reason": str(e)}
 
