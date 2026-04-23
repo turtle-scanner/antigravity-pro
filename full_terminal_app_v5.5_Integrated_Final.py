@@ -628,8 +628,12 @@ def analyze_stockbee_setup(ticker, hist_df=None):
         high_52w = hist['High'].max()
         dist_from_high = (latest_close / high_52w - 1) * 100
         
+        # 공통 지표 계산 (정렬용)
+        day_pct = round(((latest_close / hist['Close'].iloc[-2]) - 1) * 100, 2)
+        last_3d_range = round((hist['High'].iloc[-3:].max() - hist['Low'].iloc[-3:].min()) / hist['Low'].iloc[-3:].min() * 100, 2)
+
         if rs_score < 30 or dist_from_high < -25:
-            return {"status": "PASS", "stage": "UNIVERSE", "ticker": ticker, "close": latest_close, "rs": rs_score, "reason": "기본 유니버스 충족"}
+            return {"status": "PASS", "stage": "UNIVERSE", "ticker": ticker, "close": latest_close, "rs": rs_score, "day_pct": day_pct, "range_3d": last_3d_range, "reason": "기본 유니버스 충족"}
 
         # --- [ STEP 3. EXECUTION (VCP & PIVOT) ] ---
         prev_high = hist['High'].iloc[-2] # 전일 고점
@@ -639,20 +643,19 @@ def analyze_stockbee_setup(ticker, hist_df=None):
         recent_5d = hist.iloc[-5:]
         ep_detected = any((recent_5d['Close'].iloc[i]/hist['Close'].iloc[-(5-i+1)]-1)*100 >= 4.0 and (recent_5d['Volume'].iloc[i]/vol_avg_20) >= 3.0 for i in range(5))
         
-        last_3d_range = (hist['High'].iloc[-3:].max() - hist['Low'].iloc[-3:].min()) / hist['Low'].iloc[-3:].min() * 100
-        is_tight = last_3d_range < 5.0
-        
-        if not (ep_detected and is_tight):
-            return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "reason": "핵심 타겟 확보 (응축 부족)"}
+        if not (ep_detected and last_3d_range < 5.0):
+            return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "day_pct": day_pct, "range_3d": last_3d_range, "reason": "핵심 타겟 확보 (응축 부족)"}
 
         # 피벗 포인트 돌파 최종 확인
         if not is_pivot_break:
-             return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "reason": f"응축 완료, 피벗 대기 (전일고점:{prev_high:,.0f})"}
+             return {"status": "PASS", "stage": "RS_TARGET", "ticker": ticker, "close": latest_close, "rs": rs_score, "day_pct": day_pct, "range_3d": last_3d_range, "reason": f"응축 완료, 피벗 대기"}
 
         # [ SUCCESS ] 실행 범위 진입 (피벗 돌파 성공)
         return {
             "status": "SUCCESS", "stage": "EXECUTION", "ticker": ticker, "close": latest_close, 
-            "rs": round(rs_score, 1), "reason": f"🔥 피벗 돌파! (RS:{rs_score:.1f}, 고점:{prev_high:,.0f} 돌파)",
+            "rs": round(rs_score, 1), "day_pct": round(((latest_close/hist['Close'].iloc[-2])-1)*100, 2),
+            "range_3d": round(last_3d_range, 2),
+            "reason": f"🔥 피벗 돌파! (RS:{rs_score:.1f}, 고점:{prev_high:,.0f} 돌파)",
             "setups": ["Pivot Break", "VCP Tightness"]
         }
     except Exception as e:
@@ -3944,10 +3947,36 @@ elif page.startswith("7-c."):
             
             # 대시보드 갱신
             report_placeholder.markdown("\n".join(report_log))
+            
+            # --- [ BONDE TACTICAL GRID ] 실시간 전술 상황판 ---
+            st.markdown("---")
+            st.markdown("### 🏹 BONDE TACTICAL GRID (Stage Ranking)")
+            grid_col1, grid_col2, grid_col3 = st.columns(3)
+            
+            with grid_col1:
+                st.markdown("<div style='background:rgba(255,75,75,0.1); padding:10px; border-radius:10px; border-top:3px solid #FF4B4B;'><h4 style='margin:0; color:#FF4B4B;'>⚡ EP (폭발)</h4></div>", unsafe_allow_html=True)
+                # 최근 5일 내 상승폭/거래량 상위
+                ep_candidates = sorted(scanned_pool, key=lambda x: x.get('day_pct', 0), reverse=True)[:5]
+                for res in ep_candidates:
+                    st.caption(f"🚀 {res['name']} ({res['ticker']})")
+            
+            with grid_col2:
+                st.markdown("<div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #FFD700;'><h4 style='margin:0; color:#FFD700;'>⏳ DR (지연반응)</h4></div>", unsafe_allow_html=True)
+                # EP 이후 횡보 중인 종목들
+                dr_candidates = [r for r in scanned_pool if r.get('stage') == 'RS_TARGET' and r.get('rs', 0) > 40][:5]
+                for res in dr_candidates:
+                    st.caption(f"⏳ {res['name']} ({res['ticker']})")
+
+            with grid_col3:
+                st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축)</h4></div>", unsafe_allow_html=True)
+                # 변동폭이 가장 좁은 종목들
+                tight_candidates = sorted([r for r in scanned_pool if r.get('range_3d')], key=lambda x: x.get('range_3d', 100))[:5]
+                for res in tight_candidates:
+                    st.caption(f"🎯 {res['name']} ({res['ticker']})")
+
             time.sleep(60) # 1분 간격으로 무한 반복
             if not st.session_state.scanning_active: break
-            # Streamlit의 한계로 인해 루프 내에서 UI를 완벽히 갱신하려면 rerun이 필요할 수 있으나, 
-            # while 문 내에서도 placeholder는 갱신됩니다.
+            st.rerun() # UI 전체 갱신을 위해 rerun 호출
 elif page.startswith("7-c."):
     st.title("🛰️ STOCKBEE PROCEDURAL ENGINE")
     st.markdown("""
