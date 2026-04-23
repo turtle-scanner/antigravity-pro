@@ -456,27 +456,110 @@ def get_kis_overseas_balance(token):
     return 0, []
 
 def execute_kis_market_order(ticker, qty, is_buy=True):
-    """시장가 주문 실행 엔진 (실제 연동 대비 구조)"""
-    print(f"LOG: KIS Order Execution - {ticker} / {qty} / {is_buy}")
-    return True
+    """시장가 주문 실행 엔진 (KIS API 연동)"""
+    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+    if not token: return False
+    
+    is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
+    base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+    
+    if is_kr:
+        url = f"{base_url}/uapi/domestic-stock/v1/trading/order-cash"
+        tr_id = ("VTTC0802U" if is_buy else "VTTC0801U") if KIS_MOCK_TRADING else ("TTTC0802U" if is_buy else "TTTC0801U")
+        body = {
+            "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
+            "PDNO": ticker.split('.')[0], "ORD_DVSN": "01", "ORD_QTY": str(qty), "ORD_UNPR": "0"
+        }
+    else:
+        url = f"{base_url}/uapi/overseas-stock/v1/trading/order"
+        tr_id = ("VTTW0801U" if is_buy else "VTTW0802U") if KIS_MOCK_TRADING else ("TTTW0801U" if is_buy else "TTTW0802U")
+        body = {
+            "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
+            "OVRS_EXCG_CD": "NASD" if ticker.isalpha() else "NYSE", # 간소화된 시장 판별
+            "PDNO": ticker, "ORD_QTY": str(qty), "ORD_OVRS_P deliverance": "0", "ORD_DVSN": "00"
+        }
 
-# --- [ SCANNER HELPERS ] ---
+    headers = {
+        "Content-Type": "application/json", "authorization": f"Bearer {token}",
+        "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": tr_id
+    }
+    try:
+        res = requests.post(url, headers=headers, json=body, timeout=7)
+        return res.status_code == 200
+    except: return False
+
+# --- [ SCANNER HELPERS: STOCKBEE STRICT EDITION ] ---
+@st.cache_data(ttl=3600)
+def get_bonde_top_50():
+    """프라딥 본데 50 종목 구글 시트 연동"""
+    url = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
+    try:
+        df = pd.read_csv(url)
+        tickers = df.iloc[:50, 0].dropna().unique().tolist()
+        return [str(t).strip().upper() for t in tickers if len(str(t)) < 6]
+    except:
+        return ["NVDA", "TSLA", "AAPL", "MSFT", "PLTR", "SMCI", "AMD", "META", "GOOGL", "AVGO"]
+
+def analyze_stockbee_setup(ticker):
+    """
+    본데(Stockbee) 실전 스캐너: TI65, 4% Burst, Classic EP, 9M EP 정밀 판독
+    """
+    try:
+        end_date = datetime.today()
+        start_date = end_date - timedelta(days=100)
+        df = yf.download(ticker, start=start_date, end=end_date, progress=False)
+        if len(df) < 65: return None
+        
+        # 지표 계산
+        df['C1'] = df['Close'].shift(1)
+        df['V1'] = df['Volume'].shift(1)
+        df['Pct_Change'] = ((df['Close'] - df['C1']) / df['C1']) * 100
+        df['SMA_7'] = df['Close'].rolling(window=7).mean()
+        df['SMA_65'] = df['Close'].rolling(window=65).mean()
+        df['TI65'] = df['SMA_7'] / df['SMA_65']
+        df['AvgV_50'] = df['Volume'].rolling(window=50).mean()
+        
+        latest = df.iloc[-1]
+        prev_3d = df.iloc[-4:-1]
+        
+        # [ RULE ] AVOID_BAGHOLDER: 3일 연속 상승 종목 제외
+        is_3d_up = all(prev_3d['Pct_Change'] > 0)
+        if is_3d_up: return "AVOID_BAGHOLDER"
+        
+        setups = []
+        # 1. 4% 모멘텀 버스트
+        if (latest['Pct_Change'] >= 4.0) and (latest['Volume'] > latest['V1']) and (latest['TI65'] >= 1.05):
+            setups.append("4% Momentum Burst")
+        
+        # 2. 클래식 EP
+        if (latest['Pct_Change'] >= 10.0) and (latest['Volume'] >= 3 * latest['AvgV_50']):
+            setups.append("Classic EP")
+            
+        # 3. 9 Million EP
+        if (latest['Volume'] >= 9000000):
+            setups.append("9 Million EP")
+            
+        if setups:
+            return {
+                "setups": setups,
+                "ti65": round(latest['TI65'], 3),
+                "lod": round(latest['Low'], 2),
+                "pct": round(latest['Pct_Change'], 2),
+                "close": round(latest['Close'], 2)
+            }
+    except: pass
+    return None
+
 @st.cache_data(ttl=3600)
 def get_kospi_top_200():
-    """KOSPI 200 주요 종목 리스트 반환 (Mock: 실제론 라이브러리나 크롤링 연동)"""
     return ["005930.KS", "000660.KS", "196170.KQ", "042700.KS", "105560.KS", "055550.KS", "005490.KS", "000270.KS", "066570.KS", "035720.KS"]
 
 def get_rs_score(ticker):
-    """상대강도(RS) 점수 산출"""
     try:
         h = yf.Ticker(ticker).history(period="6mo")
         if len(h) < 20: return 50
         return int((h['Close'].iloc[-1] / h['Close'].iloc[0]) * 100)
     except: return 50
-
-def get_ml_pattern_score(ticker):
-    """머신러닝 기반 패턴 점수 (Mock)"""
-    return random.randint(40, 95)
 
 # --- [ AI ] 사령부 AI 정예 요원 (NPC Operatives) 설정 ---
 AI_OPERATIVES = {
@@ -1242,11 +1325,8 @@ def fetch_macro_ticker_tape():
                     diff = curr - prev
                     pct = (diff / prev) * 100
                     
-                    # [ ACTION ] 한국 주식 색상 체계 적용 (상승: 빨강, 하락: 파랑 / 글로벌은 반대)
-                    if name in ["KOSPI", "KOSDAQ"]:
-                        color = "#FF4B4B" if diff >= 0 else "#0088FF"
-                    else:
-                        color = "#00FF00" if diff >= 0 else "#FF4B4B"
+                    # [ ACTION ] 한국식 색상 체계 (상승: 빨강, 하락: 파랑)
+                    color = "#FF4B4B" if diff >= 0 else "#0088FF"
                         
                     items.append(f"<span class='ticker-item' style='margin-right: 30px;'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
             except: continue
@@ -1361,9 +1441,9 @@ with st.container():
         val, pct, high, low = idx_info.get(name, [0.0, 0.0, 0.0, 0.0])
         with cols[i]:
             is_kr = name in ["KOSPI", "KOSDAQ"]
-            theme_color = "#FF4B4B" if is_kr else "#00FF00"
-            stat_color = theme_color if pct >= 0 else ("#0088FF" if is_kr else "#FF4B4B")
-            arrow = ("▲" if is_kr else "↑") if pct >= 0 else ("▼" if is_kr else "↓")
+            theme_color = "#FF4B4B" # 상승 (빨강)
+            stat_color = "#FF4B4B" if pct >= 0 else "#0088FF" # 상승: 빨강, 하락: 파랑
+            arrow = "▲" if pct >= 0 else "▼"
             
             # 시간 표시 결정
             time_str = now_us.strftime('%H:%M') if not is_kr else now_kr.strftime('%H:%M')
@@ -3488,15 +3568,75 @@ elif page.startswith("7-c."):
                 time.sleep(0.5)
                 st.write("3. [ 펀더멘털 ] ROE 15% 이상 우량 반도체 필터링...")
                 status.update(label="[ SUCCESS ] 요원 민수의 전략 스캔 완료!", state="complete")
-            semi_tickers = get_kospi_top_200()
-            sample_tickers = random.sample(semi_tickers, min(10, len(semi_tickers))) if semi_tickers else []
-            new_results = []
-            for t in sample_tickers:
-                rs = get_rs_score(t)
-                ml_score = get_ml_pattern_score(t)
-                if rs > 70 and ml_score > 60:
-                    new_results.append({"ticker": t, "name": TICKER_NAME_MAP.get(t, t), "rs": rs, "ml": ml_score})
+elif page.startswith("7-c."):
+    st.title("🛰️ STOCKBEE PROCEDURAL ENGINE")
+    st.markdown("""
+    <div class='glass-card' style='border-left: 5px solid #FFD700;'>
+        <h3 style='margin:0; color:#FFD700;'>프라딥 본데(Stockbee) 전술 사령부</h3>
+        <p style='font-size:0.95rem; line-height:1.6;'>
+            프라딥 본데의 철학을 정확히 꿰뚫어 보셨습니다. 그의 전략은 단순한 종목 리스트가 아니라, 
+            철저한 통계와 기계적인 손절(LOD), 그리고 절차적 기억(Procedural Memory)에 기반한 엄격한 비즈니스 프로세스입니다.
+            35일 내에 8~40%의 단기 수익을 챙기는 <b>모멘텀 버스트</b>와 <b>에피소딕 피벗(EP)</b>을 실전에서 포착합니다.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if "scanning_results" not in st.session_state: st.session_state.scanning_results = []
+    if "scanning_active" not in st.session_state: st.session_state.scanning_active = False
+
+    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+    real_total, real_cash, real_holdings = get_kis_balance(token)
+    over_total, over_holdings = get_kis_overseas_balance(token)
+    full_balance = real_total + over_total
+
+    status_color = "#00FF00" if st.session_state.scanning_active else "#FF4B4B"
+    st.markdown(f"""
+        <div class='glass-card' style='border-left: 5px solid {status_color};'>
+            <div style='display: flex; justify-content: space-between; align-items: center;'>
+                <div>
+                    <span style='color: #888; font-size: 0.8rem; font-family:"Orbitron";'>OPERATIONAL STATUS</span><br>
+                    <b style='color: {status_color}; font-size: 1.2rem;'>{"ENGINE ACTIVE" if st.session_state.scanning_active else "STANDBY"}</b>
+                </div>
+                <div style='text-align: right;'>
+                    <span style='color: #888; font-size: 0.8rem; font-family:"Orbitron";'>COMMANDER EQUITY</span><br>
+                    <b style='color: #FFD700; font-size: 1.2rem;'>{full_balance:,.0f} KRW</b>
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.subheader("[ SCAN ] Stockbee 기계적 스캔 (EP/VCP/TI65)")
+    col_btn1, col_btn2 = st.columns([1, 1])
+    with col_btn1:
+        if st.button("🔍 엔진 가동 (Procedural Scan)", use_container_width=True):
+            st.session_state.scanning_active = True
+            with st.status("본데(Stockbee) 절차적 스캐닝 가동 중...", expanded=True) as status:
+                st.write("> 구글 시트 및 KOSPI 상위 종목 리스트 로드...")
+                targets = get_bonde_top_50() + get_kospi_top_200()
+                random.shuffle(targets)
+                
+                new_results = []
+                for t in targets[:15]: # 정밀 분석을 위해 개수 제한
+                    st.write(f">> {t} 분석 중 (TI65 & Volume Catalyst)...")
+                    setup_data = analyze_stockbee_setup(t)
+                    
+                    if setup_data == "AVOID_BAGHOLDER":
+                        st.warning(f"⚠️ {t}: 3일 연속 상승으로 인한 추격 매수 금지 (AVOID_BAGHOLDER)")
+                        continue
+                        
+                    if setup_data:
+                        name = TICKER_NAME_MAP.get(t)
+                        if not name:
+                            try: name = yf.Ticker(t).info.get('shortName', t)
+                            except: name = t
+                        
+                        setup_data["ticker"] = t
+                        setup_data["name"] = name
+                        new_results.append(setup_data)
+                
+                status.update(label=f"[ SUCCESS ] {len(new_results)}개의 기계적 타점 포착!", state="complete")
             st.session_state.scanning_results = new_results
+
     with col_btn2:
         if st.button("🛑 중단", use_container_width=True):
             st.session_state.scanning_active = False
@@ -3506,16 +3646,39 @@ elif page.startswith("7-c."):
     if st.session_state.scanning_active:
         st.markdown("""<style>@keyframes blinker { 50% { opacity: 0; } } .live-blink { color: #FF0000; font-weight: 900; animation: blinker 1s linear infinite; border: 2px solid #FF0000; padding: 2px 8px; border-radius: 5px; margin-right: 10px; }</style>""", unsafe_allow_html=True)
         c1, c2 = st.columns([1, 4])
-        with c1: live_trade_allowed = st.toggle("⚡ LIVE", value=False, key="live_toggle_main_v999")
+        with c1: live_trade_allowed = st.toggle("⚡ LIVE", value=False, key="live_toggle_v6_pro")
         with c2:
-            if live_trade_allowed: st.markdown("<span class='live-blink'>LIVE ACTIVE</span> <b style='color:#FF0000;'>실전 계좌 매매 엔진이 활성화되었습니다.</b>", unsafe_allow_html=True)
-            else: st.write("🛡️ 현재 가상 시뮬레이션 모드입니다.")
+            if live_trade_allowed: st.markdown("<span class='live-blink'>LIVE ACTIVE</span> <b style='color:#FF0000;'>기계적 자동매매 엔진 가동 (LOD 스탑 적용)</b>", unsafe_allow_html=True)
+            else: st.info("🛡️ 시뮬레이션 모드 (절차적 기억 훈련 중)")
+
         if st.session_state.scanning_results:
-            st.markdown("#### 💎 발견된 최적 타점 종목 (PERSISTENT SCAN)")
+            st.markdown("#### 📊 [SCAN RESULTS] 본데 셋업 포착 (기계적 손절 필수)")
             for res in st.session_state.scanning_results:
                 t, t_name = res['ticker'], res['name']
-                with st.expander(f"🔥 {t_name} ({t}) - RS: {res['rs']} / ML: {res['ml']:.1f}%", expanded=True):
-                    st.write(f"요원 의견: '{t_name}' 종목이 전술적 임계치에 도달.")
+                with st.expander(f"🎯 {t_name} ({t}) | {', '.join(res['setups'])}", expanded=True):
+                    st.markdown(f"""
+                    <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border-left: 4px solid #FFD700;'>
+                        <p style='margin:0; font-size: 1.1rem; font-weight: 800;'>포착된 셋업: <span style='color:#FFD700;'>{', '.join(res['setups'])}</span></p>
+                        <div style='display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; font-size: 0.9rem;'>
+                            <span>현재가: <b>{res['close']}</b></span>
+                            <span>등락률: <b style='color:{"#FF4B4B" if res["pct"] >= 0 else "#0088FF"};'>{res['pct']}%</b></span>
+                            <span>TI65: <b style='color:#00FFFF;'>{res['ti65']}</b></span>
+                        </div>
+                        <p style='margin-top: 15px; color: #FF4B4B; font-weight: 900; font-size: 1rem;'>🚨 HARD STOP: 당일 최저점(LOD) {res['lod']} 이탈 시 무조건 손절</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    buy_col1, buy_col2 = st.columns([1, 1])
+                    qty = buy_col1.number_input("진입 수량", min_value=1, value=1, key=f"qty_pro_{t}")
+                    if buy_col2.button(f"[ EXECUTE ] {t_name} 진입", key=f"buy_pro_{t}", use_container_width=True):
+                        if live_trade_allowed:
+                            with st.spinner("본데 절차적 진입 명령 수행 중..."):
+                                success = execute_kis_market_order(t, qty, is_buy=True)
+                                if success:
+                                    st.success(f"[ SUCCESS ] {t_name} {qty}주 매수 완료. 즉시 {res['lod']}에 손절 예약을 설정하십시오!")
+                                    st.balloons()
+                                else: st.error("KIS API 통신 오류.")
+                        else: st.warning("LIVE 모드를 활성화하십시오.")
                     if st.button(f"[ BUY ] {t_name} 즉시 집행", key=f"buy_btn_{t}_v999"):
                         try:
                             curr_p = float(yf.Ticker(t).history(period="1d")['Close'].iloc[-1])
