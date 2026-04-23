@@ -3242,6 +3242,7 @@ elif page.startswith("5-b."):
             **반사 신경 강화:**  
             장중에 머리로 고민하지 않고 손이 먼저 반응하도록 무한 반복 훈련합니다.
             """)
+            
             if st.button("[ RUN ] 무작위 훈련 시작"):
                 st.toast("사령부 데이터베이스에서 무작위 폭등주 과거 차트를 추출합니다.")
             
@@ -3699,13 +3700,72 @@ elif page.startswith("7-c."):
     with col_btn1:
         if st.button("🔍 엔진 가동", use_container_width=True):
             st.session_state.scanning_active = True
-            with st.status("본데(Stockbee) 전술 타점 분석 중...", expanded=False) as status:
-                st.write("1. [ RS ] 글로벌 주도주 상대강도 랭킹 산출 중...")
-                time.sleep(0.5)
-                st.write("2. [ BONDE ] VCP(변동성 축소) 최종 단계 및 EP 감지...")
-                time.sleep(0.5)
-                st.write("3. [ ACTION ] 기계적 손절(LOD) 가이드라인 생성 중...")
-                status.update(label="[ SUCCESS ] 본데의 전략 자동매매 스캔 완료!", state="complete")
+            
+            # [ LIVE TACTICAL REPORT ] 실시간 전술 해설 판넬
+            st.markdown("---")
+            st.markdown("#### 📡 LIVE TACTICAL REPORT (Real-time Scanner Log)")
+            report_placeholder = st.empty()
+            report_log = []
+
+            with st.status("[ SCANNING ] 본데(Stockbee) 전술 타점 정밀 분석 및 자동 집행 중...", expanded=True) as status:
+                # 1. 대상 리스트 확보
+                targets = get_bonde_top_50()
+                new_results = []
+                
+                # [ PERFORMANCE ] 렉 방지를 위한 배치 다운로드
+                try:
+                    all_hist = yf.download(targets[:15], period="75d", progress=False)
+                except: all_hist = None
+                
+                for t in targets[:15]: 
+                    # 실시간 로그 업데이트 (최신순)
+                    current_msg = f"📡 {t} 분석 중..."
+                    report_log.insert(0, current_msg)
+                    report_placeholder.markdown("\n".join(report_log[:15]))
+                    
+                    # 배치 데이터에서 해당 종목만 추출
+                    t_hist = None
+                    if all_hist is not None:
+                        try:
+                            t_hist = pd.DataFrame({
+                                "Close": all_hist["Close"][t],
+                                "High": all_hist["High"][t],
+                                "Low": all_hist["Low"][t],
+                                "Volume": all_hist["Volume"][t]
+                            }).dropna()
+                        except: t_hist = None
+                    
+                    analysis = analyze_stockbee_setup(t, hist_df=t_hist)
+                    
+                    if analysis["status"] == "SUCCESS":
+                        name = TICKER_NAME_MAP.get(t, t)
+                        report_log[0] = f"✅ **{name}({t}) 포착!** - {analysis['reason']}"
+                        
+                        setup_data = analysis
+                        setup_data["name"] = name
+                        new_results.append(setup_data)
+                        
+                        # [ AUTO_EXECUTION ] 포착 즉시 실전 매수 집행
+                        if st.session_state.get("live_toggle_v6_pro"):
+                            st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
+                            if execute_kis_market_order(t, 10, is_buy=True):
+                                if st.session_state.combat_logs:
+                                    st.session_state.combat_logs[-1]["msg"] += f" (근거: {analysis['reason']})"
+                            else:
+                                # 매수 실패 시 사유를 리포트에 명시
+                                last_combat_log = st.session_state.combat_logs[-1]["msg"] if st.session_state.combat_logs else "사유 미상"
+                                report_log[0] += f" | ⚠️ **주문실패**: {last_combat_log}"
+                    
+                    elif analysis["status"] == "REJECT":
+                        report_log[0] = f"❌ {t} 탈락: {analysis['reason']}"
+                    else:
+                        report_log[0] = f"⚠️ {t} 오류: {analysis['reason']}"
+                    
+                    # 로그 화면 갱신
+                    report_placeholder.markdown("\n".join(report_log[:15]))
+                
+                status.update(label="[ SUCCESS ] 본데의 전략 자동매매 엔진 분석 및 자동 집행 완료!", state="complete")
+            st.session_state.scanning_results = new_results
 elif page.startswith("7-c."):
     st.title("🛰️ STOCKBEE PROCEDURAL ENGINE")
     st.markdown("""
