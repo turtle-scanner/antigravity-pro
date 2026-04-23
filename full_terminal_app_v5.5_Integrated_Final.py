@@ -1,6 +1,5 @@
 # 작업 일자: 2026-04-19 | 버전: v9.9 Platinum Full Restoration (Step 1: Base)
 import streamlit as st
-st.set_page_config(page_title="StockDragonfly Pro", page_icon="[ TERMINAL ]", layout="wide")
 import pandas as pd
 import yfinance as yf
 from datetime import datetime
@@ -19,350 +18,6 @@ import shutil
 import hashlib
 import threading
 import concurrent.futures
-try:
-    import FinanceDataReader as fdr
-except ImportError:
-    # Fallback if FinanceDataReader is not installed
-    class DummyFDR:
-        def StockListing(self, market):
-            return pd.DataFrame(columns=['Code', 'Name', 'Marcap'])
-    fdr = DummyFDR()
-
-def is_market_open(market="KR"):
-    kst = pytz.timezone('Asia/Seoul')
-    est = pytz.timezone('US/Eastern')
-    now_kst = datetime.now(kst)
-    now_est = datetime.now(est)
-    
-    if market == "KR":
-        if now_kst.weekday() >= 5: return False
-        m_open = now_kst.replace(hour=9, minute=0, second=0, microsecond=0)
-        m_close = now_kst.replace(hour=15, minute=30, second=0, microsecond=0)
-        return m_open <= now_kst <= m_close
-    elif market == "US":
-        if now_est.weekday() >= 5: return False
-        m_open = now_est.replace(hour=9, minute=30, second=0, microsecond=0)
-        m_close = now_est.replace(hour=16, minute=0, second=0, microsecond=0)
-        return m_open <= now_est <= m_close
-    return False
-
-@st.cache_data(ttl=3600)
-def get_kospi_top_200():
-    try:
-        df = fdr.StockListing('KOSPI')
-        df = df.sort_values('Marcap', ascending=False).head(200)
-        return [f"{str(code).zfill(6)}.KS" for code in df['Code']]
-    except Exception as e:
-        print(f"[ ERROR ] KOSPI 200 데이터 로드 실패: {e}")
-        return ["005930.KS", "000660.KS", "042700.KS"]
-
-@st.cache_data(ttl=900)
-def get_us_top_stocks():
-    url1 = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/export?format=csv&gid=1499398020"
-    watch_list = set()
-    try:
-        df1 = pd.read_csv(url1)
-        watch_list.update(df1.iloc[:, 0].dropna().head(50).tolist())
-        for col in range(min(10, len(df1.columns))):
-            watch_list.update(df1.iloc[:, col].dropna().tolist())
-    except: pass
-    valid = [str(t).upper().strip() for t in watch_list if isinstance(t, str) and 1 <= len(t.strip()) <= 10]
-    return sorted(list(set(valid))) if valid else ["NVDA", "AAPL", "TSLA"]
-
-@st.cache_data(ttl=600)
-def get_dynamic_ai_ranking():
-    kospi_list = get_kospi_top_200()
-    us_list = get_us_top_stocks()
-    now_str = datetime.now().strftime("%m/%d %H:%M")
-    
-    ai_configs = [
-        ("[ AI ] minsu", True), ("[ AI ] Olive", True), ("[ AI ] Pure", False),
-        ("[ AI ] Harmony", True), ("[ AI ] Mint Soft", False), ("[ AI ] Calm Blue12", False)
-    ]
-    
-    # [ OPTIMIZE ] 티커 먼저 선발 후 일괄 다운로드
-    ai_picks = []
-    for _, is_kr in ai_configs:
-        t_list = kospi_list if is_kr else us_list
-        ai_picks.append(random.choice(t_list) if t_list else ("005930.KS" if is_kr else "NVDA"))
-    
-    try:
-        # 모든 AI 티커 일괄 수집
-        all_data = yf.download(ai_picks, period="5d", progress=False)['Close']
-        # 티커가 하나인 경우 처리
-        if isinstance(all_data, pd.Series):
-            all_data = pd.DataFrame({ai_picks[0]: all_data})
-    except:
-        all_data = pd.DataFrame()
-
-    results = []
-    for i, (name, is_kr) in enumerate(ai_configs):
-        tick = ai_picks[i]
-        try:
-            p_data = all_data[tick].dropna() if tick in all_data.columns else pd.Series()
-            if len(p_data) >= 2:
-                entry = float(p_data.iloc[-2])
-                exit_p = float(p_data.iloc[-1])
-            else: entry = 100.0; exit_p = 105.0
-        except: entry = 100.0; exit_p = 105.0
-        
-        # NaN 방어
-        if np.isnan(entry) or np.isnan(exit_p): entry = 100.0; exit_p = 105.0
-
-        roi = ((exit_p / entry) - 1) * 100 if entry > 0 else 0
-        roi_str = f"+{roi:.1f}%" if roi > 0 else f"{roi:.1f}%"
-        base_bal = random.randint(20000000, 30000000)
-        bal = base_bal * (1 + roi/100)
-        
-        from datetime import timedelta
-        random_minutes = random.randint(1, 120)
-        individual_exit_time = (datetime.now() - timedelta(minutes=random_minutes)).strftime("%m/%d %H:%M")
-        
-        results.append({
-            "name": name, "pts": random.randint(500, 3000), "win": random.randint(60, 90),
-            "balance": bal, "pick": tick, "entry": entry, "exit_p": exit_p,
-            "roi": roi_str, "exit": individual_exit_time
-        })
-    
-    return sorted(results, key=lambda x: x["balance"], reverse=True)
-
-# [USER RULE: High Security] 민감한 정보는 환경 변수 또는 st.secrets로 처리하며 코드 내 노출하지 않습니다.
-fallback_secrets = {}
-try:
-    s_path = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml")
-    if os.path.exists(s_path):
-        with open(s_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    k = k.strip()
-                    v = v.split("#")[0].strip()
-                    if v.startswith('"') and v.endswith('"'): v = v[1:-1]
-                    elif v.startswith("'") and v.endswith("'"): v = v[1:-1]
-                    elif v.lower() == 'true': v = 'true'
-                    elif v.lower() == 'false': v = 'false'
-                    fallback_secrets[k] = v
-except Exception:
-    pass
-
-KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", os.environ.get("KIS_APP_KEY", fallback_secrets.get("KIS_APP_KEY", "")))
-KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", os.environ.get("KIS_APP_SECRET", fallback_secrets.get("KIS_APP_SECRET", "")))
-KIS_ACCOUNT = st.secrets.get("KIS_ACCOUNT", os.environ.get("KIS_ACCOUNT", fallback_secrets.get("KIS_ACCOUNT", "46289819-01")))
-KIS_MOCK_TRADING = str(st.secrets.get("KIS_MOCK_TRADING", os.environ.get("KIS_MOCK_TRADING", fallback_secrets.get("KIS_MOCK_TRADING", "False")))).lower() in ("true", "1", "t")
-
-# [ 최후의 보루 ] 사용자 제공 정보 직접 하드코딩
-if not KIS_APP_KEY:
-    KIS_APP_KEY = "PSwPjCXRoSuY1Uz59aDWYKpIPix7VgNB8QUX"
-if not KIS_APP_SECRET:
-    KIS_APP_SECRET = "4WF33M5pnD3Y3qskLfWAlwo0eFxpYIK+TdIXNVW9r+wSLAAF/WVxtqDIvNBDNakV28aFM9ZO+v8069JwBlYDpS1lBvoFf7j9dgSsPwjiwclbvyJ7nMYl5m62wH7VInWWtXgl/8hDnmihzDidKEIss87UdT42JANMvOrCSEF18e5SilJKRIA="
-if not KIS_ACCOUNT:
-    KIS_ACCOUNT = "46289819-01"
-
-def get_kis_access_token(app_key, app_secret, mock_trading):
-    """한국투자증권 API 토큰 발급 (로컬 파일 캐싱 적용으로 KIS 1분 호출 제한 완벽 우회)"""
-    if not app_key or not app_secret:
-        st.session_state["kis_error"] = f"API 키 또는 시크릿 오류. [KEY길이: {len(app_key) if app_key else 0}, SEC길이: {len(app_secret) if app_secret else 0}]"
-        return None
-        
-    token_file = os.path.join(os.path.dirname(__file__), "kis_token_cache.json")
-    
-    # 1. 파일에서 토큰 읽기 시도 (Streamlit 재시작에도 유지됨)
-    if os.path.exists(token_file):
-        try:
-            with open(token_file, "r") as f:
-                data = json.load(f)
-            # 유효기간(24시간) 중 23시간 이내면 기존 토큰 재사용
-            if time.time() - data.get("timestamp", 0) < 82800:
-                return data.get("token")
-        except:
-            pass
-
-    # 2. 파일에 없거나 만료된 경우 KIS 서버로 API 호출
-    try:
-        url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP" if not mock_trading else "https://openapivts.koreainvestment.com:29443/oauth2/tokenP"
-        headers = {"content-type": "application/json"}
-        body = {
-            "grant_type": "client_credentials",
-            "appkey": app_key,
-            "appsecret": app_secret
-        }
-        res = requests.post(url, headers=headers, json=body, timeout=5)
-        if res.status_code == 200:
-            token = res.json().get("access_token")
-            # 3. 발급받은 새 토큰을 파일에 영구 저장
-            try:
-                with open(token_file, "w") as f:
-                    json.dump({"token": token, "timestamp": time.time()}, f)
-            except:
-                pass
-            return token
-        else:
-            print(f"[ KIS API ERROR ] 토큰 발급 실패: {res.status_code} {res.text}")
-            
-            # 실패했는데 혹시 파일에 이전 토큰이 남아있다면 마지막 수단으로 그거라도 반환 시도
-            if os.path.exists(token_file):
-                try:
-                    with open(token_file, "r") as f:
-                        return json.load(f).get("token")
-                except: pass
-            st.session_state["kis_error"] = f"서버 거부 (상태: {res.status_code}) - {res.text}"
-            return None
-    except Exception as e:
-        st.session_state["kis_error"] = f"네트워크/파이썬 시스템 예외: {str(e)}"
-        print(f"[ KIS API ERROR ] 토큰 발급 중 예외 발생: {e}")
-        return None
-
-def get_kis_balance(token):
-    """실계좌 예수금 및 총 평가금액 실시간 연동 (자동 비중 조절용)"""
-    if not token or not KIS_ACCOUNT: return 10000000, 10000000, []
-    url_base = "https://openapi.koreainvestment.com:9443" if not KIS_MOCK_TRADING else "https://openapivts.koreainvestment.com:29443"
-    url = f"{url_base}/uapi/domestic-stock/v1/trading/inquire-balance"
-    acc_no = KIS_ACCOUNT.split('-') if '-' in KIS_ACCOUNT else (KIS_ACCOUNT[:8], KIS_ACCOUNT[8:])
-    if len(acc_no) != 2: return 10000000, 10000000, []
-    
-    headers = {
-        "content-type": "application/json", "authorization": f"Bearer {token}",
-        "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
-        "tr_id": "VTTC8434R" if KIS_MOCK_TRADING else "TTTC8434R"
-    }
-    params = {
-        "CANO": acc_no[0], "ACNT_PRDT_CD": acc_no[1], "AFHR_FLPR_YN": "N",
-        "OFL_YN": "", "INQR_DVSN": "02", "UNPR_DVSN": "01",
-        "FUND_STTL_ICLD_YN": "N", "FNCG_AMT_AUTO_RDPT_YN": "N",
-        "PRCS_DVSN": "00", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""
-    }
-    try:
-        res = requests.get(url, headers=headers, params=params, timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            out1 = data.get('output1', []) # 종목 리스트
-            out2 = data.get('output2', [{}])[0] # 총 요약
-            total_eval = float(out2.get('tot_evlu_amt', 0))
-            cash = float(out2.get('dnca_tot_amt', 0))
-            return total_eval, cash, out1
-    except: pass
-    return 10000000, 10000000, []
-
-def get_kis_overseas_balance(token):
-    """해외주식 실계좌 잔고 조회 (실전전용)"""
-    if KIS_MOCK_TRADING or not token or not KIS_ACCOUNT: return 0, []
-    url = "https://openapi.koreainvestment.com:9443/uapi/overseas-stock/v1/trading/inquire-balance"
-    acc_no = KIS_ACCOUNT.split('-') if '-' in KIS_ACCOUNT else (KIS_ACCOUNT[:8], KIS_ACCOUNT[8:])
-    
-    headers = {
-        "content-type": "application/json", "authorization": f"Bearer {token}",
-        "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
-        "tr_id": "JTTT8434R" # 해외주식 잔고조회
-    }
-    params = {
-        "CANO": acc_no[0], "ACNT_PRDT_CD": acc_no[1], "OVRS_EXCG_CD": "NASD", # 기본 나스닥
-        "TR_PBF_INTL_TP_CD": "02", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""
-    }
-    try:
-        res = requests.get(url, headers=headers, params=params, timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            return float(data.get('output2', {}).get('tot_evlu_pamt', 0)), data.get('output1', [])
-    except: pass
-    return 0, []
-
-def calculate_position_size(total_capital, risk_pct, entry_price, sl_price):
-    """[ RISK ] 1회 매매당 총 자본의 리스크%를 기준으로 매수 수량 자동 결정"""
-    if entry_price <= sl_price or entry_price <= 0: return 0
-    risk_per_share = entry_price - sl_price
-    max_loss_amount = total_capital * (risk_pct / 100.0)
-    return int(max(max_loss_amount / risk_per_share, 0))
-
-def execute_kis_market_order(ticker, amount, is_buy=True):
-    """한국투자증권 API 실전 시장가 주문 (주식)"""
-    if not KIS_APP_KEY or not KIS_APP_SECRET or not KIS_ACCOUNT: return False, "API 키/계좌 미설정"
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-    if not token: return False, "접근 토큰 발급 실패"
-    
-    url_base = "https://openapi.koreainvestment.com:9443" if not KIS_MOCK_TRADING else "https://openapivts.koreainvestment.com:29443"
-    url = f"{url_base}/uapi/domestic-stock/v1/trading/order-cash"
-    acc_no = KIS_ACCOUNT.split('-') if '-' in KIS_ACCOUNT else (KIS_ACCOUNT[:8], KIS_ACCOUNT[8:])
-    if len(acc_no) != 2: return False, "계좌번호 형식 오류"
-    
-    stock_code = ticker.replace(".KS", "").replace(".KQ", "")
-    headers = {
-        "content-type": "application/json", "authorization": f"Bearer {token}",
-        "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
-        "tr_id": ("VTTC0802U" if is_buy else "VTTC0801U") if KIS_MOCK_TRADING else ("TTTC0802U" if is_buy else "TTTC0801U")
-    }
-    body = {
-        "CANO": acc_no[0], "ACNT_PRDT_CD": acc_no[1], "PDNO": stock_code,
-        "ORD_DVSN": "01", "ORD_QTY": str(amount), "ORD_PRC": "0"
-    }
-    try:
-        res = requests.post(url, headers=headers, json=body, timeout=5)
-        if res.status_code == 200 and res.json().get("rt_cd") == "0":
-            # [ LOG ] 실전 매매 기록
-            msg = res.json().get("msg1", "주문 성공")
-            log_real_trade(ticker, TICKER_NAME_MAP.get(ticker, ticker), amount, 0, "BUY" if is_buy else "SELL", "KR")
-            return True, "주문 성공"
-        else: return False, f"주문 실패: {res.json().get('msg1')}"
-    except Exception as e: return False, f"API 오류: {e}"
-
-def execute_kis_overseas_order(ticker, amount, is_buy=True):
-    """한국투자증권 API 실전 시장가 주문 (해외/미국)"""
-    if KIS_MOCK_TRADING: return False, "실전 모드가 아닙니다."
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-    if not token: return False, "접근 토큰 발급 실패"
-    
-    url = "https://openapi.koreainvestment.com:9443/uapi/overseas-stock/v1/trading/order"
-    acc_no = KIS_ACCOUNT.split('-') if '-' in KIS_ACCOUNT else (KIS_ACCOUNT[:8], KIS_ACCOUNT[8:])
-    
-    headers = {
-        "content-type": "application/json", "authorization": f"Bearer {token}",
-        "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
-        "tr_id": "TTTT1002U" if is_buy else "TTTT1006U" # 미국 매수/매도
-    }
-    body = {
-        "CANO": acc_no[0], "ACNT_PRDT_CD": acc_no[1], "OVRS_EXCG_CD": "NASD",
-        "PDNO": ticker, "ORD_QTY": str(amount), "ORD_DVSN": "00", "ORD_SVR_DVSN_CD": "00"
-    }
-    try:
-        res = requests.post(url, headers=headers, json=body, timeout=5)
-        if res.status_code == 200 and res.json().get("rt_cd") == "0":
-            log_real_trade(ticker, TICKER_NAME_MAP.get(ticker, ticker), amount, 0, "BUY" if is_buy else "SELL", "US")
-            return True, "해외 주문 성공"
-        else: return False, f"해외 주문 실패: {res.json().get('msg1')}"
-    except Exception as e: return False, f"해외 API 오류: {e}"
-
-@st.cache_data(ttl=3600)
-def get_ml_pattern_score(ticker):
-    """[ UPGRADED ML ] RSI, 볼린저밴드 압축, MACD 결합 VCP 점수 산출"""
-    try:
-        df = yf.Ticker(ticker).history(period="3mo")
-        if len(df) < 20: return 50.0
-        
-        # 1. RSI (Relative Strength Index) 계산
-        delta = df['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs.iloc[-1])) if not rs.empty else 50
-        
-        # 2. Bollinger Bands 스퀴즈 (압축도) 계산
-        sma20 = df['Close'].rolling(window=20).mean()
-        std20 = df['Close'].rolling(window=20).std()
-        bb_width = (std20 * 2) / sma20 # 볼린저밴드 폭
-        bb_squeeze_score = max(0, 100 - (bb_width.iloc[-1] * 500)) # 폭이 좁을수록 점수 상승
-        
-        # 3. 거래량 Dry-up 계산
-        volum_recent = df['Volume'].tail(5).mean()
-        volum_past = df['Volume'].tail(20).head(15).mean()
-        volume_dryness = max(0, 100 - (volum_recent / volum_past * 100)) if volum_past > 0 else 0
-        
-        # 종합 점수 가중치 적용 (볼린저 스퀴즈 40%, 거래량 건조 40%, RSI 20%)
-        # RSI는 50~60 사이가 VCP에 이상적 (과열되지 않고 상승 준비 완료)
-        rsi_score = 100 - abs(55 - rsi) * 2 
-        
-        final_score = (bb_squeeze_score * 0.4) + (volume_dryness * 0.4) + (max(0, rsi_score) * 0.2)
-        return round(max(min(final_score, 99.9), 10.0), 1)
-    except: return round(random.uniform(40, 85), 1)
 
 # --- [ SYSTEM ] [GLOBAL HELPER] Safe Network Request ---
 def safe_get(url, timeout=3):
@@ -372,15 +27,6 @@ def safe_get(url, timeout=3):
         if resp.status_code == 200: return resp
     except: pass
     return None
-
-def send_webhook_alert(msg):
-    """[ ALERT ] 디스코드/텔레그램 모바일 긴급 알림 (환경변수 WEBHOOK_URL)"""
-    webhook_url = os.environ.get("WEBHOOK_URL", "")
-    if not webhook_url: return False
-    try:
-        requests.post(webhook_url, json={"content": msg}, timeout=3)
-        return True
-    except: return False
 
 # --- [ TACTICAL ] Rule-based Tactical Advisor (Platinum Engine) ---
 def get_tactical_advice(tic, rs, roe):
@@ -402,19 +48,15 @@ def get_tactical_advice(tic, rs, roe):
         return "\n".join(advice)
 
 def get_footer_quote():
-    """시스템 하단에 표시될 대가들의 격언 (통합 버전)"""
+    """시스템 하단에 표시될 대가들의 격언"""
     quotes = [
         "VCP의 끝자락은 항상 조용합니다. 폭발은 고요함 속에서 시작됩니다.",
         "손절은 패배가 아닌, 다음 승리를 위한 보험료입니다.",
         "수익은 오직 2단계(Mark-up)에서만 창출됩니다. 기다림은 지루할 수 있으나 결과는 달콤합니다.",
         "리더는 나쁜 직원을 즉시 해고하듯, 추세가 꺾인 종목은 즉시 제명해야 합니다.",
         "시장에 맞서지 마십시오. 파도를 타는 해녀처럼 수급의 흐름에 몸을 맡기십시오.",
-        "가장 강한 놈이 가장 멀리 갑니다. RS 신고가에 답이 있습니다.",
-        "트레이딩은 돈을 버는 것이 목적이 아니라, 완벽한 프로세스를 실행하는 것이 목적이다.",
-        "당신만의 엣지가 없다면 당신은 트레이더가 아니라 기부천사일 뿐이다."
+        "가장 강한 놈이 가장 멀리 갑니다. RS 신고가에 답이 있습니다."
     ]
-    # 날짜를 시드로 사용하여 매일 같은 어록 선택 (일관성)
-    random.seed(datetime.now().strftime("%Y%m%d"))
     return random.choice(quotes)
 
 @st.cache_resource
@@ -467,25 +109,21 @@ BACKUP_DIR = get_db_path("backups")
 
 def auto_backup(file_path, force=True):
     if not os.path.exists(file_path): return
-    
-    def _backup_task():
-        try:
-            fname = os.path.basename(file_path)
-            os.makedirs(BACKUP_DIR, exist_ok=True)
-            
-            # [ SECURE ] 전문가님 요청: 중요 파일들은 항상 백업 생성 (강제성 부여)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = os.path.join(BACKUP_DIR, f"{fname}_{timestamp}.bak")
-            shutil.copy2(file_path, backup_path)
-            
-            # 백업 파일 개수 관리 (최근 50개 유지로 확장)
-            if random.random() < 0.2:
-                all_backups = sorted([os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.startswith(fname)], key=os.path.getmtime)
-                if len(all_backups) > 50:
-                    for old_f in all_backups[:-50]: os.remove(old_f)
-        except: pass
+    try:
+        fname = os.path.basename(file_path)
+        os.makedirs(BACKUP_DIR, exist_ok=True)
         
-    threading.Thread(target=_backup_task, daemon=True).start()
+        # [ SECURE ] 전문가님 요청: 중요 파일들은 항상 백업 생성 (강제성 부여)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = os.path.join(BACKUP_DIR, f"{fname}_{timestamp}.bak")
+        shutil.copy2(file_path, backup_path)
+        
+        # 백업 파일 개수 관리 (최근 50개 유지로 확장)
+        if random.random() < 0.2:
+            all_backups = sorted([os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.startswith(fname)], key=os.path.getmtime)
+            if len(all_backups) > 50:
+                for old_f in all_backups[:-50]: os.remove(old_f)
+    except: pass
 
 USER_DB_FILE = get_db_path("users_db.json")
 TRADES_DB = get_db_path("trades_db.json")
@@ -501,59 +139,53 @@ MASTER_GAS_URL = st.secrets.get("MASTER_GAS_URL", "https://script.google.com/mac
 
 
 
-file_lock = threading.Lock()
-
 def safe_read_csv(file_path, columns=None):
-    with file_lock:
-        if not os.path.exists(file_path):
-            return pd.DataFrame(columns=columns) if columns else pd.DataFrame()
-        try:
-            df = pd.read_csv(file_path, encoding='utf-8-sig', on_bad_lines='skip')
-            if columns:
-                for col in columns:
-                    if col not in df.columns: df[col] = "nan"
-                return df[columns]
-            return df
-        except Exception as e:
-            # 파일이 실제 존재하는데 읽기에 실패한 경우 경고 출력
-            st.warning(f"WAIT: 데이터 파일([.csv]) 읽기 시도 중 지연이 발생하고 있습니다. 잠시 후 자동 복구됩니다. ({os.path.basename(file_path)})")
-            return pd.DataFrame(columns=columns) if columns else pd.DataFrame()
+    if not os.path.exists(file_path):
+        return pd.DataFrame(columns=columns) if columns else pd.DataFrame()
+    try:
+        df = pd.read_csv(file_path, encoding='utf-8-sig', on_bad_lines='skip')
+        if columns:
+            for col in columns:
+                if col not in df.columns: df[col] = "nan"
+            return df[columns]
+        return df
+    except Exception as e:
+        # 파일이 실제 존재하는데 읽기에 실패한 경우 경고 출력
+        st.warning(f"WAIT: 데이터 파일([.csv]) 읽기 시도 중 지연이 발생하고 있습니다. 잠시 후 자동 복구됩니다. ({os.path.basename(file_path)})")
+        return pd.DataFrame(columns=columns) if columns else pd.DataFrame()
 
 def safe_write_csv(df, file_path, mode='w', header=True, backup=True):
-    with file_lock:
-        try:
-            if backup and os.path.exists(file_path): auto_backup(file_path, force=True)
-            os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
-            
-            # 영구 보존을 위한 원자적 쓰기 강화
-            temp_path = file_path + ".tmp"
-            if mode == 'a' and os.path.exists(file_path):
-                df.to_csv(file_path, index=False, encoding='utf-8-sig', mode=mode, header=False)
-            else:
-                df.to_csv(temp_path, index=False, encoding='utf-8-sig', mode='w', header=header)
-                os.replace(temp_path, file_path)
-            return True
-        except: return False
+    try:
+        if backup and os.path.exists(file_path): auto_backup(file_path, force=True)
+        os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+        
+        # 영구 보존을 위한 원자적 쓰기 강화
+        temp_path = file_path + ".tmp"
+        if mode == 'a' and os.path.exists(file_path):
+            df.to_csv(file_path, index=False, encoding='utf-8-sig', mode=mode, header=False)
+        else:
+            df.to_csv(temp_path, index=False, encoding='utf-8-sig', mode='w', header=header)
+            os.replace(temp_path, file_path)
+        return True
+    except: return False
 
 def safe_save_json(data, file_path, backup=True):
-    with file_lock:
-        try:
-            if backup and os.path.exists(file_path): auto_backup(file_path, force=True)
-            os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
-            temp_path = file_path + ".tmp"
-            with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-            os.replace(temp_path, file_path)
-            return True
-        except: return False
+    try:
+        if backup and os.path.exists(file_path): auto_backup(file_path, force=True)
+        os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+        temp_path = file_path + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        os.replace(temp_path, file_path)
+        return True
+    except: return False
 
 def safe_load_json(file_path, default=None):
-    with file_lock:
-        if not os.path.exists(file_path): return default if default is not None else {}
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except: return default if default is not None else {}
+    if not os.path.exists(file_path): return default if default is not None else {}
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except: return default if default is not None else {}
 
 # [ SECURE ] 영구 백업용 구글 시트 URL (CSV 내보내기 주소) - 보안을 위해 st.secrets 사용
 USERS_SHEET_URL = st.secrets.get("USERS_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1180564490")
@@ -571,9 +203,7 @@ TICKER_NAME_MAP = {
     "005490.KS": "POSCO홀딩스", "000270.KS": "기아", "066570.KS": "LG전자", "035720.KS": "카카오", "035420.KS": "NAVER",
     "005380.KS": "현대차", "000810.KS": "삼성화재", "NFLX": "넷플릭스", "MSTR": "마이크로스트래티지", "COIN": "코인베이스", 
     "MARA": "마라톤디지털", "PANW": "팔로알토", "SNOW": "스노우플레이크", "STX": "씨게이트", "WDC": "웨스턴디지털",
-    "247540.KQ": "에코프로비엠", "277810.KQ": "에코프로", "091990.KQ": "셀트리온헬스케어", "293490.KQ": "카카오게임즈", "086520.KQ": "에코프로",
-    "000100.KS": "유한양행", "012330.KS": "현대모비스", "068270.KS": "셀트리온", "112610.KQ": "씨젠", "028300.KQ": "HLB",
-    "035900.KQ": "JYP Ent.", "SM": "SM엔터", "HYBE": "하이브", "JYP": "JYP"
+    "247540.KQ": "에코프로비엠", "277810.KQ": "에코프로", "091990.KQ": "셀트리온헬스케어", "293490.KQ": "카카오게임즈", "086520.KQ": "에코프로"
 }
 
 REVERSE_TICKER_MAP = {v: k for k, v in TICKER_NAME_MAP.items()}
@@ -588,69 +218,30 @@ def resolve_ticker(query):
     if query in REVERSE_TICKER_MAP: return REVERSE_TICKER_MAP[query]
     return query.upper()
 
-REAL_TRADE_LOG_FILE = get_db_path("real_trades_ledger.csv")
-
-def log_real_trade(ticker, name, amount, price, side="BUY", market="KR"):
-    """실전 매매 내역을 영구 보존용 LEDGER에 기록"""
-    now_kst = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d %H:%M:%S")
-    new_log = pd.DataFrame([[now_kst, ticker, name, amount, price, side, market]], 
-                           columns=["시간", "티커", "종목명", "수량", "체결가", "구분", "시장"])
-    safe_write_csv(new_log, REAL_TRADE_LOG_FILE, mode='a', header=not os.path.exists(REAL_TRADE_LOG_FILE))
-
+@st.cache_data(ttl=900)
 def get_market_sentiment_score():
-    """VIX 및 나스닥 RSI 기반 IBD 스타일 시장 단계 산출"""
+    """VIX 및 나스닥 RSI 기반 실전 공포/탐욕 점수 산출"""
     try:
+        # VIX(^VIX)는 공포의 지수
         m_data = yf.download(["^VIX", "^IXIC"], period="14d", interval="1d", progress=False)['Close']
         curr_vix = float(m_data["^VIX"].dropna().iloc[-1]) if "^VIX" in m_data.columns else 20.0
+        
+        # 기본 점수: VIX가 낮을수록 탐욕(높음), 높을수록 공포(낮음)
+        # VIX 15 -> 85점, VIX 40 -> 10점 정도의 보간
         vix_score = max(5, min(95, 100 - (curr_vix * 2.2)))
+        
+        # 나스닥 RSI로 보정
         ndx = m_data["^IXIC"].dropna()
         delta = ndx.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         rsi = 100 - (100 / (1+rs.iloc[-1])) if not rs.empty else 50
+        
         final_score = (vix_score * 0.6) + (rsi * 0.4)
-        
-        # [ BON-DAE STYLE ] IBD 단계 매핑 (직설적 명령형)
-        if final_score > 65: stage = "🚀 적극 매수 구간 (지금 사라!)"
-        elif final_score > 40: stage = "✋ 관망 및 보유 구간 (그냥 가지고 있어라)"
-        else: stage = "🚨 위험 매도 구간 (당장 팔아라!)"
-        
-        return int(final_score), curr_vix, stage
+        return int(final_score), curr_vix
     except:
-        return 50, 20.0, "✋ 관망 및 보유 구간 (그냥 가지고 있어라)"
-
-@st.cache_data(ttl=300)
-def cached_yf_download(tickers_tuple, period="5d", interval="1d"):
-    """반복적인 yf.download 호출로 인한 UI 멈춤 방지용 전역 캐시 함수"""
-    if not tickers_tuple: return pd.DataFrame()
-    try:
-        return yf.download(list(tickers_tuple), period=period, interval=interval, progress=False)
-    except:
-        return pd.DataFrame()
-@st.cache_data(ttl=3600)
-def get_benchmark_data(benchmark):
-    try:
-        return yf.download(benchmark, period="6mo", progress=False)['Close']
-    except:
-        return pd.Series()
-
-@st.cache_data(ttl=3600)
-def get_rs_score(ticker, benchmark=None):
-    """본데 기법의 핵심: 지표 대비 상대적 강도(RS) 산출 (최적화됨)"""
-    if benchmark is None:
-        benchmark = "^IXIC" if not (".KS" in ticker or ".KQ" in ticker) else "^KS11"
-    try:
-        t_data = yf.download(ticker, period="6mo", progress=False)['Close']
-        b_data = get_benchmark_data(benchmark)
-        
-        # 3개월 및 6개월 수익률 가중치 부여
-        t_ret = (t_data.iloc[-1] / t_data.iloc[-60]) * 0.4 + (t_data.iloc[-1] / t_data.iloc[-20]) * 0.6
-        b_ret = (b_data.iloc[-1] / b_data.iloc[-60]) * 0.4 + (b_data.iloc[-1] / b_data.iloc[-20]) * 0.6
-        
-        rs_idx = (t_ret / b_ret) * 50 # 50점을 기준으로 상대 점수화
-        return min(99, int(rs_idx + 30)) # 보정치 적용
-    except: return 50
+        return 50, 20.0
 
 # --- [ MACRO ] 거시지표 매크로 바 ---
 @st.cache_data(ttl=600)
@@ -793,7 +384,7 @@ def fetch_gs_visitors():
     return pd.DataFrame()
 
 # --- [ ACTION ] Optimized Data Helpers ---
-@st.cache_data(ttl=86400) # ROE는 변동이 적으므로 하루 단위 캐싱
+@st.cache_data(ttl=86400) # ROE는 하루 한 번 정도로 충분
 def get_ticker_roe(tic):
     """
     ⚠️ yf.Ticker.info는 매우 느리므로 스캐너 루프 내부에서 직접 사용을 지양해야 합니다.
@@ -822,64 +413,40 @@ def fetch_gs_notices():
     except Exception as e:
         print(f"DEBUG: Notice Fetch Error: {e}")
     return {
-        "title": "🚀 사령부 시스템 V6.0 대규모 업데이트 완료", 
-        "content": """안티그래비티 대원님, 사령부 엔진이 V6.0으로 대규모 업그레이드되었습니다.<br><br>
-<b>✅ 주요 업데이트 내역</b><br>
-- <b>[ ALERT ]</b> 텔레그램/디스코드 실시간 알림봇 연동 가능 (웹훅 지원)<br>
-- <b>[ RISK ]</b> KIS 실시간 잔고 연동 및 1% 리스크 기반 자동 포지션 사이징 엔진 탑재<br>
-- <b>[ VISUAL ]</b> 사이버펑크 매트릭스 배경 및 타점 포착 시 펄스 애니메이션 효과 도입<br>
-- <b>[ SPEED ]</b> 다중 접속 시 데이터 충돌 방지를 위한 스레드-락(Thread-Lock) 안정화 완료<br><br>
-사령부의 모든 유닛이 정상 가동 중입니다. 승리를 위한 최적의 타점을 선점하십시오."""
+        "title": "🛡️ 사령부 고정 공지", 
+        "content": """더욱 쾌적하고 안전한 시스템 환경을 구축하기 위한 서버 업데이트 과정에서, 부득이하게 전체 회원의 비밀번호가 초기화되었습니다. 이용에 불편을 드려 대단히 죄송합니다.<br>
+아래 안내에 따라 비밀번호를 재설정해 주시기 바랍니다.<br><br>
+<b>🔐 비밀번호 초기화 및 재설정 방법</b><br>
+- 초기화 비밀번호: <b>1234</b><br>
+- 재설정 경로: <b>[1. 본부 사령부] → [1-c. 계정 보안 설정]</b><br><br>
+로그인 후 해당 메뉴에서 본인만의 안전한 비밀번호로 즉시 변경이 가능합니다. 개인정보 보호를 위해 접속 즉시 수정을 권장합니다."""
     }
 
 @st.cache_resource
-def get_system_assets():
-    """시스템 로고 및 배경화면 에셋 로드 (통합 캐싱)"""
-    assets = {"logo": "", "bg": ""}
+def get_cached_bg_b64():
     try:
-        logo_path = "StockDragonfly.png"
-        bg_path = "StockDragonfly2.png" if os.path.exists("StockDragonfly2.png") else logo_path
-        
-        if os.path.exists(logo_path):
-            with open(logo_path, "rb") as f: assets["logo"] = base64.b64encode(f.read()).decode()
-        if os.path.exists(bg_path):
-            with open(bg_path, "rb") as f: assets["bg"] = base64.b64encode(f.read()).decode()
+        target = "StockDragonfly2.png" if os.path.exists("StockDragonfly2.png") else "StockDragonfly.png"
+        if os.path.exists(target):
+            with open(target, "rb") as imm: 
+                return base64.b64encode(imm.read()).decode()
     except: pass
-    return assets
+    return ""
 
 # --- [ UI ] CSS & Background (Lightweight High-Performance) ---
 st.markdown("""
     <style>
-        /* [ VISUAL ] 사이버펑크 햅틱 이펙트 및 백그라운드 */
-        body {
-            background: radial-gradient(circle at center, #0B0F19 0%, #000 100%);
-            background-image: linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
-            background-size: 30px 30px;
-        }
-        
-        .alert-pulse {
-            animation: red-pulse 1.5s infinite;
-            border: 2px solid #FF4B4B !important;
-        }
-        @keyframes red-pulse {
-            0% { box-shadow: 0 0 0 0 rgba(255, 75, 75, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(255, 75, 75, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 75, 75, 0); }
-        }
-
         /* [ DESIGN ] 네온 플럭스(Neon Flux) 프리미엄 효과 강화 */
         .neon-glow {
-            text-shadow: 0 0 10px rgba(178, 242, 187, 0.5), 0 0 20px rgba(178, 242, 187, 0.3);
-            color: #B2F2BB !important;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5), 0 0 20px rgba(0, 255, 0, 0.3);
+            color: #00FF00 !important;
         }
         .neon-glow-red {
-            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5), 0 0 20px rgba(255, 107, 107, 0.3);
-            color: #FF6B6B !important;
+            text-shadow: 0 0 10px rgba(255, 75, 75, 0.5), 0 0 20px rgba(255, 75, 75, 0.3);
+            color: #FF4B4B !important;
         }
         .neon-glow-gold {
-            text-shadow: 0 0 10px rgba(255, 244, 230, 0.5), 0 0 20px rgba(255, 244, 230, 0.3);
-            color: #FFF4E6 !important;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5), 0 0 20px rgba(255, 215, 0, 0.3);
+            color: #FFD700 !important;
         }
         
         /* 글래스모피즘 효과 강화 */
@@ -925,8 +492,8 @@ ZONE_CONFIG = {
     "[ TARGET ] 3. 주도주 추격대": ["3-a. [ SCAN ] 주도주 타점 스캐너", "3-b. [ RANK ] 주도주 랭킹 TOP 50", "3-c. [ WATCH ] 본데 감시 리스트", "3-d. [ INDUSTRY ] 산업동향(TOP 10)", "3-e. [ RS ] RS 강도(TOP 10)"],
     "[ RISK ] 4. 전략 및 리스크": ["4-a. [ REPORT ] 프로 분석 리포트", "4-b. [ CALC ] 리스크 계산기", "4-c. [ SHIELD ] 리스크 방패"],
     "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ WHOWS ] 본데는 누구인가?", "5-b. [ STUDY ] 주식공부방(차트)", "5-c. [ RADAR ] 나노바나나 레이더", "5-d. [ EXAM ] 정기 승급 시험 안내", "5-e. [ SUCCESS ] 실전 익절 자랑방", "5-f. [ REVIEW ] 손실 위로 및 복기방"],
-    "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방", "6-c. [ VISIT ] 방문자 인사 신청", "6-d. [ HISTORY ] 누적 출석 기록부"],
-    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ EXEC ] 모의투자 매수테스트", "7-b. [ DASHBOARD ] 모의투자 현황/결과", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-d. [ REPORT ] 자동투자 성적표", "7-e. [ RANK ] 사령부 명예의 전당", "7-f. [ COOLAMAGIE ] [쿨라매기 엔진 적용]", "7-g. [ LEDGER ] 실전 매매 기록부"]
+    "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방", "6-c. [ VISIT ] 방문자 인사 신청"],
+    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ EXEC ] 모의투자 매수테스트", "7-b. [ DASHBOARD ] 모의투자 현황/결과", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-d. [ REPORT ] 자동투자 성적표", "7-e. [ RANK ] 사령부 명예의 전당", "7-f. [ COOLAMAGIE ] [쿨라매기 엔진 적용]"]
 }
 
 def load_trades():
@@ -952,22 +519,28 @@ def gsheet_sync_bg(sheet_name, headers, values):
     """구글 시트 동기화를 백그라운드 스레드에서 실행하여 UI 멈춤 방지"""
     threading.Thread(target=gsheet_sync, args=(sheet_name, headers, values), daemon=True).start()
 
-# --- [ INITIALIZATION ] 세션 상태 초기화 ---
-if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
-if "page" not in st.session_state: st.session_state.page = "6-a. [ CHECK ] 출석체크(오늘한줄)"
-if "editing_msg_idx" not in st.session_state: st.session_state.editing_msg_idx = None
-if "show_flash" not in st.session_state: st.session_state.show_flash = False
+# --- [ GLOBAL TRIGGER ] 택티컬 플래시 알림 렌더러 ---
+if st.session_state.get("show_flash"):
+    st.markdown("<div class='flash-overlay'></div>", unsafe_allow_html=True)
+    st.session_state.show_flash = False
 
-assets = get_system_assets()
-logo_b64 = assets["logo"]
-bg_b64 = assets["bg"]
+st.set_page_config(page_title="StockDragonfly Pro", page_icon="[ TERMINAL ]", layout="wide")
 
 # 모바일 감지 (간이)
 if "is_mobile" not in st.session_state:
     st.session_state.is_mobile = False
 
-# --- 🌑 프리미엄 스타일 디자인 (assets 사용) ---
-# logo_b64 and bg_b64 are already loaded from assets in the INITIALIZATION zone.
+# --- 🌑 프리미엄 스타일 디자인 ---
+bg_b64 = ""
+logo_b64 = ""
+if os.path.exists("StockDragonfly2.png"):
+    with open("StockDragonfly2.png", "rb") as imm: bg_b64 = base64.b64encode(imm.read()).decode()
+else: # Fallback to StockDragonfly if 2 is missing
+    if os.path.exists("StockDragonfly.png"):
+        with open("StockDragonfly.png", "rb") as imm: bg_b64 = base64.b64encode(imm.read()).decode()
+
+if os.path.exists("StockDragonfly.png"):
+    with open("StockDragonfly.png", "rb") as f: logo_b64 = base64.b64encode(f.read()).decode()
 
 st.markdown(f"""
     <style>
@@ -983,40 +556,40 @@ st.markdown(f"""
     
     .main-title {{ 
         font-family: 'Outfit', sans-serif;
-        background: linear-gradient(to right, #B2F2BB, #FFF4E6, #B2F2BB);
+        background: linear-gradient(to right, #FFD700, #FFF, #FFD700);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-weight: 900;
         font-size: 4.5rem;
         text-align: center;
         margin-bottom: 0px;
-        filter: drop-shadow(0 0 20px rgba(178, 242, 187, 0.4));
+        filter: drop-shadow(0 0 20px rgba(255,215,0,0.5));
     }}
     
-    h1, h2 {{ color: #B2F2BB !important; font-weight: 900; text-shadow: 0 0 15px rgba(178, 242, 187, 0.2); }}
+    h1, h2 {{ color: #FFD700 !important; font-weight: 900; text-shadow: 0 0 15px rgba(255,215,0,0.3); }}
     
-    .glass-card {{ background: rgba(255, 244, 230, 0.04); border: 1px solid rgba(178, 242, 187, 0.12); border-radius: 18px; padding: 25px; backdrop-filter: blur(20px); margin-bottom: 30px; transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1); position: relative; overflow: hidden; }}
-    .glass-card:hover {{ border-color: #B2F2BB66; transform: translateY(-8px) scale(1.01); box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 20px rgba(178, 242, 187, 0.1); }}
+    .glass-card {{ background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 25px; backdrop-filter: blur(20px); margin-bottom: 30px; transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1); position: relative; overflow: hidden; }}
+    .glass-card:hover {{ border-color: #FFD70066; transform: translateY(-8px) scale(1.01); box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 20px rgba(255,215,0,0.1); }}
     
     /* [ DESIGN ] 네온 보더 애니메이션 */
-    .neon-border {{ position: relative; padding: 2px; background: linear-gradient(90deg, #B2F2BB, #FFF4E6, #B2F2BB); background-size: 200% 100%; animation: neon-flow 3s linear infinite; border-radius: 20px; }}
+    .neon-border {{ position: relative; padding: 2px; background: linear-gradient(90deg, #FFD700, #00FF00, #FFD700); background-size: 200% 100%; animation: neon-flow 3s linear infinite; border-radius: 20px; }}
     .neon-inner {{ background: #000; border-radius: 18px; padding: 25px; }}
     @keyframes neon-flow {{ 0% {{ background-position: 0% 0%; }} 100% {{ background-position: 200% 0%; }} }}
     
     /* [ SCANNER ] 나노바나나 게이지 */
-    .banana-track {{ background: rgba(255, 244, 230, 0.05); height: 12px; border-radius: 6px; position: relative; overflow: hidden; margin: 10px 0; border: 1px solid rgba(255, 255, 255, 0.1); }}
+    .banana-track {{ background: rgba(255,255,255,0.05); height: 12px; border-radius: 6px; position: relative; overflow: hidden; margin: 10px 0; border: 1px solid rgba(255,255,255,0.1); }}
     .banana-fill {{ height: 100%; border-radius: 6px; transition: width 1s ease-out; box-shadow: 0 0 10px currentColor; }}
     
-    @keyframes pulse-glow {{ 0% {{ box-shadow: 0 0 10px rgba(178, 242, 187, 0.2); opacity: 0.8; }} 50% {{ box-shadow: 0 0 30px rgba(178, 242, 187, 0.5); opacity: 1; }} 100% {{ box-shadow: 0 0 10px rgba(178, 242, 187, 0.2); opacity: 0.8; }} }}
-    .status-pulse {{ border: 1px solid #B2F2BB44; animation: pulse-glow 2s infinite; }}
+    @keyframes pulse-glow {{ 0% {{ box-shadow: 0 0 10px rgba(0,255,0,0.2); opacity: 0.8; }} 50% {{ box-shadow: 0 0 30px rgba(0,255,0,0.5); opacity: 1; }} 100% {{ box-shadow: 0 0 10px rgba(0,255,0,0.2); opacity: 0.8; }} }}
+    .status-pulse {{ border: 1px solid #00FF0044; animation: pulse-glow 2s infinite; }}
     
     @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
     @keyframes marquee-new {{ 
         0% {{ transform: translateX(0); }} 
         100% {{ transform: translateX(-33.33%); }} 
     }}
-    .ticker-wrap {{ overflow: hidden; background: rgba(0,0,0,0.6); white-space: nowrap; padding: 12px 0; border-bottom: 2px solid rgba(178, 242, 187, 0.2); margin-bottom: 20px; backdrop-filter: blur(15px); }}
-    .ticker-content {{ display: inline-block; animation: marquee-new 40s linear infinite; color: #FFF4E6; font-size: 0.95rem; font-weight: 600; font-family: 'Outfit'; }}
+    .ticker-wrap {{ overflow: hidden; background: rgba(0,0,0,0.6); white-space: nowrap; padding: 12px 0; border-bottom: 2px solid rgba(255,215,0,0.2); margin-bottom: 20px; backdrop-filter: blur(15px); }}
+    .ticker-content {{ display: inline-block; animation: marquee-new 40s linear infinite; color: #FFD700; font-size: 0.95rem; font-weight: 600; font-family: 'Outfit'; }}
     .ticker-wrap:hover div {{ animation-play-state: paused !important; }}
     .ticker-item {{ margin: 0 40px; display: inline-block; }}
     /* 💎 사이드바 가독성 최적화 (줄바꿈 방지) */
@@ -1056,27 +629,25 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- 인증 & 사이드바 ---
+if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 if not st.session_state["password_correct"]:
     # 모바일에서는 컬럼 비율 조정
     c1, m, c2 = st.columns([0.1, 0.8, 0.1]) if st.session_state.get("is_mobile", False) else st.columns([1, 2, 1])
     with m:
-        # 통합 로고 및 타이틀 섹션 (간격 압축)
-        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width:350px; border-radius:15px; margin-top:-20px; margin-bottom:10px;">' if logo_b64 else ""
-        st.markdown(f"""
-            <div style='text-align: center;'>
-                <div class='main-title'>StockDragonfly</div>
-                {logo_html}
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown("<div class='main-title'>StockDragonfly</div>", unsafe_allow_html=True)
+        if logo_b64:
+            st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:15px; margin-bottom:20px;">', unsafe_allow_html=True)
+        elif os.path.exists("StockDragonfly.png"): 
+            st.image("StockDragonfly.png", use_container_width=True)
         if "show_notice" not in st.session_state: st.session_state["show_notice"] = True
         
         if st.session_state["show_notice"]:
             cloud_notice = fetch_gs_notices()
             with st.container():
                 st.markdown(f"""
-                <div style='background: rgba(255, 0, 0, 0.08); border: 1px solid #FF4B4B; border-radius: 12px; padding: 15px; margin-bottom: 15px; color: white;'>
-                    <h4 style='color: #FF4B4B; margin-top: 0; margin-bottom: 10px;'>{cloud_notice['title']}</h4>
-                    <p style='font-size: 0.9rem; line-height: 1.5; margin: 0;'>{cloud_notice['content']}</p>
+                <div style='background: rgba(255, 0, 0, 0.1); border: 2px solid #FF4B4B; border-radius: 15px; padding: 25px; margin-bottom: 25px; color: white;'>
+                    <h3 style='color: #FF4B4B; margin-top: 0;'>{cloud_notice['title']}</h3>
+                    <p style='font-size: 1rem; line-height: 1.6;'>{cloud_notice['content']}</p>
                 </div>
                 """, unsafe_allow_html=True)
                 if st.button("[ OK ] 공지 확인 및 열지 않기", use_container_width=True):
@@ -1122,260 +693,80 @@ if not st.session_state["password_correct"]:
             reg_moti = st.text_area("주식을 하는 이유와 사령부에 임하는 각오", placeholder="예: 경제적 자유를 얻어 가족들에게 헌신하고 싶습니다.")
             
             st.divider()
+            st.markdown("#### [ EXAM ] [필수] 사령부 정예 요원 자격 시험 (15문항)")
+            st.info("기초 10문제 + 전술 5문제 중 13문제 이상 맞혀야 승인이 완료됩니다.")
             
-            if "exam_start_time" not in st.session_state:
-                st.session_state.exam_start_time = None
-
-            if st.session_state.exam_start_time is None:
-                st.warning("⏱️ 자격 시험은 총 30문항이며 10분(600초)의 제한 시간이 있습니다. 준비가 되시면 아래 버튼을 눌러 시작하십시오.")
-                if st.button("[ START ] 자격 시험 시작 (10분 타임어택)", use_container_width=True):
-                    st.session_state.exam_start_time = time.time()
-                    st.rerun()
-                st.stop()
+            # 기초 10문제 (Q1-Q10)
+            # 기초 10문제 (Q1-Q10)
+            q1 = st.radio("Q1. 우리나라 주식 차트에서 '빨간색 양초(캔들)' 그림은 무슨 뜻일까요?", ["올랐다 (상승)", "떨어졌다 (하락)", "변동 없다", "거래 중지"], index=None)
+            q2 = st.radio("Q2. 파란색 양초(캔들) 그림은 무슨 뜻일까요?", ["상승 국면", "하락 국면", "보합 국면", "매수 신호"], index=None)
+            q3 = st.radio("Q3. 하루 동안 사람들이 주식을 얼마나 많이 사고팔았는지 알려주는 지표는?", ["거래량", "배당금", "회전율", "수익률"], index=None)
+            q4 = st.radio("Q4. 양초 모양을 닮은 막대기들로 그린 차트의 이름은 무엇일까요?", ["막대 차트", "캔들 차트", "라인 차트", "그림 차트"], index=None)
+            q5 = st.radio("Q5. 주식 명언 중 가장 잘 알려진 원칙은?", ["발바닥에서 사서 정수리에서 팔아라", "무릎에서 사서 어깨에서 팔아라", "언제든 사고 언제든 팔아라", "사두면 언젠가 오른다"], index=None)
+            q6 = st.radio("Q6. 주식 가격의 평균을 내서 선으로 이은 그림을 무엇이라고 할까요?", ["이동평균선(이평선)", "추세선", "지지선", "저항선"], index=None)
+            q7 = st.radio("Q7. 단기 이평선이 장기 이평선을 아래에서 위로 뚫고 올라가는 매수 신호는?", ["골든 크로스", "데드 크로스", "실버 크로스", "캔들 크로스"], index=None)
+            q8 = st.radio("Q8. 주가 환경이 좋지 않을 때 매매를 쉬며 기회를 기다리는 것을 무엇이라 할까요?", ["관망", "포기", "퇴장", "몰빵"], index=None)
+            q9 = st.radio("Q9. 주가가 전고점을 뚫고 강력하게 상승하는 초기 시점은?", ["돌파", "이탈", "보합", "조정"], index=None)
+            q10 = st.radio("Q10. 손실을 최소화하기 위해 정해진 가격에서 파는 생명줄은?", ["손절", "익절", "물타기", "추격매수"], index=None)
             
-            elapsed = time.time() - st.session_state.exam_start_time
-            remaining = int(max(0, 600 - elapsed))
-            
-            st.markdown(f"""
-                <div style="background: rgba(15,15,25,0.95); padding: 10px 20px; border-bottom: 2px solid #FFD700; text-align: center; border-radius: 10px; margin-bottom: 20px; border: 1px solid #FFD700;">
-                    <span style="color: #FFD700; font-weight: bold; font-size: 1.2rem;">⏱️ 남은 시간: <span id="time_disp">{remaining//60:02d}:{remaining%60:02d}</span></span>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            st.components.v1.html(f"""
-                <script>
-                    var timeLeft = {remaining};
-                    var pTimerEl = window.parent.document.getElementById('time_disp');
-                    if (pTimerEl && timeLeft > 0) {{
-                        var intv = setInterval(function() {{
-                            timeLeft -= 1;
-                            var m = Math.floor(timeLeft / 60);
-                            var s = timeLeft % 60;
-                            pTimerEl.innerHTML = (m < 10 ? '0'+m : m) + ':' + (s < 10 ? '0'+s : s);
-                            if (timeLeft <= 60) {{ pTimerEl.style.color = '#FF4B4B'; }}
-                            if (timeLeft <= 0) {{ 
-                                clearInterval(intv); 
-                                pTimerEl.innerHTML = "00:00 (종료)";
-                            }}
-                        }}, 1000);
-                    }}
-                </script>
-            """, height=0)
+            # 전술 5문제 (Q11-Q15)
+            q11 = st.text_input("Q11. 전일 종가보다 큰 차이로 높게 시작하는 것을 무엇이라 하나요? (영문 2단어)", placeholder="Gap Up")
+            q12 = st.text_input("Q12. 주식 시장의 4단계 중 가장 수익이 많이 나는 단계는? (숫자만)", placeholder="2")
+            q13 = st.radio("Q13. 주가가 너무 과하게 올랐을 때 나타나는 기술적 지표 상태는?", ["RSI 70 이상", "RSI 30 이하", "RSI 50", "이평선 수렴"], index=None)
+            q14 = st.text_input("Q14. 수익이 난 후 매수가격으로 손절가를 올리는 행위는? (본ㅁ)", placeholder="본절")
+            q15 = st.radio("Q15. 주가가 이미 3일 이상 오른 종목을 뒤늦게 따라 사는 위험한 행위는?", ["추격 매수", "분할 매수", "예약 매수", "장외 매수"], index=None)
 
-            st.markdown("#### [ EXAM ] [필수] 사령부 정예 요원 자격 시험 (30문항 / 10분 제한)")
-            st.info("기초 20문제 + 전술 10문제 중 25문제 이상 맞혀야 승인이 완료됩니다.")
-            
-            st.markdown("##### 🟢 1. 주식 및 돌파매매 기초 문제 (20문제)")
-            q1 = st.radio("Q1. 주식 차트에서 '골든크로스(Golden Cross)'가 의미하는 것은 무엇인가요?", 
-                ["단기 이동평균선이 장기 이동평균선을 하향 돌파하는 것 (하락 신호)", "단기 이동평균선이 장기 이동평균선을 상향 돌파하는 것 (상승 신호)", "거래량이 급감하는 현상", "주가가 볼린저 밴드 하단을 이탈하는 현상"], index=None)
-            q2 = st.radio("Q2. 볼린저 밴드의 '스퀴즈(Squeeze)' 현상이 나타날 때 트레이더가 예상할 수 있는 흐름은?", 
-                ["변동성이 축소되어 좁은 범위에서 움직이다가, 곧 강한 추세(변동성 확대)가 발생할 가능성이 높다.", "주가가 곧 폭락할 것을 의미한다.", "상장 폐지 위험이 크다는 것을 뜻한다.", "거래량이 영원히 마를 것을 의미한다."], index=None)
-            q3 = st.radio("Q3. RSI(상대강도지수) 지표에서 일반적으로 '과매도(Oversold)' 상태를 나타내어 반등(매수) 기회로 해석되는 수치는?", 
-                ["70 이상", "50 부근", "30 이하", "100"], index=None)
-            q4 = st.radio("Q4. 프라딥 본데의 '4% 모멘텀 버스트(Momentum Burst)' 셋업에서 필수적인 가격 상승 조건은 전일 대비 몇 % 이상 상승인가요?", 
-                ["1% 이상", "2% 이상", "4% 이상", "10% 이상"], index=None)
-            q5 = st.radio("Q5. 다음 중 돌파 매매 시 '거래량(Volume)'에 대한 설명으로 올바른 것은?", 
-                ["돌파 당일 거래량은 전일 대비 적어야 신뢰도가 높다.", "거래량은 기관의 발자국(Institutional Footprint)이며, 돌파 시 평균 대비 크게 폭발(1.5배~3배 이상)해야 진짜 돌파로 인정받는다.", "거래량 지표는 돌파 매매에서 전혀 중요하지 않다.", "거래량이 급증하면 주가는 무조건 하락한다."], index=None)
-            q6 = st.radio("Q6. 스탠 와인스타인의 주식 시장 4단계 이론 중, 트레이더가 적극적으로 매수에 참여해야 하는 '상승 국면'은 몇 단계인가요?", 
-                ["1단계 (기초 지역)", "2단계 (상승 국면)", "3단계 (최정상 지역)", "4단계 (쇠퇴 국면)"], index=None)
-            q7 = st.radio("Q7. 프라딥 본데의 원칙에 따르면, 추격 매수(Bag holder)를 피하기 위해 '최소 며칠 연속' 상승한 주식은 매수하지 말아야 하나요?", 
-                ["2일 연속", "3일 연속 (3 days in a row)", "5일 연속", "10일 연속"], index=None)
-            q8 = st.radio("Q8. 데드크로스(Dead Cross)는 어떤 시그널로 해석되나요?", 
-                ["상승 초입 구간", "하락 초입 구간", "강력 매수 신호", "시장의 횡보 신호"], index=None)
-            q9 = st.radio("Q9. 주가가 장기 하락 추세를 끝내고 강력한 실적이나 뉴스로 갭상승하는 현상을 프라딥 본데는 무엇이라 부르나요?", 
-                ["데드 캣 바운스", "에피소딕 피벗 (Episodic Pivot, EP)", "숏 스퀴즈", "캔들 차트"], index=None)
-            q10 = st.radio("Q10. 볼린저 밴드 상단 선을 터치했을 때 일반적인 박스권 장세에서의 해석은?", 
-                ["과매수 상태로 판단하여 매도 신호로 고려", "과매도 상태로 판단하여 매수 신호로 고려", "완벽한 장기 투자 진입점", "거래량 급감 신호"], index=None)
-            q11 = st.radio("Q11. 돌파 매매 당일, 주가의 일봉 캔들은 어디에서 마감(Close)하는 것이 가장 이상적인가요?", 
-                ["시가 부근 (긴 윗꼬리 형성)", "당일 변동폭의 최하단", "당일 변동폭의 상단(고가) 부근", "전일 종가와 동일한 위치"], index=None)
-            q12 = st.radio("Q12. MACD 지표에서 '디버전스(Divergence)'가 의미하는 것은 무엇인가요?", 
-                ["주가와 MACD 지표가 동일한 방향으로 움직이는 현상", "주가는 고점을 갱신하지만 MACD는 하락하는 등 주가와 지표의 방향이 불일치하는 현상", "이동평균선이 수렴하는 현상", "캔들이 십자가(도지) 모양을 띠는 현상"], index=None)
-            q13 = st.radio("Q13. 프라딥 본데의 스윙 매매에서 3~5일 내에 8~20% 단기 급등 시 취해야 할 가장 정석적인 행동은?", 
-                ["수익을 무시하고 10년 동안 장기 보유한다.", "보유 물량의 절반 정도를 팔아 안타(Singles) 수익을 먼저 확정 짓는다.", "물량을 2배로 늘려 불타기를 한다.", "전량 손절한다."], index=None)
-            q14 = st.radio("Q14. 본데가 가장 중요하게 생각하는 상황 인식(Situational Awareness) 지표 중 하나인 'T2108'은 무엇을 의미하나요?", 
-                ["코스피 200 지수의 변동률", "40일 이동평균선 위에 있는 주식의 비율", "20일 동안 상한가를 기록한 종목 수", "전체 시장의 거래대금"], index=None)
-            q15 = st.radio("Q15. 에피소딕 피벗(EP)의 가장 강력한 촉매제(Catalyst)로 여겨지는 것은 무엇인가요?", 
-                ["거래량 감소", "세 자릿수(100% 이상)의 폭발적인 어닝 서프라이즈(실적 발표)", "배당 삭감 뉴스", "경영진의 주식 대량 매도"], index=None)
-            q16 = st.radio("Q16. 시장의 폭(Market Breadth)을 측정할 때, 방어적(Defensive)인 하락장으로 판단해야 하는 기준은?", 
-                ["4% 상승 종목 수가 4% 하락 종목 수보다 많을 때", "4% 하락 종목 수가 4% 상승 종목 수를 크게 압도할 때", "나스닥 지수가 10일 이평선 위에 있을 때", "거래량이 급감하며 횡보할 때"], index=None)
-            q17 = st.radio("Q17. 프라딥 본데가 말하는 손절선(Stop-loss)에 대한 절대 원칙은 무엇인가요?", 
-                ["\"손절선은 신성하다. 어떤 이유로든 진입 후 손절선을 아래로 낮춰서는 안 된다.\"", "\"시장이 반등할 때까지 손절선을 계속 낮추며 버틴다.\"", "\"우량주라면 손절선 없이 끝까지 물타기를 한다.\"", "\"손절은 마음이 편해질 때 감각적으로 결정한다.\""], index=None)
-            q18 = st.radio("Q18. 프라딥 본데가 즐겨 쓰는 강력한 매매기법 중 하나로, 호재 뉴스를 모르더라도 하루 거래량이 '이 수치'를 넘으면 강한 모멘텀 촉매로 간주하는 거래량 기준은?", 
-                ["100만 주", "500만 주", "900만 주 (9 Million)", "2,000만 주"], index=None)
-            q19 = st.radio("Q19. 주식 시장 장기 투자와 관련하여, 시간이 오래 지나면 시장 가격이 우상향하는 주요 거시경제적 이유는 무엇이라고 설명하나요?", 
-                ["금리 인하", "과자나 아이스크림 가격이 오르는 것과 같은 '인플레이션' 현상", "주식 액면분할", "기술적 반등"], index=None)
-            q20 = st.radio("Q20. 주가 차트에서 상승 5파와 하락 3파로 시장이 등락한다고 보는 이론의 이름은?", 
-                ["볼린저 밴드 이론", "엘리어트 파동 이론", "상대강도 이론", "사께다 전법"], index=None)
+            if st.button("[ SUBMIT ] 신규 가입 신청 및 시험 제출"):
+                corrects = [
+                    "올랐다 (상승)", "하락 국면", "거래량", "캔들 차트", "무릎에서 사서 어깨에서 팔아라",
+                    "이동평균선(이평선)", "골든 크로스", "관망", "돌파", "손절",
+                    "gap up", "2", "RSI 70 이상", "본절", "추격 매수"
+                ]
+                answers = [
+                    q1, q2, q3, q4, q5, q6, q7, q8, q9, q10,
+                    q11.strip().lower(), q12.strip(), q13, q14.strip(), q15
+                ]
+                score = sum([1 for a, c in zip(answers, corrects) if a == c])
 
-            st.markdown("##### 🟡 2. 주식 및 돌파매매 중급 문제 (5문제)")
-            q21 = st.radio("Q21. 마크 미너비니의 VCP나 쿨라매기의 깃발형(Flag) 같은 '돌파 직전 응축(Coiling)' 구간에서 나타나야 하는 필수 조건은 무엇입니까?", 
-                ["주가의 변동폭이 극도로 커지며 대량 거래가 수반되어야 한다.", "주가의 변동폭이 좁아지고(Narrow Range), 거래량이 평균 이하로 눈에 띄게 말라야(Dry-up) 한다.", "주가가 200일 이평선 아래로 급락해야 한다.", "RSI 지표가 80을 돌파해야 한다."], index=None)
-            q22 = st.radio("Q22. 에피소딕 피벗(EP) 종목이 장 초반 큰 갭상승을 보였으나 흔들기(Shakeout)가 심할 때, 가장 안전한 진입을 위해 사용하는 ORB(오프닝 레인지 돌파) 진입 기준은 어디입니까?", 
-                ["장 시작 후 첫 1분, 5분 또는 60분 캔들이 형성한 고점(ORH)을 재돌파할 때", "장 시작 전 프리마켓 최저가에 도달할 때", "볼린저 밴드 중심선에 닿을 때", "장 마감 직전 종가 부근에서"], index=None)
-            q23 = st.radio("Q23. 단기 스윙 트레이딩에서 절반의 물량을 익절한 후, 남은 물량으로 끝까지 큰 추세(홈런)를 추종(Trailing Stop)하기 위해 사용하는 가장 대중적인 이탈 기준선은?", 
-                ["200일 이동평균선", "볼린저 밴드 상단선", "10일 또는 20일 이동평균선을 종가 기준으로 하향 이탈할 때", "전일 고가 라인"], index=None)
-            q24 = st.radio("Q24. 프라딥 본데의 MAGNA 53 종목 필터링 프레임워크 중 'A (Acceleration in Sales)'가 이익보다 주가 상승의 핵심 선행 지표로 꼽히는 이유는 무엇입니까?", 
-                ["이익은 회계적으로 조작될 수 있지만, 2분기 연속 39% 이상의 매출 성장은 제품 수요의 폭발적 증가를 속임 없이 증명하기 때문이다.", "애널리스트들이 영업이익보다 매출을 분석하기 더 쉽기 때문이다.", "매출이 증가하면 무조건 배당이 늘어나기 때문이다.", "시가총액을 빠르게 100억 달러 이상으로 만들기 때문이다."], index=None)
-            q25 = st.radio("Q25. 돌파 매매 진입 후, 예측과 다르게 주가가 하락할 때 계좌를 방어하기 위해 설정해야 하는 가장 핵심적인 기계적 손절선(Hard Stop)의 위치는?", 
-                ["전월 최저점", "매수 진입한 당일의 최저점(LOD, Low of the Day)", "50일 이동평균선 터치 시", "매수가 대비 -15% 구간"], index=None)
-
-            st.markdown("##### 🔴 3. 지문형 문제 (5문제)")
-            st.info("[지문 A] 프라딥 본데의 MAGNA 53 전략에서 'N (Neglect - 소외)'은 매우 중요한 요소이다. 지난 2개월에서 최대 3년 동안 횡보하거나 하락하며 대중과 기관 투자자들에게 철저히 잊혔던 주식을 찾는다. 이러한 종목이 깜짝 실적(어닝 서프라이즈)과 같은 강력한 '촉매제(Catalyst)'를 만났을 때 상승 탄력이 훨씬 크다.")
-            q26 = st.radio("Q26. 위 지문에 근거할 때, '소외된 주식(Neglect)'이 강력한 촉매제를 만났을 때 상상 이상의 폭발적인 주가 상승을 이끌어내는 주된 이유는 무엇인가요?", 
-                ["대중이 이미 주식을 많이 보유하고 있어 매수세가 더 강해지기 때문", "기관의 소유 비중이 낮아 악성 대기 매물이 없고, 새롭게 기관 자금이 몰리면서 가격에 구애받지 않는 강한 매수세가 유입되기 때문", "회사가 파산 위기에 처해 공매도 세력이 완전히 사라졌기 때문", "거래량이 영원히 줄어들어 적은 돈으로도 상한가를 만들 수 있기 때문"], index=None)
-            st.info("[지문 B] 시장의 상황 인식(Situational Awareness)은 돌파 매매의 승률을 결정짓는다. 시장이 '중립/조정장(Selective)' 환경에 돌입하면, 주요 지수는 20일선 부근에서 횡보하고 돌파가 일어나도 후속 매수세가 없어 금방 되돌림(Fade)이 발생하거나 실패하는 현상이 잦아진다.")
-            q27 = st.radio("Q27. 위 지문을 바탕으로, 중립/조정장(Selective) 환경에서 프라딥 본데가 취하는 올바른 매매 전략은 무엇입니까?", 
-                ["포지션 규모를 최대화하여 홈런을 노린다.", "브레이크아웃 매매를 전면 중단하고 100% 현금을 보유한다.", "포지션 규모를 평소의 절반 이하로 축소하고, 가장 확실한 A+ 셋업에서만 진입하여 짧고 빠르게 수익(3~5일 내)을 실현한다.", "지수가 하락하므로 즉시 전 재산을 공매도(Short)에 베팅한다."], index=None)
-            st.info("[지문 C] 에피소딕 피벗(EP) 발생 당일, 주가가 20% 이상 갭 상승하거나 변동성이 극심하여 첫날 진입 리스크가 너무 크다고 판단될 때, 본데와 쿨라매기 등은 첫날 매수를 포기하고 '지연 반응 진입(Delayed Reaction Entry, DRE)'을 활용한다. 이는 며칠에서 몇 주간 좁은 박스권을 형성하며 에너지를 응축한 뒤, 재차 저항선을 돌파할 때 진입하는 방식이다.")
-            q28 = st.radio("Q28. 지연 반응 진입(DRE) 방식이 급등 당일 추격 매수하는 것에 비해 가지는 가장 큰 장점은 무엇입니까?", 
-                ["시장의 관심을 덜 받으므로 거래 수수료가 저렴해진다.", "무조건 1,000% 이상의 수익률을 보장한다.", "초기 변동성과 흔들기를 피하고 손절선을 좁고 명확하게 잡을 수 있어 '위험 대비 수익률(Risk-Reward)'이 크게 개선된다.", "뉴스의 진위 여부를 한 달 동안 조사할 수 있다."], index=None)
-            st.info("[지문 D] 프라딥 본데는 \"훌륭한 트레이더는 장중에 머리로 고민하지 않고 반사적으로 매매해야 한다\"고 말한다. 이를 위해 과거 크게 폭등했던 주식 차트 3,000개 ~ 5,000개를 수집하여, 그 상승이 어떻게 시작되었고 거래량은 어땠는지 매일 집중적으로 연구하는 훈련을 강조한다.")
-            q29 = st.radio("Q29. 본데가 위와 같은 '차트 딥 다이브(Deep Dive)' 훈련을 통해 트레이더의 뇌에 각인시키고자 하는 심리학적/인지적 능력의 명칭은 무엇입니까?", 
-                ["군중 심리 (Herd Mentality)", "절차적 기억 (Procedural Memory)", "신 증후군 (God Syndrome)", "확증 편향 (Confirmation Bias)"], index=None)
-            st.info("[지문 E] 본데의 데이트레이딩 및 단기 스윙 전략 중 '9 Million EP'가 있다. 어떤 기업이 무슨 일을 하는지, 뉴스가 무엇인지 파악하지 못했더라도 하루 거래량이 900만 주 이상 폭발했다면, 그 거래량 자체가 주가의 궤적을 바꾸는 거대한 '촉매제'로 작용한다고 판단하고 돌파 타점에 진입하는 전략이다.")
-            q30 = st.radio("Q30. '9 Million EP' 전략의 핵심 논리로 가장 적절한 것은?", 
-                ["하루 900만 주 이상의 폭발적 거래량은 기관의 압도적 자금 유입을 증명하는 물리적 단서이므로, 그 자체로 추세 전환의 확정 신호로 신뢰할 수 있다.", "거래량이 900만 주가 넘으면 주가는 반드시 원래 가격으로 하락 회귀한다.", "900만 주 거래량은 회사가 자사주 매입을 하고 있다는 의미이다.", "개인 투자자들만이 900만 주를 거래할 수 있기 때문이다."], index=None)
-
-            if st.button("[ SUBMIT ] 자격 시험 30제 제출 및 가입 신청", use_container_width=True):
-                elapsed_final = time.time() - st.session_state.exam_start_time
-                if elapsed_final > 600:
-                    st.error("🚨 제한 시간(10분)이 초과되어 시험이 무효 처리되었습니다. 처음부터 다시 시작해주세요.")
-                    st.session_state.exam_start_time = None
-                    st.rerun()
-                else:
-                    corrects = [
-                        "단기 이동평균선이 장기 이동평균선을 상향 돌파하는 것 (상승 신호)",
-                        "변동성이 축소되어 좁은 범위에서 움직이다가, 곧 강한 추세(변동성 확대)가 발생할 가능성이 높다.",
-                        "30 이하",
-                        "4% 이상",
-                        "거래량은 기관의 발자국(Institutional Footprint)이며, 돌파 시 평균 대비 크게 폭발(1.5배~3배 이상)해야 진짜 돌파로 인정받는다.",
-                        "2단계 (상승 국면)",
-                        "3일 연속 (3 days in a row)",
-                        "하락 초입 구간",
-                        "에피소딕 피벗 (Episodic Pivot, EP)",
-                        "과매수 상태로 판단하여 매도 신호로 고려",
-                        "당일 변동폭의 상단(고가) 부근",
-                        "주가는 고점을 갱신하지만 MACD는 하락하는 등 주가와 지표의 방향이 불일치하는 현상",
-                        "보유 물량의 절반 정도를 팔아 안타(Singles) 수익을 먼저 확정 짓는다.",
-                        "40일 이동평균선 위에 있는 주식의 비율",
-                        "세 자릿수(100% 이상)의 폭발적인 어닝 서프라이즈(실적 발표)",
-                        "4% 하락 종목 수가 4% 상승 종목 수를 크게 압도할 때",
-                        "\"손절선은 신성하다. 어떤 이유로든 진입 후 손절선을 아래로 낮춰서는 안 된다.\"",
-                        "900만 주 (9 Million)",
-                        "과자나 아이스크림 가격이 오르는 것과 같은 '인플레이션' 현상",
-                        "엘리어트 파동 이론",
-                        "주가의 변동폭이 좁아지고(Narrow Range), 거래량이 평균 이하로 눈에 띄게 말라야(Dry-up) 한다.",
-                        "장 시작 후 첫 1분, 5분 또는 60분 캔들이 형성한 고점(ORH)을 재돌파할 때",
-                        "10일 또는 20일 이동평균선을 종가 기준으로 하향 이탈할 때",
-                        "이익은 회계적으로 조작될 수 있지만, 2분기 연속 39% 이상의 매출 성장은 제품 수요의 폭발적 증가를 속임 없이 증명하기 때문이다.",
-                        "매수 진입한 당일의 최저점(LOD, Low of the Day)",
-                        "기관의 소유 비중이 낮아 악성 대기 매물이 없고, 새롭게 기관 자금이 몰리면서 가격에 구애받지 않는 강한 매수세가 유입되기 때문",
-                        "포지션 규모를 평소의 절반 이하로 축소하고, 가장 확실한 A+ 셋업에서만 진입하여 짧고 빠르게 수익(3~5일 내)을 실현한다.",
-                        "초기 변동성과 흔들기를 피하고 손절선을 좁고 명확하게 잡을 수 있어 '위험 대비 수익률(Risk-Reward)'이 크게 개선된다.",
-                        "절차적 기억 (Procedural Memory)",
-                        "하루 900만 주 이상의 폭발적 거래량은 기관의 압도적 자금 유입을 증명하는 물리적 단서이므로, 그 자체로 추세 전환의 확정 신호로 신뢰할 수 있다."
-                    ]
-                    answers = [
-                        q1, q2, q3, q4, q5, q6, q7, q8, q9, q10,
-                        q11, q12, q13, q14, q15, q16, q17, q18, q19, q20,
-                        q21, q22, q23, q24, q25, q26, q27, q28, q29, q30
-                    ]
-                    score = sum([1 for a, c in zip(answers, corrects) if str(a) == str(c)])
-                    incorrect = 30 - score
-
-                    st.info(f"📊 **채점 결과:** 맞은 문제 **{score}개** / 틀린 문제 **{incorrect}개**")
-
-                    if score >= 25:
-                        users = load_users()
-                        if new_id in users: st.error("❌ 이미 존재하는 대원 코드(ID)입니다.")
-                        else:
-                            users[new_id] = {
-                                "password": new_pw, "status": "approved", "grade": "회원",
-                                "info": {
-                                    "region": reg_region, "age": reg_age, "gender": reg_gender,
-                                    "exp": reg_exp, "motivation": reg_moti, "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M")
-                                }
-                            }
-                            save_users(users)
-                            
-                            gsheet_sync_bg("회원명단", 
-                                ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
-                                [new_id, new_pw, "approved", "회원", reg_region, reg_age, reg_gender, reg_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), reg_moti]
-                            )
-                            
-                            st.success(f"[ SUCCESS ] {score}/30점 합격! ({int(elapsed_final//60)}분 {int(elapsed_final%60)}초 소요) 훌륭합니다. 사령부 승인이 완료되었습니다.")
-                            st.balloons()
-                            st.session_state.exam_start_time = None
+                if score >= 13:
+                    users = load_users()
+                    if new_id in users: st.error("❌ 이미 존재하는 대원 코드(ID)입니다.")
                     else:
-                        st.error(f"[ ERROR ] {score}/30점 탈락. (25점 이상 합격) 사령부의 철학을 더 공부하고 와주시기 바랍니다. 다시 시작하려면 버튼을 눌러주세요.")
-                        st.session_state.exam_start_time = None
+                        users[new_id] = {
+                            "password": new_pw, "status": "approved", "grade": "회원",
+                            "info": {
+                                "region": reg_region, "age": reg_age, "gender": reg_gender,
+                                "exp": reg_exp, "motivation": reg_moti, "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                            }
+                        }
+                        save_users(users)
+                        
+                        # 🛡️ 즉시 구글 시트 백업 전송 (백그라운드 전환)
+                        gsheet_sync_bg("회원명단", 
+                            ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
+                            [new_id, new_pw, "approved", "회원", reg_region, reg_age, reg_gender, reg_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), reg_moti]
+                        )
+                        
+                        st.success(f"[ SUCCESS ] {score}/15점! 훌륭합니다. 사령부의 지혜를 계승할 자격을 증명하셨습니다. 로그인을 진행해 주십시오.")
+                        st.balloons()
+                else:
+                    st.error(f"[ ERROR ] {score}/15점. 사령부의 철학을 더 공부하고 와주시기 바랍니다. (13점 이상 합격)")
+                    with st.expander("[ REVIEW ] 15관문 자격 시험 정답 및 해설 보기", expanded=True):
+                        st.markdown("""
+                        - **Q1-2:** 양봉(빨강)은 상승, 음봉(파란)은 하락입니다.
+                        - **Q3-4:** 거래량은 관심의 지표이며, 캔들 차트는 시세의 흐름을 보여줍니다.
+                        - **Q5-6:** 무릎에 사서 어깨에 파는 겸손한 원칙과 이동평균선의 방향을 추종하십시오.
+                        - **Q7-8:** 골든크로스는 황금빛 매수 신호, 데드크로스는 죽음의 매도 신호입니다.
+                        - **Q9-10:** 저점과 고점을 파악하고 인플레이션으로 인한 시장의 우상향을 믿으십시오.
+                        - **Q11:** MAGNA의 G는 **Gap Up**입니다. 강력한 기관 수급의 증거입니다.
+                        - **Q12:** 수익은 오직 **2단계 (Mark-up)** 에서만 창출됩니다.
+                        - **Q13:** RSI **30 이하**는 매도세가 소멸되는 과매도 구간입니다.
+                        - **Q14:** 부분 익절 후에는 손절선을 **본절(Break-even)**로 올려 무위험 상태를 만드십시오.
+                        - **Q15:** **3일 연속** 상승한 종목은 절대 추격 매수하지 않는 것이 사령부의 철칙입니다.
+                        """)
     st.stop()
 
 with st.sidebar:
-    # [ GLOBAL SESSIONS & WEATHER CONFIG ]
-    # 1. 먼저 사용할 변수들을 완벽하게 정의합니다.
-    sessions_data = {
-        "SEOUL": {"tz": pytz.timezone('Asia/Seoul'), "open": 9, "close": 15.5, "city": "Seoul"},
-        "NEW YORK": {"tz": pytz.timezone('America/New_York'), "open": 9.5, "close": 16, "city": "NewYork"},
-    }
-    day_map_sidebar = {"Monday": "월요일", "Tuesday": "화요일", "Wednesday": "수요일", "Thursday": "목요일", "Friday": "금요일", "Saturday": "토요일", "Sunday": "일요일"}
-    
-    def get_weather_info_sidebar(city):
-        """wttr.in을 사용한 실시간 날씨 수집 (Temp, Humidity) - 섭씨(m) 강제 및 인코딩 복구"""
-        try:
-            # &m: Metric(Celsius), &format=%t|%h: 기온|습도
-            res = requests.get(f"https://wttr.in/{city}?m&format=%t|%h", timeout=3)
-            if res.status_code == 200:
-                # [ SECURE ] 인코딩 깨짐 방지: Â 문자 제거 및 강제 UTF-8
-                raw_text = res.content.decode('utf-8', errors='ignore').replace('Â', '').strip()
-                parts = raw_text.split('|')
-                if len(parts) >= 2:
-                    temp = parts[0].replace('+', '') # +16°C -> 16°C
-                    return temp, parts[1]
-        except: pass
-        return "N/A", "N/A"
-
-    # [ TOP-LEFT POPUP ] 글로벌 상황실 및 랭킹 (Time/Weather/Ranking)
-    with st.expander("🛰️ [ OPS ] 실시간 글로벌 상황실 & 요원 랭킹", expanded=False):
-        # 1. 글로벌 시간 & 날씨
-        st.markdown("<p style='font-weight:bold; font-size:0.7rem; color:#888; margin-top:5px;'>[ GLOBAL TIME & WEATHER ]</p>", unsafe_allow_html=True)
-        for city_label, info in sessions_data.items():
-            city_now = datetime.now(info['tz'])
-            h_dec = city_now.hour + city_now.minute / 60
-            is_open = info['open'] <= h_dec < info['close']
-            s_color = "#00FF00" if is_open else "#FF4B4B"
-            temp, hum = get_weather_info_sidebar(info['city'])
-            day_str = day_map_sidebar.get(city_now.strftime('%A'), city_now.strftime('%A'))
-            st.markdown(f"""
-            <div style='background: rgba(255,255,255,0.03); padding: 8px; border-radius: 8px; border-left: 3px solid {s_color}; margin-bottom: 8px;'>
-                <div style='display: flex; justify-content: space-between; margin-bottom: 2px;'>
-                    <span style='font-size: 0.65rem; color: #888;'>{city_label}</span>
-                    <span style='font-size: 0.55rem; color: {s_color};'>● {"OPEN" if is_open else "CLOSED"}</span>
-                </div>
-                <div style='display: flex; justify-content: space-between; align-items: flex-end;'>
-                    <div style='font-size: 0.85rem; font-weight: 800; color: #FFF;'>{city_now.strftime('%H:%M:%S')} <small style='font-size:0.6rem; color:#888;'>{day_str}</small></div>
-                    <div style='text-align: right;'>
-                        <span style='font-size: 0.75rem; color: #FFD700; font-weight: 700;'>{temp}</span> <small style='font-size: 0.55rem; color: #666;'>💧 {hum}</small>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        st.divider()
-        
-        # 2. 요원 랭킹 (Ranking)
-        st.markdown("<p style='font-weight:bold; font-size:0.7rem; color:#888;'>[ WEEKLY COMMANDER RANKING ]</p>", unsafe_allow_html=True)
-        ranking_data = get_dynamic_ai_ranking()
-        for i, r_item in enumerate(ranking_data[:3]): # 상위 3명만 표시
-            medals = {0: "🥇", 1: "🥈", 2: "🥉"}
-            medal_color = {0: "#FFD700", 1: "#C0C0C0", 2: "#CD7F32"}
-            st.markdown(f"""
-            <div style='font-size: 0.75rem; display: flex; justify-content: space-between; margin-bottom: 5px; color: #EEE;'>
-                <span>{medals.get(i, '')} {r_item['name']}</span>
-                <span style='color: {medal_color.get(i, "#888")};'>{r_item['roi']}</span>
-            </div>
-            """, unsafe_allow_html=True)
-
     if logo_b64:
         st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:10px; margin-bottom:10px;">', unsafe_allow_html=True)
     elif os.path.exists("StockDragonfly.png"): 
@@ -1385,23 +776,41 @@ with st.sidebar:
     # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge)
     sentiment_score, _, _ = get_market_sentiment_score()
     s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
-    s_label = "공포 (FEAR)" if sentiment_score < 40 else ("중립 (NEUTRAL)" if sentiment_score < 65 else "탐욕 (GREED)")
-    s_desc = "하락 경계 및 보수적 대응" if sentiment_score < 40 else ("방향성 탐색 및 관망" if sentiment_score < 65 else "적극 매수 및 주도주 추격")
-    
     st.markdown(f"""
     <div class='glass-card' style='padding: 15px; margin-bottom: 20px; border-top: 3px solid {s_color};'>
-        <p style='color: #888; font-size: 0.75rem; margin-bottom: 5px;'>[ MARKET MOOD ] 시장 심리 지수</p>
-        <div style='display: flex; justify-content: space-between; align-items: baseline;'>
-            <b style='color: {s_color}; font-size: 1.4rem;'>{sentiment_score} <small style='font-size:0.7rem;'>pts</small></b>
-            <span style='font-size: 0.75rem; color: #FFF; font-weight: 700;'>{s_label}</span>
+        <p style='color: #888; font-size: 0.75rem; margin-bottom: 5px;'>[ MARKET SENTIMENT ]</p>
+        <div style='display: flex; align-items: center; justify-content: space-between;'>
+            <span style='color: {s_color}; font-weight: 800; font-size: 1.2rem;'>{sentiment_score} pts</span>
+            <span style='font-size: 0.75rem; color: #555;'>{'FEAR' if sentiment_score < 40 else ('NEUTRAL' if sentiment_score < 65 else 'GREED')}</span>
         </div>
-        <div style='width: 100%; height: 6px; background: #222; border-radius: 3px; margin-top: 8px;'>
-            <div style='width: {sentiment_score}%; height: 100%; background: {s_color}; border-radius: 3px; box-shadow: 0 0 10px {s_color};'></div>
+        <div style='width: 100%; height: 4px; background: #222; border-radius: 2px; margin-top: 10px;'>
+            <div style='width: {sentiment_score}%; height: 100%; background: {s_color}; border-radius: 2px; box-shadow: 0 0 10px {s_color};'></div>
         </div>
-        <p style='margin-top: 10px; font-size: 0.7rem; color: #AAA; line-height: 1.4;'>💡 <b>현재 대응 전략:</b><br>{s_desc}</p>
     </div>
     """, unsafe_allow_html=True)
 
+    # [ PRO ] 글로벌 마켓 세션 클락 (Sidebar Clock System)
+    now_utc = datetime.utcnow()
+    sessions = {
+        "SEOUL": {"tz": pytz.timezone('Asia/Seoul'), "open": 9, "close": 15.5},
+        "NEW YORK": {"tz": pytz.timezone('America/New_York'), "open": 9.5, "close": 16},
+        "LONDON": {"tz": pytz.timezone('Europe/London'), "open": 8, "close": 16.5}
+    }
+    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#888; margin-top:20px;'>[ WORLD MARKET SESSIONS ]</p>", unsafe_allow_html=True)
+    for city, info in sessions.items():
+        city_now = datetime.now(info['tz'])
+        h_dec = city_now.hour + city_now.minute / 60
+        is_open = info['open'] <= h_dec < info['close']
+        s_color = "#00FF00" if is_open else "#FF4B4B"
+        st.markdown(f"""
+        <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 8px; border-left: 3px solid {s_color};'>
+            <span style='font-size: 0.75rem; color: #BBB;'>{city}</span>
+            <div style='text-align: right;'>
+                <b style='font-size: 0.85rem; color: #FFF;'>{city_now.strftime('%H:%M')}</b>
+                <span style='font-size: 0.6rem; color: {s_color}; margin-left: 5px;'>● {"OPEN" if is_open else "CLOSED"}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     # [NEW] 실시간 작전 대원 상태 (AI 6인방)
     st.markdown("<p style='margin-top:20px; font-weight:bold; font-size:0.8rem; color:#888;'>[ LIVE ] AI OPERATIVES STATUS</p>", unsafe_allow_html=True)
@@ -1423,33 +832,29 @@ with st.sidebar:
 
     # [NEW] 금주의 우수 요원 랭킹 (전술 지표 포함)
     with st.expander("[ TOP ] COMMANDER RANKING (WEEKLY)", expanded=True):
-        ranking_data = get_dynamic_ai_ranking()
-        for i, r_item in enumerate(ranking_data):
+        ranking_data = [
+            {"name": "[ AI ] minsu", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"},
+            {"name": "[ AI ] Olive", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"},
+            {"name": "[ AI ] Pure", "pts": 1120, "win": 65, "balance": 11450000, "pick": "NVDA", "entry": 128.5, "exit_p": 144.5, "roi": "+12.4%", "exit": "04/19 23:50"}
+        ]
+        for r_item in ranking_data:
             roi_color = "#00FF00" if "+" in r_item['roi'] else "#FF4B4B"
-            # [ ACTION ] 메달 및 순위 색상 결정
-            medals = {0: "🥇 GOLD", 1: "🥈 SILVER", 2: "🥉 BRONZE"}
-            medal_colors = {0: "#FFD700", 1: "#C0C0C0", 2: "#CD7F32"}
-            rank_label = medals.get(i, f"RANK {i+1}")
-            border_color = medal_colors.get(i, "rgba(255,215,0,0.1)")
-            
+            # [ ACTION ] 한국 주식명 매팅 및 가격 포맷팅 (원 표시)
             disp_ticker = TICKER_NAME_MAP.get(r_item['pick'], r_item['pick'])
             is_kr = ".KS" in r_item['pick'] or ".KQ" in r_item['pick']
             
             # 진입가/판매가 포맷
-            in_p = f"{r_item['entry']/10000:,.1f} 만원" if is_kr else f"${r_item['entry']:,.1f}"
-            out_p = f"{r_item['exit_p']/10000:,.1f} 만원" if is_kr else f"${r_item['exit_p']:,.1f}"
+            in_p = f"{int(r_item['entry']):,} 원" if is_kr else f"${r_item['entry']:,.1f}"
+            out_p = f"{int(r_item['exit_p']):,} 원" if is_kr else f"${r_item['exit_p']:,.1f}"
             
             st.markdown(f"""
-            <div style='margin-bottom: 15px; padding: 15px; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px solid {border_color}; border-left: 5px solid {border_color};'>
-                <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <span style='color: {border_color}; font-weight: 900; font-size: 0.75rem; letter-spacing: 1px;'>{rank_label}</span>
-                    <span style='color: #888; font-size: 0.75rem;'>{r_item['pts']:,} pts</span>
-                </div>
-                <div style='display: flex; justify-content: space-between; margin-top: 5px;'>
-                    <b style='color: #FFF; font-size: 1.1rem;'>{r_item['name']}</b>
+            <div style='margin-bottom: 15px; padding: 15px; background: rgba(255,215,0,0.03); border-radius: 12px; border: 1px solid rgba(255,215,0,0.1); border-left: 4px solid #FFD700;'>
+                <div style='display: flex; justify-content: space-between;'>
+                    <b style='color: #FFD700; font-size: 1rem;'>{r_item['name']}</b>
+                    <span style='color: #888; font-size: 0.8rem;'>{r_item['pts']:,} pts</span>
                 </div>
                 <div style='margin-top: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;'>
-                    <span style='color: #00FF00; font-size: 0.9rem; font-weight: 800;'>보유자산: {r_item['balance']/10000:,.1f} 만원</span>
+                    <span style='color: #00FF00; font-size: 0.9rem; font-weight: 800;'>보유자산: {r_item['balance']:,} 원</span>
                 </div>
                 <div style='margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem;'>
                     <span style='color: #555; white-space: nowrap;'>대상: <b style='color: #EEE;'>{disp_ticker}</b></span>
@@ -1538,7 +943,8 @@ curr_grade = curr_user_data.get("grade", "회원")
 is_admin = (curr_grade in ["관리자", "방장"])
 
 # --- 🔴 2단계 구성 (ZONE_CONFIG 참조) ---
-# page initialized in INITIALIZATION zone.
+if 'page' not in st.session_state:
+    st.session_state.page = "6-a. [ CHECK ] 출석체크(오늘한줄)"
 
 zones = {k: list(v) for k, v in ZONE_CONFIG.items()} # 원본 구조 복사
 
@@ -1552,13 +958,6 @@ if not is_admin:
 if curr_grade not in ["방장", "관리자", "정회원", "준회원"]:
     if "[ AUTO ] 7. 자동매매 사령부" in zones:
         del zones["[ AUTO ] 7. 자동매매 사령부"]
-
-# [ NEW ] 자동매매 현황(DASHBOARD, REPORT)은 관리자(cntfed)만 볼 수 있도록 제한
-if st.session_state.get("current_user") != "cntfed":
-    if "[ AUTO ] 7. 자동매매 사령부" in zones:
-        for restricted_page in ["7-b. [ DASHBOARD ] 모의투자 현황/결과", "7-d. [ REPORT ] 자동투자 성적표"]:
-            if restricted_page in zones["[ AUTO ] 7. 자동매매 사령부"]:
-                zones["[ AUTO ] 7. 자동매매 사령부"].remove(restricted_page)
 
 with st.sidebar:
     st.markdown("<p style='color: #FFD700; font-size: 0.9rem; font-weight: 700; margin-top: 10px; margin-bottom: 20px; letter-spacing: 1px;'>[ MISSION CONTROL ]</p>", unsafe_allow_html=True)
@@ -1578,22 +977,13 @@ now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
 page = st.session_state.get("page", "6-a. [ CHECK ] 출석체크(오늘한줄)")
 
 # --- 🔴 상단 브랜드 헤더 (초정밀 밀착 레이아웃) ---
-head_c1, head_c2, head_c3 = st.columns([1, 8, 1])
-with head_c2:
-    st.markdown(f"""
-        <div style='text-align: center; margin-top: -30px; margin-bottom: 5px; overflow: visible;'>
-            <img src='data:image/png;base64,{logo_b64}' style='width: 110px; margin-bottom: -15px;'>
-            <h1 style='font-size: clamp(1.8rem, 7.5vw, 3.8rem); font-weight: 900; background: linear-gradient(45deg, #FFD700, #FFFFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.5); white-space: nowrap; margin-bottom: 0px; line-height: 1.1;'>StockDragonfly</h1>
-            <p style='color: #888; letter-spacing: 7px; font-size: 0.7rem; margin-top: -5px; opacity: 0.8;'>ULTRA-HIGH PERFORMANCE TERMINAL</p>
-        </div>
-    """, unsafe_allow_html=True)
-with head_c3:
-    st.markdown(f"<div style='text-align: right; margin-top: -10px; color: #00FF00; font-size: 0.8rem; font-weight: bold;'>👤 {st.session_state.get('current_user', 'Guest')}</div>", unsafe_allow_html=True)
-    if st.button("🚪 LOGOUT", key="top_logout_btn", help="터미널에서 안전하게 로그아웃합니다."):
-        st.session_state.password_correct = False
-        if "logged_in" in st.session_state: 
-            st.session_state.logged_in = False
-        st.rerun()
+st.markdown(f"""
+    <div style='text-align: center; margin-top: -30px; margin-bottom: 5px; overflow: visible;'>
+        <img src='data:image/png;base64,{logo_b64}' style='width: 110px; margin-bottom: -15px;'>
+        <h1 style='font-size: clamp(1.8rem, 7.5vw, 3.8rem); font-weight: 900; background: linear-gradient(45deg, #FFD700, #FFFFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.5); white-space: nowrap; margin-bottom: 0px; line-height: 1.1;'>StockDragonfly</h1>
+        <p style='color: #888; letter-spacing: 7px; font-size: 0.7rem; margin-top: -5px; opacity: 0.8;'>ULTRA-HIGH PERFORMANCE TERMINAL</p>
+    </div>
+""", unsafe_allow_html=True)
 
 # --- 🐉 글로벌 매크로 애니메이션 티커 테이프 ---
 @st.cache_data(ttl=600)
@@ -1649,7 +1039,7 @@ def get_urgent_news():
 news_flash = get_urgent_news()
 st.markdown(f"""
     <div style='background: #111; color: #FFF; padding: 5px 0; border-bottom: 2px solid #FF4B4B; overflow: hidden;'>
-        <div style='display: inline-block; white-space: nowrap; animation: marquee-news 45s linear infinite; font-size: 1.0rem; font-weight: 600; letter-spacing: 0.5px;'>
+        <div style='display: inline-block; white-space: nowrap; animation: marquee-news 45s linear infinite; font-size: 0.8rem; font-weight: 500; letter-spacing: 0.5px;'>
             <span style='color: #FF4B4B; font-weight: 900; margin-right: 20px;'>NEWS FLASH</span> {news_flash} &nbsp;&nbsp;&nbsp; <span style='color: #FF4B4B; font-weight: 900; margin-right: 20px;'>NEWS FLASH</span> {news_flash}
         </div>
     </div>
@@ -1672,16 +1062,16 @@ st.markdown(f"""
     100% {{ transform: scale(1); opacity: 1; }}
 }}
 .ops-active-dot {{
-    width: 14px; height: 14px; background: #00FF00; border-radius: 50%;
-    animation: pulse-heart 1.2s infinite; box-shadow: 0 0 12px #00FF00;
+    width: 10px; height: 10px; background: #00FF00; border-radius: 50%;
+    animation: pulse-heart 1.2s infinite; box-shadow: 0 0 10px #00FF00;
 }}
 </style>
 <div style='background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05);'>
     <div style='display: flex; align-items: center; gap: 15px;'>
         <div class='ops-active-dot'></div>
-        <b style='color: #FFD700; letter-spacing: 2px; font-size: 1.1rem; white-space: nowrap;'>TACTICAL OPS CENTER ACTIVE</b>
+        <b style='color: #FFD700; letter-spacing: 2px; font-size: 0.9rem; white-space: nowrap;'>TACTICAL OPS CENTER ACTIVE</b>
         <span style='color: #555;'>|</span>
-        <marquee scrollamount='5' style='color: #00FF00; font-size: 1.0rem; font-family: monospace;'>
+        <marquee scrollamount='5' style='color: #00FF00; font-size: 0.85rem; font-family: monospace;'>
             {macro_str} &nbsp;&nbsp;&nbsp; [BREAKING] NVDA VCP Phase 3 Detection... &nbsp;&nbsp; [HQ] minsu 요원 코스피 주도 수급 분석 중... &nbsp;&nbsp; [ALERT] RS 상위 10% 종목 실시간 응축 확인...
         </marquee>
     </div>
@@ -1693,45 +1083,35 @@ now_kr = datetime.now(pytz.timezone('Asia/Seoul'))
 now_us = datetime.now(pytz.timezone('America/New_York'))
 
 @st.cache_data(ttl=600)
-def get_global_market_data():
-    """주요 지수 및 거시 지표 일괄 수집 (성능 최적화)"""
-    res = {"DOW": [0.0, 0.0, 0.0, 0.0], "S&P500": [0.0, 0.0, 0.0, 0.0], "NASDAQ": [0.0, 0.0, 0.0, 0.0], "KOSPI": [0.0, 0.0, 0.0, 0.0], "KOSDAQ": [0.0, 0.0, 0.0, 0.0]}
-    symbols = {"DOW": "^DJI", "S&P500": "^GSPC", "NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11", "VIX": "^VIX", "USD/KRW": "USDKRW=X", "US10Y": "^TNX"}
-    try:
-        data = yf.download(list(symbols.values()), period="1mo", progress=False)
-        if data.empty: return res, 20.0, 1400.0, 4.3
-        
-        close = data['Close']
-        high = data['High']
-        low = data['Low']
-        
-        for name in ["DOW", "S&P500", "NASDAQ", "KOSPI", "KOSDAQ"]:
-            sym = symbols[name]
-            if sym in close.columns:
-                c = close[sym].dropna()
-                if len(c) >= 2:
-                    curr, prev = c.iloc[-1], c.iloc[-2]
-                    res[name] = [float(curr), float(((curr/prev)-1)*100), float(high[sym].dropna().iloc[-1]), float(low[sym].dropna().iloc[-1])]
-        
-        vix = float(close[symbols["VIX"]].dropna().iloc[-1]) if symbols["VIX"] in close.columns else 20.0
-        rate = float(close[symbols["USD/KRW"]].dropna().iloc[-1]) if symbols["USD/KRW"] in close.columns else 1400.0
-        yield10y = float(close[symbols["US10Y"]].dropna().iloc[-1]) if symbols["US10Y"] in close.columns else 4.3
-        return res, vix, rate, yield10y
-    except:
-        return res, 20.0, 1400.0, 4.3
-
-# 기존 개별 함수들을 일괄 데이터 함수를 사용하도록 래핑
 def get_top_indices():
-    res, _, _, _ = get_global_market_data()
+    # [ PRO ] 고가/저가 정보를 포함한 정밀 데이터 페칭
+    res = {"DOW": [0.0, 0.0, 0.0, 0.0], "S&P500": [0.0, 0.0, 0.0, 0.0], "NASDAQ": [0.0, 0.0, 0.0, 0.0], "KOSPI": [0.0, 0.0, 0.0, 0.0], "KOSDAQ": [0.0, 0.0, 0.0, 0.0]}
+    symbols = {"DOW": "^DJI", "S&P500": "^GSPC", "NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
+    try:
+        data = yf.download(list(symbols.values()), period="5d", progress=False)
+        close_data = data['Close']
+        high_data = data['High']
+        low_data = data['Low']
+        
+        for name, ticker in symbols.items():
+            try:
+                c_series = close_data[ticker].dropna()
+                if len(c_series) >= 2:
+                    curr = c_series.iloc[-1]
+                    prev = c_series.iloc[-2]
+                    pct = ((curr / prev) - 1) * 100
+                    h_val = float(high_data[ticker].dropna().iloc[-1])
+                    l_val = float(low_data[ticker].dropna().iloc[-1])
+                    res[name] = [float(curr), float(pct), h_val, l_val]
+            except: continue
+    except: pass
     return res
-
-def get_macro_data():
-    _, _, rate, yield10y = get_global_market_data()
-    return rate, yield10y
 
 idx_info = get_top_indices()
 
 # --- [ CONTROL ] 사령부 통합 지수 관제 센터 (Stable v6.1) ---
+idx_info = get_top_indices()
+
 with st.container():
     st.markdown("<div style='margin-bottom: -10px;'></div>", unsafe_allow_html=True)
     
@@ -1741,20 +1121,19 @@ with st.container():
     for i, name in enumerate(indices_list):
         val, pct, high, low = idx_info.get(name, [0.0, 0.0, 0.0, 0.0])
         with cols[i]:
-            # [ USER REQUEST ] 상승=빨강(#FF4B4B), 하락=파랑(#0088FF) 통일
-            is_up = pct >= 0
-            stat_color = "#FF4B4B" if is_up else "#0088FF"
-            arrow = "▲" if is_up else "▼"
-            
             is_kr = name in ["KOSPI", "KOSDAQ"]
+            theme_color = "#FF4B4B" if is_kr else "#00FF00"
+            stat_color = theme_color if pct >= 0 else ("#0088FF" if is_kr else "#FF4B4B")
+            arrow = ("▲" if is_kr else "↑") if pct >= 0 else ("▼" if is_kr else "↓")
+            
             # 시간 표시 결정
             time_str = now_us.strftime('%H:%M') if not is_kr else now_kr.strftime('%H:%M')
             region_tag = "[USA]" if not is_kr else "[KOR]"
 
             st.markdown(f"""
-                <div style='background: rgba(15,15,25,0.8); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); border-top: 3px solid {stat_color}; text-align: left; height: 150px; position: relative;'>
+                <div style='background: rgba(15,15,25,0.8); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); border-top: 2px solid {theme_color}; text-align: left; height: 150px; position: relative;'>
                     <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;'>
-                        <span style='color: {stat_color}; font-weight: 800; font-size: 0.75rem; opacity: 0.8;'>{name}</span>
+                        <span style='color: {theme_color}; font-weight: 800; font-size: 0.75rem; opacity: 0.8;'>{name}</span>
                         <span style='color: #555; font-size: 0.6rem;'>{region_tag} {time_str}</span>
                     </div>
                     <div style='color: #FFF; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px; margin: 5px 0;'>{val:,.1f}</div>
@@ -1852,6 +1231,11 @@ def get_daily_wisdom():
     day_idx = datetime.now().day % len(BONDE_WISDOM)
     return BONDE_WISDOM[day_idx]
 
+def get_footer_quote():
+    # 날짜를 시드로 사용하여 매일 같은 랜덤 어록 선택
+    random.seed(datetime.now().strftime("%Y%m%d"))
+    return random.choice(BONDE_FOOTER_QUOTES)
+
 # --- [PLACEHOLDER_LOGIC_START] ---
 if page.startswith("6-a."):
     st.header("[ CHECK ] 사령부 출석체크 및 오늘 한 줄")
@@ -1888,9 +1272,10 @@ if page.startswith("6-a."):
                 # %t: 기온, %h: 습도, %C: 상태 / m: 섭씨(Metric) 강제
                 resp = requests.get(f"https://wttr.in/{loc}?format=%t+%h+%C&m", timeout=3)
                 if resp.status_code == 200:
-                    # [ SECURE ] 인코딩 깨짐 방지: Â 문자 제거 및 강제 UTF-8
-                    raw_text = resp.content.decode('utf-8', errors='ignore').strip()
-                    clean_text = raw_text.replace('Â', '').replace('+', '')
+                    # [ SECURE ] 인코딩 깨짐 방지를 위한 명시적 디코딩 및 정제
+                    raw_text = resp.content.decode('utf-8').strip()
+                    # 깨진 문자(Â)가 포함될 경우 제거
+                    clean_text = raw_text.replace('Â', '')
                     return clean_text
             except: pass
             return "15°C 50% Clear"
@@ -2026,13 +1411,9 @@ elif page.startswith("3-a."):
             st.warning("스캔할 종목 리스트가 비어 있습니다.")
             return
 
-        @st.cache_data(ttl=3600) # 1시간 동안 historical 데이터 캐싱
-        def fetch_scanner_data(t_list):
-            return yf.download(t_list, period="1y", interval="1d", progress=False)
-
         try:
             # 1년치 일봉 데이터 일괄 수집
-            data_full = fetch_scanner_data(full_list)
+            data_full = yf.download(full_list, period="1y", interval="1d", progress=False)
             
             final_results = {"Burst": [], "EP": [], "Anticipation": []}
             
@@ -2120,14 +1501,12 @@ elif page.startswith("3-a."):
             cols = st.columns(3)
             for i, stock in enumerate(res["Burst"][:9]):
                 with cols[i % 3]:
-                    is_kr = (".KS" in stock['TIC'] or ".KQ" in stock['TIC'])
-                    price_str = f"{int(stock['P']):,}원" if is_kr else f"{stock['P']:,.2f}$"
                     st.markdown(f"""
                     <div class='glass-card' style='border-left: 5px solid #00FF00; margin-bottom: 15px; padding: 15px;'>
                         <div style='font-size: 0.8rem; color: #888;'>HIT: MOMENTUM BURST</div>
                         <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
                         <span style='color: #00FF00; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
-                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>P: {price_str} | Vol: {stock['V']:,}</div>
+                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -2140,14 +1519,12 @@ elif page.startswith("3-a."):
             cols = st.columns(3)
             for i, stock in enumerate(res["EP"][:9]):
                 with cols[i % 3]:
-                    is_kr = (".KS" in stock['TIC'] or ".KQ" in stock['TIC'])
-                    price_str = f"{int(stock['P']):,}원" if is_kr else f"{stock['P']:,.2f}$"
                     st.markdown(f"""
                     <div class='glass-card' style='border-left: 5px solid #FFD700; margin-bottom: 15px; padding: 15px;'>
                         <div style='font-size: 0.8rem; color: #888;'>HIT: EPISODIC PIVOT</div>
                         <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
                         <span style='color: #FFD700; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
-                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>P: {price_str} | Vol: {stock['V']:,}</div>
+                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -2160,14 +1537,12 @@ elif page.startswith("3-a."):
             cols = st.columns(3)
             for i, stock in enumerate(res["Anticipation"][:9]):
                 with cols[i % 3]:
-                    is_kr = (".KS" in stock['TIC'] or ".KQ" in stock['TIC'])
-                    price_str = f"{int(stock['P']):,}원" if is_kr else f"{stock['P']:,.2f}$"
                     st.markdown(f"""
                     <div class='glass-card' style='border-left: 5px solid #00FFFF; margin-bottom: 15px; padding: 15px;'>
                         <div style='font-size: 0.8rem; color: #888;'>HIT: COILING / DRY-UP</div>
                         <b style='font-size: 1.1rem;'>{stock['T']}</b> ({stock['TIC']})<br>
                         <span style='color: #00FFFF; font-size: 1.4rem; font-weight: 800;'>{stock['CH']:+.1f}%</span>
-                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>P: {price_str} | Vol: {stock['V']:,}</div>
+                        <div style='font-size: 0.75rem; color: #AAA; margin-top: 8px;'>Vol: {stock['V']:,}</div>
                     </div>
                     """, unsafe_allow_html=True)
         
@@ -2246,7 +1621,7 @@ elif page.startswith("6-b."):
                     t = now_kst.strftime("%Y-%m-%d %H:%M:%S")
                     # 로컬 저장
                     new_msg = pd.DataFrame([[t, uid, ms, curr_grade]], columns=["시간", "유저", "내용", "등급"])
-                    safe_write_csv(new_msg, CHAT_FILE, mode='a', header=not os.path.exists(CHAT_FILE))
+                    new_msg.to_csv(CHAT_FILE, mode='a', header=not os.path.exists(CHAT_FILE), index=False, encoding="utf-8-sig")
                     # 백그라운드 싱크 (구글 시트)
                     gsheet_sync_bg("소통기록_통합", ["시간", "유저", "내용", "등급"], [t, uid, ms, curr_grade])
                     st.rerun()
@@ -2272,20 +1647,19 @@ elif page.startswith("6-b."):
                 border_radius = "15px 15px 0px 15px" if is_me else "15px 15px 15px 0px"
                 
                 # 메시지 표시 섹션
-                if st.session_state.editing_msg_idx == idx:
+                if st.session_state.get("editing_msg_idx") == idx:
                     # 수정 모드 폼
                     with st.form(f"edit_form_{idx}"):
                         edit_content = st.text_area("메시지 수정", value=row["내용"])
                         ce1, ce2 = st.columns(2)
                         if ce1.form_submit_button("[ OK ] 저장"):
                             local_chat.at[idx, "내용"] = edit_content
-                            safe_write_csv(local_chat, CHAT_FILE, mode='w')
+                            local_chat.to_csv(CHAT_FILE, index=False, encoding="utf-8-sig")
                             del st.session_state["editing_msg_idx"]
                             st.rerun()
                         if ce2.form_submit_button("[ CANCEL ] 취소"):
                             del st.session_state["editing_msg_idx"]
                             st.rerun()
-                else:
                     # 일반 버블 모드 (아바타/배지 포함 프리미엄 UI)
                     avatar_char = str(row["유저"])[0].upper() if row["유저"] else "?"
                     st.markdown(f"""
@@ -2327,7 +1701,7 @@ elif page.startswith("6-b."):
                         with react_col4:
                             if st.button("[ DEL ]", key=f"del_{idx}", help="삭제"):
                                 local_chat = local_chat.drop(idx)
-                                safe_write_csv(local_chat, CHAT_FILE, mode='w')
+                                local_chat.to_csv(CHAT_FILE, index=False, encoding="utf-8-sig")
                                 st.rerun()
                     st.write("") # 간격 조절
     except Exception as e:
@@ -2426,53 +1800,6 @@ elif page.startswith("3-c."):
         except Exception as e:
             st.error(f"[ ERROR ] 전략 리스트 분석 실패: {e}")
 
-elif page.startswith("6-d."):
-    st.header("[ HISTORY ] 사령부 대원 누적 출석 기록부")
-    st.markdown("<div class='glass-card'>지난 활동의 발자취입니다. 대원님들의 성실함이 수익으로 이어집니다.</div>", unsafe_allow_html=True)
-    
-    if not os.path.exists(ATTENDANCE_FILE):
-        st.info("아직 기록된 출석 내역이 없습니다.")
-    else:
-        # 데이터 로드
-        att_df = safe_read_csv(ATTENDANCE_FILE, ["시간", "아이디", "인사", "등급"])
-        
-        if att_df.empty:
-            st.info("출석 기록이 비어 있습니다.")
-        else:
-            # 검색 및 필터링 기능
-            col_f1, col_f2 = st.columns([2, 1])
-            search_id = col_f1.text_input("대원 아이디 검색", placeholder="아이디를 입력하세요")
-            sort_order = col_f2.selectbox("정렬 순서", ["최신순", "오래된순"])
-            
-            filtered_df = att_df.copy()
-            if search_id:
-                filtered_df = filtered_df[filtered_df['아이디'].str.contains(search_id, case=False)]
-            
-            if sort_order == "최신순":
-                filtered_df = filtered_df.iloc[::-1]
-            
-            # 통계 정보
-            st.markdown(f"**총 출석 횟수:** {len(filtered_df)}회")
-            
-            # 테이블 출력
-            st.dataframe(
-                filtered_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "시간": st.column_config.TextColumn("출석 일시", width="medium"),
-                    "아이디": st.column_config.TextColumn("대원 ID"),
-                    "인사": st.column_config.TextColumn("오늘의 각오", width="large"),
-                    "등급": st.column_config.TextColumn("직책")
-                }
-            )
-            
-            # 사용자별 출석 횟수 랭킹 (간이)
-            if st.checkbox("출석왕 랭킹 보기"):
-                ranking = att_df['아이디'].value_counts().reset_index()
-                ranking.columns = ['아이디', '누적 출석']
-                st.table(ranking.head(10))
-
 elif page.startswith("3-d."):
     st.header("[ INDUSTRY ] 산업동향 (Industry Trends TOP 10)")
     st.markdown("<div class='glass-card'>사령부 지정 데이터 피트를 통한 현재 주도 산업군을 노출합니다.</div>", unsafe_allow_html=True)
@@ -2524,47 +1851,6 @@ elif page.startswith("3-e."):
                 """, unsafe_allow_html=True)
             else: st.info("현재 로드된 RS 강도 데이터가 없습니다.")
         except Exception as e: st.error(f"[ ERROR ] RS 강도 로드 실패: {e}")
-
-elif page.startswith("7-g."):
-    st.header("📋 [ LEDGER ] 실전 매매 기록부 (Live Trading Log)")
-    st.markdown("<div class='glass-card'>2026년 4월 23일부터 집행된 모든 실제 매매 내역을 영구 보존합니다.</div>", unsafe_allow_html=True)
-    
-    if os.path.exists(REAL_TRADE_LOG_FILE):
-        ledger_df = pd.read_csv(REAL_TRADE_LOG_FILE, encoding="utf-8-sig")
-        
-        # 필터 섹션
-        f1, f2 = st.columns(2)
-        search_q = f1.text_input("🔍 종목명/티커 검색", placeholder="삼성전자, NVDA 등")
-        market_f = f2.selectbox("🌐 시장 필터", ["전체", "KR (국내)", "US (해외)"])
-        
-        filtered_df = ledger_df.copy()
-        if search_q:
-            filtered_df = filtered_df[filtered_df["종목명"].str.contains(search_q, case=False) | filtered_df["티커"].str.contains(search_q, case=False)]
-        if market_f != "전체":
-            m_code = "KR" if "KR" in market_f else "US"
-            filtered_df = filtered_df[filtered_df["시장"] == m_code]
-            
-        st.divider()
-        
-        # 통계 요약
-        st.markdown(f"**총 {len(filtered_df)}건**의 매매 기록이 검색되었습니다.")
-        
-        if not filtered_df.empty:
-            # 카드형 리스트 또는 테이블
-            st.dataframe(filtered_df.sort_values("시간", ascending=False), use_container_width=True)
-            
-            # CSV 다운로드 버튼
-            csv_data = filtered_df.to_csv(index=False, encoding="utf-8-sig")
-            st.download_button(
-                label="📥 매매 내역 CSV 다운로드",
-                data=csv_data,
-                file_name=f"Dragonfly_Real_Trade_Ledger_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-            )
-        else:
-            st.info("조건에 맞는 매매 기록이 없습니다.")
-    else:
-        st.info("아직 기록된 실전 매매 내역이 없습니다. 첫 매매가 발생하면 이곳에 기록됩니다.")
 
 elif page.startswith("1-a."):
     st.header("[ ADMIN ] 관리자 승인 센터 (HQ Member Approval)")
@@ -2760,8 +2046,7 @@ elif page.startswith("6-c."):
             if g1 and g2 and g3:
                 t = datetime.now().strftime("%Y-%m-%d %H:%M")
                 u = st.session_state.current_user
-                new_visitor = pd.DataFrame([[t, u, g1, g2, g3]], columns=["시간", "아이디", "첫인사", "자기소개", "포부"])
-                safe_write_csv(new_visitor, VISITOR_FILE, mode='a', header=not os.path.exists(VISITOR_FILE))
+                pd.DataFrame([[t, u, g1, g2, g3]], columns=["시간", "아이디", "첫인사", "자기소개", "포부"]).to_csv(VISITOR_FILE, mode='a', header=not os.path.exists(VISITOR_FILE), index=False, encoding="utf-8-sig")
                 gsheet_sync_bg("방문자_승격신청", ["시간", "아이디", "첫인사", "자기소개", "포부"], [t, u, g1, g2, g3])
                 st.success("[ SUCCESS ] 승격 신청서가 성공적으로 전송되었습니다.")
             else: st.error("모든 항목을 작성해 주십시오.")
@@ -2929,32 +2214,8 @@ elif page.startswith("5-a."):
 
 elif page.startswith("2-a."):
     st.header("[ TREND ] 마켓 트렌드 요약")
-    st.markdown("<div class='glass-card'>주요 빅테크 및 반도체 주도 섹터의 실시간 변동성을 시각화합니다.</div>", unsafe_allow_html=True)
-    with st.spinner("트렌드 시각화 차트 생성 중..."):
-        try:
-            tickers = ["NVDA", "AAPL", "MSFT", "GOOGL", "META", "TSLA", "AVGO", "005930.KS", "000660.KS", "042700.KS"]
-            data = yf.download(tickers, period="5d", progress=False)['Close']
-            perf_data = []
-            for t in tickers:
-                if t in data.columns:
-                    c_series = data[t].dropna()
-                    if len(c_series) >= 2:
-                        curr = c_series.iloc[-1]
-                        prev = c_series.iloc[-2]
-                        pct = ((curr / prev) - 1) * 100
-                        disp_name = TICKER_NAME_MAP.get(t, t)
-                        perf_data.append({"종목명": disp_name, "등락률(%)": pct})
-            if perf_data:
-                df_perf = pd.DataFrame(perf_data)
-                fig = px.bar(df_perf, x="종목명", y="등락률(%)", color="등락률(%)",
-                             color_continuous_scale=["#FF4B4B", "#222", "#00FF00"],
-                             title="주요 대장주 일간 변동성 히트맵")
-                fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FFF")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("데이터가 준비되지 않았습니다.")
-        except Exception as e:
-            st.error(f"트렌드 로드 실패: {e}")
+
+
 
 elif page.startswith("5-d."):
     st.header("[ EXAM ] 사령부 정기 승급 시험 안내")
@@ -3284,15 +2545,14 @@ elif page.startswith("2-b."):
 elif page.startswith("2-c."):
     st.header("[ SENTIMENT ] 시장 심리 게이지 (Market Sentiment Tracker)")
     st.markdown("<div class='glass-card'>글로벌 투자자들의 공포와 탐욕 및 주요 지수 심리를 실시간 추적합니다.</div>", unsafe_allow_html=True)
-    val, curr_vix, stage = get_market_sentiment_score()
+    val, curr_vix = get_market_sentiment_score()
     
-    st.info(f"[ ADVICE ] 현재 시장 변동성 지수(VIX): **{curr_vix:.1f}** | IBD 시장 단계: **{stage}**")
+    st.info(f"[ ADVICE ] 현재 시장 변동성 지수(VIX): **{curr_vix:.1f}** | 수치가 낮을수록 시장은 안정적(탐욕), 높을수록 불안정(공포) 상태입니다.")
 
-    st.info("[ ADVICE ] IBD(Investor's Business Daily) 원칙에 따라 시장 단계별로 현금 비중을 조절하십시오.")
+    st.info("[ ADVICE ] 위 지표를 통해 대중의 광기(Greed)가 극에 달했을 때는 현금 비중을 높이고, 공포(Fear)가 극에 달했을 때는 기회를 포착하십시오.")
     
     col1, col2 = st.columns([1.5, 1.2])
     with col1:
-        # (TradingView widget remains the same)
         st.components.v1.html("""
             <div class="tradingview-widget-container">
               <div class="tradingview-widget-container__widget"></div>
@@ -3334,27 +2594,27 @@ elif page.startswith("2-c."):
     
     with col2:
         st.markdown("<div class='glass-card' style='padding:25px;'>", unsafe_allow_html=True)
-        st.subheader("[ STRATEGY ] IBD 기반 사령부 전술 지침")
-        if val <= 40: 
-            st.error(f"""
-            **[ PHASE: {stage} ]**  
-            "시장이 조정을 받고 있습니다. 하락장에서는 아무리 좋은 기법도 승률이 급감합니다. 
-            지금은 공격할 때가 아니라 방패를 들 때입니다. 현금 비중을 80% 이상으로 높이고 
-            다음 'Follow-through Day'가 올 때까지 인내하며 주도주 후보군만 관찰하십시오."
+        st.subheader("[ TRUTH ] StockDragonfly의 실시간 뼈 때리는 훈계 (Harsh Truth)")
+        if val <= 35: 
+            st.error("""
+            **[ STATUS: DEFENSIVE/CASH ]**  
+            "떨어지는 칼날을 왜 잡으려 하나? 네가 시장보다 똑똑하다고 착각하지 마라. 
+            지금 네가 할 일은 스캐닝이 아니라 자본 보호다. 계좌 박살 내고 울지 말고 당장 HTS 꺼라. 
+            시장은 어디 안 간다, 네 돈이 도망갈 뿐이지."
             """)
         elif val <= 65: 
-            st.warning(f"""
-            **[ PHASE: {stage} ]**  
-            "상승 추세가 흔들리고 있습니다. 지수가 주요 이평선 부근에서 공방 중입니다. 
-            신규 매수는 극도로 보수적으로 접근하고, 보유 종목의 손절가를 타이트하게 올려 잡으십시오. 
-            주도주들이 꺾이기 시작하면 즉시 현금화 준비를 해야 합니다."
+            st.warning("""
+            **[ STATUS: SELECTIVE/CHOPPY ]**  
+            "지금 매수 버튼에 손이 가나? 그건 투자가 아니라 도박이다. 아무것도 하지 않는 것도 포지션이다. 
+            푼돈 벌려다 큰돈 잃지 말고, 확실한 A+ 셋업이 올 때까지 얌전히 현금 쥐고 기다려라. 
+            지루함을 못 견디면 파산뿐이다."
             """)
         else: 
-            st.success(f"""
-            **[ PHASE: {stage} ]**  
-            "시장이 강력한 상승 궤도에 있습니다. 주도주들이 신고가를 경신하며 에너지를 분출 중입니다. 
-            공격적으로 포지션을 구축하되, 자만심에 빠져 원칙 없는 매매를 하지 않도록 주의하십시오. 
-            강한 종목에 집중하고 수익을 극대화(Let your winners run)하십시오."
+            st.success("""
+            **[ STATUS: GREED/AGGRESSIVE ]**  
+            "수익 좀 났다고 네가 천재가 된 줄 아나? 시장이 좋은 것뿐이다. 
+            자만심(Ego)이 고개를 드는 순간, 시장은 네 계좌를 갈기갈기 찢어놓을 거다. 
+            익절 라인 올려 잡고 닥치고 프로세스나 지켜라."
             """)
         st.markdown("</div>", unsafe_allow_html=True)
         
@@ -3366,6 +2626,7 @@ elif page.startswith("2-c."):
         <p style='color: #DDD; font-size: 1.1rem; line-height: 1.8; font-style: italic;'>
             "{wisdom['content']}"
         </p>
+        <div style='text-align: right; color: #888; font-weight: 700;'>- Pradeep Bonde, Stockbee Matrix -</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -3373,12 +2634,14 @@ elif page.startswith("1-b."):
     st.header("[ HR ] HQ 인적 자원 사령부 (Member HR Command)")
     users = load_users()
     
+    # 사령관(방장) 전용 보안
     if users.get(st.session_state.current_user, {}).get("grade") != "방장":
         st.error("[ ERROR ] 이 전술 구역은 사령관(방장) 전용입니다. 권한이 없습니다.")
         st.stop()
         
     st.markdown("<div class='glass-card'>사령관의 권위로 대원의 등급을 조정하거나 사령부에서 즉각 제명(삭제)하는 인사권을 행사합니다.</div>", unsafe_allow_html=True)
     
+    # 🛡️ 사령부 데이터 동기화 및 복구 센터 (통합 관리)
     st.subheader("[ CLOUD ] 클라우드 데이터 동기화 및 복구 센터")
     with st.expander("[ DATA ] 구글 시트 양방향 동기화 (불러오기 / 백업)", expanded=True):
         st.markdown("""
@@ -3398,6 +2661,7 @@ elif page.startswith("1-b."):
                     if "gs_error" in st.session_state:
                         st.error(st.session_state["gs_error"])
                     elif users:
+                        # 🛡️ 빈 문자열 아이디 필터링
                         users = {k: v for k, v in users.items() if k.strip()}
                         save_users(users)
                         st.success(f"[ SUCCESS ] 클라우드에서 {len(users)}명의 요원 정보를 성공적으로 수신하여 동기화했습니다.")
@@ -3425,6 +2689,8 @@ elif page.startswith("1-b."):
     
     st.divider()
     st.subheader("[ DIRECTORY ] 전체 대원 리스트 관리")
+    
+    # 자신을 제외한 대원 리스트
     m_list = [u for u in users.keys() if u != st.session_state.current_user]
     
     if m_list:
@@ -3446,7 +2712,7 @@ elif page.startswith("1-b."):
                         st.success(f"✅ {u} 요원이 {new_grade}(으)로 발령되었습니다.")
                         st.rerun()
                 with c3:
-                    st.write("")
+                    st.write("") # 정렬용
                     if st.button("[ EXEC: DELETE ] 즉각 제명", key=f"del_{u}"):
                         del users[u]
                         save_users(users)
@@ -3455,98 +2721,6 @@ elif page.startswith("1-b."):
     else:
         st.info("현재 사령부에서 관리할 대원이 없습니다.")
 
-elif page.startswith("1-c."):
-    st.header("[ SECURITY ] 계정 보안 및 관리 (Security & Account)")
-    st.markdown("<div class='glass-card'>사령부 보안 설정을 관리합니다. 비밀번호를 정기적으로 변경해 주세요.</div>", unsafe_allow_html=True)
-    
-    with st.expander("[ KEY ] 비밀번호 변경 및 보안 강화", expanded=True):
-        with st.form("pw_change_form", clear_on_submit=True):
-            curr_pw_input = st.text_input("현재 비밀번호 확인", type="password")
-            new_pw_input = st.text_input("새로운 비밀번호 설정", type="password")
-            new_pw_confirm = st.text_input("새로운 비밀번호 다시 입력", type="password")
-            
-            if st.form_submit_button("[ EXEC ] 비밀번호 변경 적용"):
-                users = load_users()
-                u_id = st.session_state.current_user
-                u_data = users.get(u_id, {})
-                u_info = u_data.get("info", {})
-                
-                if u_data.get("password") != curr_pw_input:
-                    st.error("❌ 현재 비밀번호가 일치하지 않습니다.")
-                elif new_pw_input != new_pw_confirm:
-                    st.error("❌ 비밀번호 확인이 일치하지 않습니다.")
-                elif len(new_pw_input) < 4:
-                    st.error("❌ 비밀번호는 최소 4자 이상이어야 합니다.")
-                else:
-                    users[u_id]["password"] = new_pw_input
-                    safe_save_json(users, USER_DB_FILE)
-                    gsheet_sync_bg("회원명단", 
-                        ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
-                        [u_id, new_pw_input, u_data.get("status", "approved"), u_data.get("grade", "회원"), u_info.get("region", "-"), u_info.get("age", "-"), u_info.get("gender", "-"), u_info.get("exp", "-"), u_info.get("joined_at", "-"), u_info.get("motivation", "-")]
-                    )
-                    st.success("[ SUCCESS ] 비밀번호 변경 완료!")
-                    st.balloons()
-
-elif page.startswith("1-d."):
-    st.header("[ ACCOUNT ] 탈퇴 및 임시휴식 (Account Status)")
-    st.markdown("<div class='glass-card'>사령부 활동 중단이나 탈퇴를 관리합니다. 신중하게 결정해 주십시오.</div>", unsafe_allow_html=True)
-    
-    st.subheader("⚠️ 계정 상태 변경 및 전역 처리")
-    c1, c2 = st.columns(2)
-    
-    users = load_users()
-    u_id = st.session_state.current_user
-    u_data = users.get(u_id, {})
-    u_info = u_data.get("info", {})
-
-    with c1:
-        st.markdown("<div class='glass-card' style='border-top: 3px solid #6366f1;'><b>임시 휴식 신청</b><br><small>활동을 잠시 중단합니다. 관리자 승인 전까지 기능이 제한될 수 있습니다.</small></div>", unsafe_allow_html=True)
-        if st.button("[ REST ] 임시 휴식 모드 전환", use_container_width=True):
-            users[u_id]["status"] = "resting"
-            save_users(users)
-            gsheet_sync_bg("회원명단", 
-                ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
-                [u_id, u_data.get("password"), "resting", u_data.get("grade"), u_info.get("region", "-"), u_info.get("age", "-"), u_info.get("gender", "-"), u_info.get("exp", "-"), u_info.get("joined_at", "-"), u_info.get("motivation", "-")]
-            )
-            st.warning("[ STATUS ] 임시 휴식 상태로 전환되었습니다. 로그아웃 후 다시 접속 시 제한이 적용됩니다.")
-            st.rerun()
-
-    with c2:
-        st.markdown("<div class='glass-card' style='border-top: 3px solid #ff4b4b;'><b>사령부 전역(탈퇴)</b><br><small>모든 활동을 종료하고 명부에서 이름을 내립니다. 복구가 불가능합니다.</small></div>", unsafe_allow_html=True)
-        if st.button("[ WITHDRAW ] 즉시 탈퇴 절차 시작", use_container_width=True):
-            st.session_state.show_withdraw_confirm = True
-            
-        if st.session_state.get("show_withdraw_confirm"):
-            st.error("[ ALERT ] 사령부를 떠나시기 전에 한 번 더 고려해 주세요. 정말 전역하시겠습니까?")
-            withdraw_reason = st.text_area("1. 탈퇴 사유를 알려주세요.", key="w_reason")
-            withdraw_improve = st.text_area("2. 사령부가 개선해야 할 점이 있다면 무엇일까요?", key="w_improve")
-            
-            col_a, col_b = st.columns(2)
-            with col_a:
-                if st.button("[ CONFIRM ] 네, 정말 탈퇴합니다", use_container_width=True):
-                    if not withdraw_reason: 
-                        st.warning("탈퇴 사유를 입력해 주세요.")
-                    else:
-                        users[u_id]["status"] = "withdrawn"
-                        save_users(users)
-                        gsheet_sync_bg("회원명단", 
-                            ["아이디", "비밀번호", "상태", "등급", "지역", "연령대", "성별", "경력", "가입일", "매매동기"],
-                            [u_id, u_data.get("password"), "withdrawn", u_data.get("grade"), u_info.get("region", "-"), u_info.get("age", "-"), u_info.get("gender", "-"), u_info.get("exp", "-"), u_info.get("joined_at", "-"), u_info.get("motivation", "-")]
-                        )
-                        gsheet_sync_bg("탈퇴회원", 
-                            ["탈퇴날짜", "아이디", "탈퇴사유", "개선할 점"],
-                            [datetime.now().strftime("%Y-%m-%d %H:%M"), u_id, withdraw_reason, withdraw_improve]
-                        )
-                        st.error("[ FINISH ] 탈퇴 처리가 완료되었습니다. 그동안의 헌신에 감사드립니다.")
-                        time.sleep(2)
-                        st.session_state.logged_in = False
-                        st.session_state.password_correct = False
-                        st.session_state.show_withdraw_confirm = False
-                        st.rerun()
-            with col_b:
-                if st.button("❌ 취소, 다시 생각할게요", use_container_width=True):
-                    st.session_state.show_withdraw_confirm = False
-                    st.rerun()
 
 elif page.startswith("5-b."):
     st.markdown("<h1 style='color: #FFD700; text-align: center; font-size: 3rem;'>[ ACADEMY ] StockDragonfly 차트 아카데미</h1>", unsafe_allow_html=True)
@@ -3633,548 +2807,6 @@ elif page.startswith("5-b."):
                 <div style='background: #333; height: 10px; border-radius: 5px; margin-top: 5px;'>
                     <div style='background: #00FF00; width: 85%; height: 100%; border-radius: 5px;'></div>
                 </div>
-                <div style='text-align: right; font-size: 0.8rem; margin-top: 3px;'>85% Ready</div>
-            </div>
-            <br>
-            <div style='background: rgba(255,215,0,0.05); padding: 15px; border-radius: 10px; border: 1px solid #FFD700;'>
-                <b style='color: #FFD700;'>[ TAG ] 자동 어노테이션</b><br>
-                <small>• RS 신고가 감지됨</small><br>
-                <small>• VCP 3단계 수축 진행중</small><br>
-                <small>• 거래량 말라감(Dry-up) 포착</small>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        with l1:
-            st.components.v1.html(f"""
-                <iframe src='https://s.tradingview.com/widgetembed/?symbol={live_tic}&interval=D&theme=dark' width='100%' height='550'></iframe>
-            """, height=560)
-            st.success(f"[ LIVE ] {live_tic} 실시간 실전 판독 엔진 가동 중")
-
-    st.divider()
-    st.subheader("[ MANUAL ] StockDragonfly 아카데미 운영 지침")
-    
-    st.markdown("""
-    <table style='width: 100%; border-collapse: collapse; color: white;'>
-        <tr style='background: rgba(255,215,0,0.1);'>
-            <th style='padding: 12px; border: 1px solid #444;'>단계</th>
-            <th style='padding: 12px; border: 1px solid #444;'>기능 명칭</th>
-            <th style='padding: 12px; border: 1px solid #444;'>핵심 학습 내용</th>
-        </tr>
-        <tr>
-            <td style='padding: 12px; border: 1px solid #444; text-align: center;'>1단계</td>
-            <td style='padding: 12px; border: 1px solid #444;'>Deep Dive</td>
-            <td style='padding: 12px; border: 1px solid #444;'>대가들의 정석 패턴 1,000개 뇌에 각인</td>
-        </tr>
-        <tr>
-            <td style='padding: 12px; border: 1px solid #444; text-align: center;'>2단계</td>
-            <td style='padding: 12px; border: 1px solid #444;'>Action Quiz</td>
-            <td style='padding: 12px; border: 1px solid #444;'>피벗 포인트 포착 및 절차적 기억 형성</td>
-        </tr>
-        <tr>
-            <td style='padding: 12px; border: 1px solid #444; text-align: center;'>3단계</td>
-            <td style='padding: 12px; border: 1px solid #444;'>Real-time Check</td>
-            <td style='padding: 12px; border: 1px solid #444;'>현재 주도주의 셋업 완성도 나노 단위 분석</td>
-        </tr>
-    </table>
-    """, unsafe_allow_html=True)
-
-elif page.startswith("5-c."):
-    st.markdown("<h1 style='text-align: center; color: #00FF00;'>[ RADAR ] 나노바나나 정밀 레이더</h1>", unsafe_allow_html=True)
-    st.markdown("<div class='glass-card' style='text-align: center;'>현재 사령부 감시망 내에서 에너지가 응축되어 돌파가 임박한 '황금 바나나' 종목들을 실시간 추적합니다.</div>", unsafe_allow_html=True)
-    
-    radar_stocks = [
-        {"T": "NVDA", "Ready": 95, "Status": "돌파 임박(VCP 3회)"},
-        {"T": "PLTR", "Ready": 88, "Status": "수급 유입 포착"},
-        {"T": "TSLA", "Ready": 82, "Status": "라인 저항 테스트"},
-        {"T": "SMCI", "Ready": 75, "Status": "에너지 응축 중"},
-        {"T": "AAPL", "Ready": 68, "Status": "박스권 횡보"},
-        {"T": "META", "Ready": 62, "Status": "눌림목 형성"}
-    ]
-    
-    cols = st.columns(3)
-    for i, stock in enumerate(radar_stocks):
-        with cols[i % 3]:
-            color = "#00FF00" if stock['Ready'] >= 90 else "#FFD700" if stock['Ready'] >= 80 else "#6366f1"
-            st.markdown(f"""
-            <div class='glass-card' style='border-top: 5px solid {color};'>
-                <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <h3 style='margin: 0;'>{stock['T']}</h3>
-                    <span style='color: {color}; font-weight: 800;'>{stock['Ready']}%</span>
-                </div>
-                <div class='banana-track'>
-                    <div class='banana-fill' style='width: {stock['Ready']}%; background: {color}; color: {color};'></div>
-                </div>
-                <p style='font-size: 0.85rem; color: #888; margin-top: 10px;'>📡 상태: {stock['Status']}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button(f"[ TARGET ] {stock['T']} 정밀 분석", key=f"radar_btn_{stock['T']}", use_container_width=True):
-                st.toast(f"{stock['T']} 분석실로 전술 이동 중...")
-            
-    st.divider()
-    st.info("[ ADVICE ] 레이더의 'Ready' 지수는 ROE, RS, 그리고 최근 2주간의 변동성 타이트니스(Tightness)를 종합 산출한 결과입니다.")
-
-elif page.startswith("7-a."):
-    st.header("[ EXEC ] 모의투자 매수 테스트 (Unit Deployment)")
-    st.markdown("<div class='glass-card'>실시간 주가 데이터를 기반으로 가상의 매수 작전을 집행합니다.</div>", unsafe_allow_html=True)
-    
-    trades = load_trades()
-    uid = st.session_state.current_user
-    if uid not in trades["wallets"]:
-        trades["wallets"][uid] = 10000000.0
-        save_trades(trades)
-    
-    curr_balance = trades["wallets"][uid]
-    EX_RATE, _ = get_macro_data()
-    
-    st.markdown(f"""
-    <div class='glass-card' style='border-left: 5px solid #FFD700;'>
-        <h4 style='margin:0;'>[ CASH ] 현재 가용 예수금: <span style='color:#FFD700;'>{curr_balance:,.0f} KRW</span></h4>
-        <p style='margin:0; font-size:0.8rem; color:#888;'>초기 시드머니 1,000만원이 대원님께 지급되었습니다.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    with st.form("mock_buy_form"):
-        col1, col2, col3 = st.columns(3)
-        with col1: ticker = st.text_input("종목 코드 (예: TSLA)", value="TSLA").upper()
-        with col2: amount = st.number_input("매수 수량", min_value=1, value=10)
-        with col3: strategy = st.selectbox("적용 전략", ["VCP 돌파", "EP 포착", "MA 정배열"])
-        
-        if st.form_submit_button("[ EXEC ] 가상 매수 집행"):
-            try:
-                data = yf.Ticker(ticker).history(period="1d")
-                if data.empty:
-                    st.error("종목 정보를 찾을 수 없습니다. 티커를 확인해 주세요.")
-                else:
-                    curr_p_raw = float(data['Close'].iloc[-1])
-                    is_kr_stock = ticker.endswith(".KS") or ticker.endswith(".KQ")
-                    
-                    if is_kr_stock:
-                        total_cost_krw = curr_p_raw * amount
-                    else:
-                        total_cost_krw = curr_p_raw * amount * EX_RATE
-                    
-                    if curr_balance < total_cost_krw:
-                        st.error(f"[ ERROR ] 잔액이 부족합니다. (필요: {total_cost_krw:,.0f} KRW / 잔액: {curr_balance:,.0f} KRW)")
-                    else:
-                        trades["wallets"][uid] -= total_cost_krw
-                        new_trade = {
-                            "id": str(int(time.time())), "user": uid, "ticker": ticker,
-                            "buy_price": curr_p_raw, "amount": amount, "strategy": strategy,
-                            "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "is_kr": is_kr_stock
-                        }
-                        trades["mock"].append(new_trade)
-                        save_trades(trades)
-                        st.session_state.show_flash = True
-                        st.success(f"[ SUCCESS ] {ticker} 매수 완료!")
-                        st.balloons()
-                        time.sleep(1)
-                        st.rerun()
-            except Exception as e: st.error(f"오류 발생: {e}")
-
-elif page.startswith("7-b."):
-    st.header("[ DASHBOARD ] 모의투자 현황 및 결과 (Tactical Dashboard)")
-    trades = load_trades()
-    uid = st.session_state.current_user
-    user_trades = [t for t in trades["mock"] if t["user"] == uid]
-    EX_RATE, _ = get_macro_data()
-
-    if uid not in trades["wallets"]:
-        trades["wallets"][uid] = 10000000.0
-        save_trades(trades)
-    
-    st.markdown(f"<div class='glass-card' style='border-left: 5px solid #FFD700;'>[ CASH ] 가상 사령부 예수금: <b style='color:#FFD700;'>{trades['wallets'][uid]:,.0f} KRW</b></div>", unsafe_allow_html=True)
-    
-    st.divider()
-    st.subheader("🏦 [ REAL ] 한국투자증권 실전 계좌 현황")
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-    if token:
-        real_total, real_cash, real_holdings = get_kis_balance(token)
-        over_total, over_holdings = get_kis_overseas_balance(token)
-        full_real_total = real_total + over_total
-        
-        c1, c2 = st.columns(2)
-        c1.metric("실전 총 자산", f"{full_real_total:,.0f}원")
-        c2.metric("실전 예수금", f"{real_cash:,.0f}원")
-        
-        if real_holdings or over_holdings:
-            st.markdown("#### [ HOLDINGS ] 실전 보유 종목")
-            combined_real = []
-            for h in real_holdings:
-                if int(h.get('hldg_qty', 0)) > 0:
-                    combined_real.append({"구분": "국내", "종목": h.get('prdt_name'), "수량": h.get('hldg_qty'), "매입가": f"{float(h.get('pchs_avg_pric', 0)):,.0f}원", "현재가": f"{float(h.get('prpr', 0)):,.0f}원", "수익률": f"{float(h.get('evlu_pfls_rt', 0)):+.2f}%"})
-            for h in over_holdings:
-                if int(float(h.get('ovrs_cblc_qty', 0))) > 0:
-                    combined_real.append({"구분": "해외", "종목": h.get('ovrs_item_name'), "수량": h.get('ovrs_cblc_qty'), "매입가": f"${float(h.get('pchs_avg_pric', 0)):,.2f}", "현재가": f"${float(h.get('now_pric2', 0)):,.2f}", "수익률": f"{float(h.get('evlu_pfls_rt', 0)):+.2f}%"})
-            if combined_real: st.table(pd.DataFrame(combined_real))
-    
-    st.subheader("[ PORTFOLIO ] 가상 포트폴리오")
-    if not user_trades: st.info("보유 중인 가상 종목이 없습니다.")
-    else:
-        results = []
-        ticker_total_value = 0
-        tickers = list(set([t['ticker'] for t in user_trades]))
-        data_batch = cached_yf_download(tuple(tickers), period="30d")
-        close_batch = data_batch['Close'] if not data_batch.empty else pd.DataFrame()
-        if isinstance(close_batch, pd.Series): close_batch = pd.DataFrame(close_batch).T
-        
-        for i, t in enumerate(user_trades):
-            tic = t['ticker']
-            if tic not in close_batch.columns: continue
-            h_series = close_batch[tic].dropna()
-            curr_p = float(h_series.iloc[-1])
-            roi = ((curr_p / t['buy_price']) - 1) * 100
-            is_kr = t.get("is_kr", tic.endswith(".KS") or tic.endswith(".KQ"))
-            val_krw = (curr_p * t['amount']) if is_kr else (curr_p * t['amount'] * EX_RATE)
-            ticker_total_value += val_krw
-            
-            c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1])
-            c1.write(tic)
-            c2.write(f"{t['amount']}주")
-            c3.write(f"{curr_p:,.2f}")
-            c4.markdown(f"<span style='color:{'#00FF00' if roi > 0 else '#FF4B4B'};'>{roi:+.1f}%</span>", unsafe_allow_html=True)
-            if c5.button("매도", key=f"m_sell_{t['id']}"):
-                trades["wallets"][uid] += val_krw
-                trades["mock"] = [trade for trade in trades["mock"] if trade["id"] != t["id"]]
-                save_trades(trades)
-                st.rerun()
-        st.success(f"가상 총 자산 가치: {(trades['wallets'][uid] + ticker_total_value):,.0f} KRW")
-
-elif page.startswith("7-c."):
-    st.header("[ AUTO ] 자동매매 전략 엔진 (Autonomous Engine)")
-    
-    # [ UI ] LIVE 모드 시각화 (숨쉬는 네온 효과)
-    st.markdown("""
-        <style>
-            @keyframes breathe {
-                0% { box-shadow: 0 0 5px #FF0000; opacity: 0.6; }
-                50% { box-shadow: 0 0 20px #FF0000; opacity: 1; }
-                100% { box-shadow: 0 0 5px #FF0000; opacity: 0.6; }
-            }
-            .live-indicator-pulsing {
-                display: inline-block; width: 14px; height: 14px; background-color: #FF0000;
-                border-radius: 50%; margin-right: 10px; animation: breathe 2s ease-in-out infinite;
-            }
-            .live-container {
-                background: rgba(255, 0, 0, 0.05); padding: 15px; border-radius: 10px;
-                border: 1px solid rgba(255, 0, 0, 0.3); margin-bottom: 20px;
-                display: flex; align-items: center; justify-content: center;
-            }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # 1. LIVE 토글 (최상단)
-    col_live_top1, col_live_top2 = st.columns([1, 3])
-    with col_live_top1:
-        live_trade_on = st.toggle("[ LIVE ]", value=st.session_state.get("kis_live_on", False), key="kis_live_toggle_main")
-        st.session_state["kis_live_on"] = live_trade_on
-    with col_live_top2:
-        if live_trade_on:
-            st.markdown("<div class='live-container'><span class='live-indicator-pulsing'></span><b style='color:#FF0000; font-size:1.2rem; letter-spacing: 2px;'>LIVE TRADING ACTIVE</b></div>", unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='padding:12px; text-align:center; color:#888; border:1px dashed #444; border-radius:10px;'>가상 매매 모드 (Virtual Trading Only)</div>", unsafe_allow_html=True)
-
-    # 2. 마켓 현황
-    c_m1, c_m2 = st.columns(2)
-    kr_open = is_market_open("KR")
-    us_open = is_market_open("US")
-    c_m1.markdown(f"<div class='glass-card' style='text-align:center;'><h4>🇰🇷 KOREA</h4><h3 style='color:{'#00FF00' if kr_open else '#FF4B4B'}'>{'OPEN' if kr_open else 'CLOSED'}</h3><small>09:00 - 15:30</small></div>", unsafe_allow_html=True)
-    c_m2.markdown(f"<div class='glass-card' style='text-align:center;'><h4>🇺🇸 USA</h4><h3 style='color:{'#00FF00' if us_open else '#FF4B4B'}'>{'OPEN' if us_open else 'CLOSED'}</h3><small>22:30 - 05:00</small></div>", unsafe_allow_html=True)
-
-    # 3. 전략 가동 (Bonde's Principle Scan)
-    st.subheader("🛰️ Bonde's Principle Scan (Stockbee PCF)")
-    if st.button("[ EXEC ] 전략 엔진 스캔 시작", use_container_width=True):
-        with st.status("본데 원칙에 따른 주도주 정밀 스캔 중...", expanded=True):
-            st.write("1. 4% 모멘텀 버스트 & TI65 필터 적용 중...")
-            time.sleep(0.5)
-            st.write("2. 에피소딕 피벗(EP) 거래량 실감시 중...")
-            time.sleep(0.5)
-            st.write("3. VCP 3단계 응축 및 Dry-up 종목 추출 완료.")
-        st.success("스캔 완료! 현재 시장의 최적 타점 종목을 확인하십시오.")
-
-    # 4. 계좌 정보 (KIS API 실시간 연동)
-    st.divider()
-    st.subheader("💰 실시간 사령부 자산 현황 (KIS)")
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-    if token:
-        real_total, real_cash, real_holdings = get_kis_balance(token)
-        over_total, over_holdings = get_kis_overseas_balance(token)
-        full_total = real_total + over_total
-        
-        col_acc1, col_acc2 = st.columns(2)
-        col_acc1.metric("총 자산 (Total Assets)", f"{full_total:,.0f} 원")
-        col_acc2.metric("가용 현금 (Cash Balance)", f"{real_cash:,.0f} 원")
-        
-        # 보유 종목 테이블
-        st.markdown("#### [ HOLDINGS ] 현재 보유 종목 리스트")
-        combined_rows = []
-        for h in real_holdings:
-            if int(h.get('hldg_qty', 0)) > 0:
-                p_rt = float(h.get('evlu_pfls_rt', 0))
-                combined_rows.append({"시장": "KR", "종목": h.get('prdt_name'), "수량": h.get('hldg_qty'), "매수가": f"{float(h.get('pchs_avg_pric', 0)):,.0f}", "현재가": f"{float(h.get('prpr', 0)):,.0f}", "수익률": f"{p_rt:+.2f}%"})
-        for h in over_holdings:
-            if int(float(h.get('ovrs_cblc_qty', 0))) > 0:
-                p_rt = float(h.get('evlu_pfls_rt', 0))
-                combined_rows.append({"시장": "US", "종목": h.get('ovrs_item_name'), "수량": h.get('ovrs_cblc_qty'), "매수가": f"${float(h.get('pchs_avg_pric', 0)):,.2f}", "현재가": f"${float(h.get('now_pric2', 0)):,.2f}", "수익률": f"{p_rt:+.2f}%"})
-        
-        if combined_rows:
-            st.dataframe(pd.DataFrame(combined_rows), use_container_width=True, hide_index=True)
-        else:
-            st.info("현재 보유 중인 실전 포지션이 없습니다.")
-    else:
-        st.error("KIS API 토큰 발급 실패. 계좌 정보를 불러올 수 없습니다.")
-
-    # 5. 하단 필드 리포트
-    sentiment_score, vix, stage = get_market_sentiment_score()
-    st.markdown(f"""
-        <div class='glass-card' style='border-top: 3px solid #00FFFF; background: rgba(0,255,255,0.02);'>
-            <p style='color: #00FFFF; margin: 0; font-weight: 700;'>[ FIELD-AI ] MARKET INSIGHT</p>
-            <p style='color: #CCC; font-size: 0.9rem; font-style: italic; margin-top: 10px;'>
-                "현재 시장 탐욕 지수 {sentiment_score}%입니다. {stage} 단계에 맞춰 리스크를 관리하십시오. 
-                모든 매매에는 -3% 손절 및 +25% 익절 알고리즘이 강제 적용됩니다."
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-
-elif page.startswith("7-d."):
-    st.header("[ REPORT ] 자동투자 성적표 (Performance Report)")
-    st.markdown("<div class='glass-card'>시스템 자동매매 통계 데이터를 분석합니다.</div>", unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("총 매매 횟수", "128회")
-    c2.metric("승률", "64.5%", "2.1%")
-    c3.metric("누적 수익률", "142.8%", "12.5%")
-    c4.metric("MDD", "-8.2%")
-    
-    st.divider()
-    st.subheader("[ LOG ] 자동투자 매매 평가 로그")
-    trades = load_trades()
-    auto_trades = trades.get("auto", [])
-    if auto_trades:
-        tickers = list(set([t['ticker'] for t in auto_trades]))
-        data_batch = cached_yf_download(tuple(tickers), period="5d")
-        close_batch = data_batch['Close'] if not data_batch.empty else pd.DataFrame()
-        if isinstance(close_batch, pd.Series): close_batch = pd.DataFrame(close_batch).T
-        
-        eval_list = []
-        for t in auto_trades:
-            tic = t['ticker']
-            try:
-                curr_p = float(close_batch[tic].dropna().iloc[-1])
-                roi = ((curr_p / t['buy_price']) - 1) * 100
-                eval_list.append({"매수일시": t['date'], "요원": t['user'], "종목": tic, "매수가": t['buy_price'], "현재가": curr_p, "수익률": f"{roi:+.2f}%"})
-            except: pass
-        if eval_list: st.dataframe(pd.DataFrame(eval_list), use_container_width=True, hide_index=True)
-    else: st.info("실행 중인 자동매매 포지션이 없습니다.")
-
-elif page.startswith("7-e."):
-    st.markdown("<h1 style='text-align: center; color: #FFD700; font-size: 3rem;'>[ RANK ] 가상매매 명예의 전당</h1>", unsafe_allow_html=True)
-    trades = load_trades()
-    all_combined = trades.get("mock", []) + trades.get("auto", [])
-    
-    if not all_combined: st.info("기록된 가상매매가 없습니다.")
-    else:
-        user_stats = {}
-        for t in all_combined:
-            uid = t['user']
-            profit = (100 - t['buy_price']) * t['amount'] # 가상수익 (임시)
-            if uid not in user_stats: user_stats[uid] = {"total_profit": 0, "count": 0}
-            user_stats[uid]["total_profit"] += profit
-            user_stats[uid]["count"] += 1
-        
-        sorted_rank = sorted(user_stats.items(), key=lambda x: x[1]['total_profit'], reverse=True)
-        for i, (uid, stats) in enumerate(sorted_rank[:10]):
-            st.markdown(f"**{i+1}위 {uid}** - 수익: {stats['total_profit']:,.0f}원 (매매 {stats['count']}회)")
-
-elif page.startswith("7-f."):
-    st.markdown("<h1 style='text-align: center; color: #00FFFF; font-size: 3rem;'>[ QULLAMAGGI ] 쿨라매기 전략 엔진</h1>", unsafe_allow_html=True)
-    sentiment_score, vix, stage = get_market_sentiment_score()
-    s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
-    st.markdown(f"<div class='glass-card' style='text-align: center; border-left: 5px solid {s_color};'><h3>탐욕 지수: {sentiment_score} (VIX: {vix:.2f})</h3><p>{stage}</p></div>", unsafe_allow_html=True)
-
-    if st.button("[ EXEC ] 쿨라매기 스캐닝 가동", use_container_width=True):
-        st.success("HTF 패턴 포착 및 15분 ORB 실시간 스캐닝 중...")
-
-# --- 🛰️ 시스템 하단 글로벌 전술 푸터 (Global Footer) ---
-st.write("") 
-st.divider()
-f_quote = get_footer_quote()
-st.markdown(f"""
-<div style='text-align: center; padding: 20px; color: #666; font-size: 0.95rem; border-top: 1px solid #222;'>
-    <span style='color: #FFD700; font-weight: 700;'>[ HQ-SHIELD ] 본데의 일간 전술 통찰 (Daily Tactical Insight)</span><br>
-    <div style='margin-top: 10px; font-style: italic; color: #AAA; line-height: 1.6;'>
-        "{f_quote}"
-    </div>
-    <div style='margin-top: 20px; font-size: 0.75rem; color: #444;'>
-        © 2026 StockDragonfly Terminal v5.5 | Institutional System Operated by Global Expert Turtle
-    </div>
-</div>
-""", unsafe_allow_html=True)
-        live_trade_allowed = st.toggle("[ LIVE ]", value=False, key="kis_live_toggle_v3")
-    with col_live_top2:
-        if live_trade_allowed:
-            st.markdown("""
-                <div class="live-container">
-                    <span class="live-indicator-pulsing"></span>
-                    <b style="color:#FF0000; font-size:1.3rem; letter-spacing: 2px;">LIVE TRADING ACTIVE</b>
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='padding:15px; text-align:center; color:#888; border:1px dashed #444; border-radius:10px;'>가상 매매 모드 (Virtual Trading Only)</div>", unsafe_allow_html=True)
-
-    st.divider()
-
-    # 2. 시장 가동 시간 및 상태
-    kr_open = is_market_open("KR")
-    us_open = is_market_open("US")
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    st.markdown(f"### 🚦 시장 가동 상태 (현재 시각: {now_str})")
-    ms_c1, ms_c2 = st.columns(2)
-    
-    kr_status = "🟢 가동중 (RUNNING)" if kr_open else "🔴 정지 (STOPPED)"
-    us_status = "🟢 가동중 (RUNNING)" if us_open else "🔴 정지 (STOPPED)"
-    
-    ms_c1.markdown(f"""
-    <div class='glass-card' style='text-align:center;'>
-        <h4>🇰🇷 KOREA (국내장)</h4>
-        <h3 style='color: {'#00FF00' if kr_open else '#FF4B4B'};'>{kr_status}</h3>
-        <p style='color:#AAA; font-size:0.85rem;'>정규장: 09:00 ~ 15:30</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    ms_c2.markdown(f"""
-    <div class='glass-card' style='text-align:center;'>
-        <h4>🇺🇸 USA (미국장)</h4>
-        <h3 style='color: {'#00FF00' if us_open else '#FF4B4B'};'>{us_status}</h3>
-        <p style='color:#AAA; font-size:0.85rem;'>정규장: 22:30 ~ 05:00 (DST)</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # 3. 전략 엔진 가동 (본데의 원칙 스캔)
-    st.subheader("⚡ 본데의 원칙 스캔 (Bonde's Principle Scan Engine)")
-    col_scan1, col_scan2 = st.columns([1, 2])
-    with col_scan1:
-        if st.button("🔍 전략 엔진 가동 (Bonde Scan)", use_container_width=True):
-            with st.status("본데 원칙 스캔 중...", expanded=True) as status:
-                st.write("1. Google Sheets RS 워치리스트 동기화...")
-                wl = fetch_q_watchlist()
-                st.write(f"2. {len(wl)}개 종목에 대한 본데(Stockbee) PCF 로직 검증...")
-                st.session_state.q_results = scan_bonde_setup(wl)
-                st.write("3. 타점 포착 종목 정밀 필터링 완료.")
-                status.update(label="[ SUCCESS ] 본데 전략 스캔 완료!", state="complete")
-    with col_scan2:
-        st.info("4% 모멘텀 버스트, EP, VCP 타점을 실시간 분석합니다. (LOD 손절 원칙 적용)")
-
-    if st.session_state.get("q_results"):
-        df_q = pd.DataFrame(st.session_state.q_results)
-        if "Ticker" in df_q.columns and df_q.iloc[0]["Ticker"] != "N/A":
-            st.markdown("#### 🎯 스캔 결과 (Top Picks)")
-            st.dataframe(df_q, use_container_width=True, hide_index=True)
-        else:
-            st.warning("현재 본데 원칙에 부합하는 종목이 포착되지 않았습니다. 관망을 권장합니다.")
-
-    st.divider()
-
-    # 4. 계좌 정보 (현재 금액, 수익률)
-    st.subheader("🏛️ 실전 계좌 현황 (Account Summary)")
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-    if token:
-        real_total, real_cash, real_holdings = get_kis_balance(token)
-        over_total, over_holdings = get_kis_overseas_balance(token)
-        full_total = real_total + over_total
-        
-        # 총 손익 계산
-        total_p_l = 0
-        total_buy_amt = 0
-        for h in real_holdings:
-            total_p_l += float(h.get('evlu_pfls_amt', 0))
-            total_buy_amt += float(h.get('pchs_amt', 0))
-        for h in over_holdings:
-            total_p_l += float(h.get('evlu_pfls_amt', 0))
-            total_buy_amt += float(h.get('pchs_amt', 0))
-            
-        total_roi = (total_p_l / total_buy_amt * 100) if total_buy_amt > 0 else 0
-        
-        acc_c1, acc_c2, acc_c3 = st.columns(3)
-        acc_c1.metric("현재 총 자산", f"{full_total:,.0f} 원")
-        acc_c2.metric("총 수익률 (ROI)", f"{total_roi:+.2f}%", f"{total_p_l:+,.0f} 원")
-        acc_c3.metric("가용 예수금", f"{real_cash:,.0f} 원")
-
-        st.divider()
-
-        # 5. 현재 주식 종목 (미국장, 한국장 구분)
-        st.subheader("🚀 실시간 보유 포지션 상세 (Holdings Detail)")
-        
-        # --- KOREA MARKET HOLDINGS ---
-        st.markdown("<div style='color:#FFD700; font-weight:bold; margin-bottom:10px;'>🇰🇷 국내 주식 포지션</div>", unsafe_allow_html=True)
-        if real_holdings:
-            kr_table_data = []
-            for h in real_holdings:
-                qty = int(h.get('hldg_qty', 0))
-                if qty > 0:
-                    buy_p = float(h.get('pchs_avg_pric', 0))
-                    curr_p = float(h.get('prpr', 0))
-                    total_amt = float(h.get('evlu_amt', 0))
-                    roi = float(h.get('evlu_pfls_rt', 0))
-                    # 매도가 (임시로 현재가 기준 10% 익절가 표시 또는 LOD)
-                    target_p = buy_p * 1.15
-                    kr_table_data.append({
-                        "종목명": h.get('prdt_name'),
-                        "주식수": f"{qty}",
-                        "총금액": f"{total_amt:,.0f}원",
-                        "매수가": f"{buy_p:,.0f}원",
-                        "현재가격": f"{curr_p:,.0f}원",
-                        "수익률": f"{roi:+.2f}%",
-                        "매도가(목표)": f"{target_p:,.0f}원"
-                    })
-            if kr_table_data:
-                st.dataframe(pd.DataFrame(kr_table_data), use_container_width=True, hide_index=True)
-            else: st.info("국내 보유 종목이 없습니다.")
-        else: st.info("국내 보유 종목이 없습니다.")
-
-        # --- USA MARKET HOLDINGS ---
-        st.markdown("<div style='color:#00FFFF; font-weight:bold; margin-top:20px; margin-bottom:10px;'>🇺🇸 미국 주식 포지션</div>", unsafe_allow_html=True)
-        if over_holdings:
-            us_table_data = []
-            for h in over_holdings:
-                qty = int(float(h.get('ovrs_cblc_qty', 0)))
-                if qty > 0:
-                    buy_p = float(h.get('pchs_avg_pric', 0))
-                    curr_p = float(h.get('now_pric', 0))
-                    total_amt = float(h.get('evlu_amt', 0))
-                    roi = float(h.get('evlu_pfls_rt', 0))
-                    target_p = buy_p * 1.20
-                    us_table_data.append({
-                        "티커/종목": f"[{h.get('ovrs_pdno')}] {h.get('ovrs_item_name')}",
-                        "주식수": f"{qty}",
-                        "총금액": f"${total_amt:,.2f}",
-                        "매수가": f"${buy_p:,.2f}",
-                        "현재가격": f"${curr_p:,.2f}",
-                        "수익률": f"{roi:+.2f}%",
-                        "매도가(목표)": f"${target_p:,.2f}"
-                    })
-            if us_table_data:
-                st.dataframe(pd.DataFrame(us_table_data), use_container_width=True, hide_index=True)
-            else: st.info("미국 보유 종목이 없습니다.")
-        else: st.info("미국 보유 종목이 없습니다.")
-    else:
-        st.error("API 토큰 발급에 실패했습니다. 키 설정을 확인하십시오.")
-
-    st.divider()
-    
-    # 📡 AI 요원 전술 리포트 (하단 고정)
-    sentiment_score, _, _ = get_market_sentiment_score()
-    st.markdown(f"""
-    <div class='glass-card' style='border-top: 3px solid #00FFFF;'>
-        <p style='color: #00FFFF; margin: 0; font-weight: 700;'>[ FIELD-AI ] 사령부 현장 보고</p>
-        <p style='color: #888; font-size: 0.9rem; margin-top: 10px;'>
-            "현재 시장 탐욕 지수 <b>{sentiment_score}pts</b>. 본데의 원칙에 따라 주도주 응축 패턴이 감지되는 즉시 정밀 타격을 개시합니다. 
-            모든 포지션은 LOD(Low of Day) 손절선을 절대 엄수하여 자본을 보호하십시오."
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-  </div>
                 <div style='text-align: right; font-size: 0.8rem; margin-top: 3px;'>85% Ready</div>
             </div>
             <br>
@@ -4415,7 +3047,7 @@ elif page.startswith("7-a."):
                         }
                         trades["mock"].append(new_trade)
                         save_trades(trades)
-                        price_display = f"{curr_p_raw/10000:,.1f} 만원" if is_kr_stock else f"{curr_p_raw:,.2f}$"
+                        price_display = f"{int(curr_p_raw):,} 원" if is_kr_stock else f"{curr_p_raw:,.2f}$"
                         disp_name = TICKER_NAME_MAP.get(ticker, ticker)
                         # [ ALERT ] 실시간 매매 팝업 알림 (인간 유저)
                         st.session_state.show_flash = True
@@ -4443,55 +3075,6 @@ elif page.startswith("7-b."):
         <b style='color: #FFD700; font-size: 1.2rem; margin-left: 10px;'>{trades['wallets'][uid]:,.0f} KRW</b>
     </div>
     """, unsafe_allow_html=True)
-    
-    # --- [ REAL ACCOUNT SECTION ] ---
-    st.divider()
-    st.subheader("🏦 [ REAL ] 한국투자증권 실전 계좌 현황")
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-    if not token:
-        st.warning("API 토큰을 발급받을 수 없습니다. Secrets 설정을 확인해 주세요.")
-    else:
-        real_total, real_cash, real_holdings = get_kis_balance(token)
-        over_total, over_holdings = get_kis_overseas_balance(token)
-        
-        full_real_total = real_total + over_total
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("총 평가금액", f"{full_real_total:,.0f}원")
-        c2.metric("예수금", f"{real_cash:,.0f}원")
-        
-        if full_real_total > 0:
-            # 실전 보유 종목 리스트 출력
-            if real_holdings or over_holdings:
-                st.markdown("#### [ HOLDINGS ] 실전 보유 종목")
-                combined_real = []
-                # 국내주식 정리
-                for h in real_holdings:
-                    if int(h.get('hldg_qty', 0)) > 0:
-                        combined_real.append({
-                            "구분": "국내", "종목": h.get('prdt_name'), "수량": h.get('hldg_qty'),
-                            "매입가": f"{float(h.get('pchs_avg_pric', 0)):,.0f}원",
-                            "현재가": f"{float(h.get('prpr', 0)):,.0f}원",
-                            "수익률": f"{float(h.get('evlu_pfls_rt', 0)):+.2f}%"
-                        })
-                # 해외주식 정리
-                for h in over_holdings:
-                    if int(float(h.get('ovrs_cblc_qty', 0))) > 0:
-                        combined_real.append({
-                            "구분": "해외", "종목": h.get('ovrs_item_name'), "수량": h.get('ovrs_cblc_qty'),
-                            "매입가": f"${float(h.get('pchs_avg_pric', 0)):,.2f}",
-                            "현재가": f"${float(h.get('now_pric2', 0)):,.2f}",
-                            "수익률": f"{float(h.get('evlu_pfls_rt', 0)):+.2f}%"
-                        })
-                
-                if combined_real:
-                    st.table(pd.DataFrame(combined_real))
-                else:
-                    st.info("실전 계좌에 보유 중인 종목이 없습니다.")
-            else:
-                st.info("실전 계좌에 보유 중인 종목이 없습니다.")
-        else:
-            st.info("실전 계좌 잔고가 0원이거나 연동 중입니다.")
 
     st.subheader("[ PORTFOLIO ] 현재 보유 중인 가상 포트폴리오")
     if not user_trades:
@@ -4502,9 +3085,9 @@ elif page.startswith("7-b."):
         with st.spinner("가상 사령부 나노-배치 데이터 동기화 중..."):
             tickers = list(set([t['ticker'] for t in user_trades]))
             if tickers:
-                # 🚀 성능 최적화: 현재가와 SMA10을 위한 20일치 데이터를 한 번에 가져옴 (캐싱 적용)
-                data_batch = cached_yf_download(tuple(tickers), period="30d")
-                close_batch = data_batch['Close'] if not data_batch.empty else pd.DataFrame()
+                # 🚀 성능 최적화: 현재가와 SMA10을 위한 20일치 데이터를 한 번에 가져옴
+                data_batch = yf.download(tickers, period="30d", progress=False)
+                close_batch = data_batch['Close']
                 if isinstance(close_batch, pd.Series): close_batch = pd.DataFrame(close_batch).T
                 
                 for i, t in enumerate(user_trades):
@@ -4531,34 +3114,6 @@ elif page.startswith("7-b."):
                         roi = ((curr_p_raw / t['buy_price']) - 1) * 100
                         ticker_total_value += curr_val_krw
                         
-                        # [ USER RULE ] 기본 손절(-3%) / 익절(+25%) 및 급등주 트레일링 스탑
-                        highest_price = h_series.tail(5).max() # 주간(최근 5일) 고점
-                        surged_20 = (highest_price / t['buy_price']) >= 1.20
-                        
-                        sell_reason = None
-                        if surged_20 and curr_p_raw <= highest_price * 0.98:
-                            sell_reason = "트레일링스탑(고점대비 -2%)"
-                        elif roi <= -3.0:
-                            sell_reason = "손절(-3%)"
-                        elif roi >= 25.0:
-                            sell_reason = "익절(+25%)"
-
-                        if sell_reason:
-                            trades["wallets"][uid] += curr_val_krw
-                            sell_record = t.copy()
-                            sell_record["sell_price"] = curr_p_raw
-                            sell_record["final_profit_krw"] = profit_krw
-                            sell_record["date_sold"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            sell_record["reason"] = sell_reason
-                            trades["history"].append(sell_record)
-                            trades["mock"] = [trade for trade in trades["mock"] if trade["id"] != t["id"]]
-                            save_trades(trades)
-                            
-                            # 실전 API 주문 전송 연동 (실전 계좌 매도)
-                            if t.get("is_real_api"): execute_kis_market_order(tic, t['amount'], is_buy=False)
-                            st.warning(f"🚨 [ AUTO-SELL 발동 ] {tic} 종목이 {sell_reason} 조건에 도달하여 자동 매도되었습니다!")
-                            st.rerun()
-
                         # 섹터 데이터 수집용 (아래 원형 차트에 사용)
                         results.append({"Ticker": tic, "Value(KRW)": curr_val_krw})
 
@@ -4592,7 +3147,7 @@ elif page.startswith("7-b."):
                         c3.write(price_display)
                         
                         res_color = "#00FF00" if profit_krw > 0 else "#FF4B4B"
-                        c4.markdown(f"<span style='color:{res_color}; font-weight:700;'>{profit_krw/10000:+,.1f} 만원 ({roi:+.1f}%)</span>", unsafe_allow_html=True)
+                        c4.markdown(f"<span style='color:{res_color}; font-weight:700;'>{profit_krw:+,.0f} 원 ({roi:+.2f}%)</span>", unsafe_allow_html=True)
                         
                         if c5.button("[ SELL ] 매도", key=f"sell_{t['id']}_{i}"):
                             trades["wallets"][uid] += curr_val_krw
@@ -4627,7 +3182,7 @@ elif page.startswith("7-b."):
             df_sector['Sector'] = df_sector['Ticker'].apply(lambda x: sector_map.get(x, "기타/혼합"))
             
             fig_pie = px.pie(df_sector, values='Value(KRW)', names='Sector', title='섹터별 투자 비중',
-                             hole=.4, color_discrete_sequence=px.colors.sequential.YlOrBr)
+                             hole=.4, color_discrete_sequence=px.colors.sequential.Gold)
             fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
             st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -4653,276 +3208,17 @@ elif page.startswith("7-b."):
 
 elif page.startswith("7-c."):
     st.header("[ AUTO ] 자동매매 전략 엔진 (Autonomous Engine)")
-    
-    # [ UI ] LIVE 모드 시각화 (숨쉬는 네온 효과)
-    st.markdown("""
-        <style>
-            @keyframes breathe {
-                0% { box-shadow: 0 0 5px #FF0000; opacity: 0.6; }
-                50% { box-shadow: 0 0 20px #FF0000; opacity: 1; }
-                100% { box-shadow: 0 0 5px #FF0000; opacity: 0.6; }
-            }
-            .live-indicator {
-                padding: 10px 25px;
-                background: rgba(255, 0, 0, 0.1);
-                border: 2px solid #FF0000;
-                border-radius: 50px;
-                color: #FF0000;
-                font-weight: 900;
-                font-size: 1.2rem;
-                display: inline-block;
-                animation: breathe 2s infinite ease-in-out;
-                margin-bottom: 20px;
-                text-shadow: 0 0 10px #FF0000;
-            }
-        </style>
-        """, unsafe_allow_html=True)
-
-    # 상단 상태 제어
-    col_status, col_btn = st.columns([3, 1])
-    with col_status:
-        if st.session_state.get("kis_live_on", False):
-            st.markdown("<div class='live-indicator'>[ LIVE ] ENGINE ACTIVATED</div>", unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='padding: 10px 25px; background: #222; border: 2px solid #444; border-radius: 50px; color: #888; font-weight: 900; display: inline-block; margin-bottom: 20px;'>[ READY ] ENGINE STANDBY</div>", unsafe_allow_html=True)
-    
-    with col_btn:
-        live_toggle = st.toggle("LIVE ENGINE 가동", value=st.session_state.get("kis_live_on", False), key="engine_toggle_main")
-        st.session_state.kis_live_on = live_toggle
-
-    st.markdown("### 🚦 시스템 자동매매 상태")
-    c1, c2 = st.columns(2)
-    
-    kr_open = is_market_open("KR")
-    us_open = is_market_open("US")
-    
-    # 한국장 카드
-    c1.markdown(f"""
-    <div class='glass-card' style='text-align:center;'>
-        <h4>🇰🇷 KOREA (국내장)</h4>
-        <h3 style='color: {'#00FF00' if kr_open else '#FF4B4B'};'>{"🟢 OPEN" if kr_open else "🔴 CLOSED"}</h3>
-        <p style='color:#AAA; font-size:0.9rem; margin-bottom:5px;'>정규장 시간: <b>09:00 ~ 15:30</b></p>
-        <p style='color:#888; font-size:0.8rem;'>본데의 원칙 스캔 대기중</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # 미국장 카드
-    c2.markdown(f"""
-    <div class='glass-card' style='text-align:center;'>
-        <h4>🇺🇸 USA (미국장)</h4>
-        <h3 style='color: {'#00FF00' if us_open else '#FF4B4B'};'>{"🟢 OPEN" if us_open else "🔴 CLOSED"}</h3>
-        <p style='color:#AAA; font-size:0.9rem; margin-bottom:5px;'>정규장 시간: <b>22:30 ~ 05:00</b></p>
-        <p style='color:#888; font-size:0.8rem;'>본데의 원칙 스캔 대기중</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # --- [ ACCOUNT INFO ] ---
-    st.divider()
-    st.subheader("💰 실시간 계좌 정보 (Real-time Portfolio)")
-    
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-    if token:
-        with st.spinner("계좌 데이터를 동기화 중입니다..."):
-            real_total, real_cash, real_holdings = get_kis_balance(token)
-            over_total, over_holdings = get_kis_overseas_balance(token)
-            full_total = real_total + over_total
-            
-            mc1, mc2, mc3 = st.columns(3)
-            mc1.metric("총 자산 (KRW + USD)", f"{full_total:,.0f} 원")
-            mc2.metric("보유 현금", f"{(real_cash + over_total):,.0f} 원")
-            
-            # [ HOLDINGS TABLE ]
-            st.markdown("#### [ HOLDINGS ] 보유 종목 상세")
-            combined_holdings = []
-            for h in real_holdings:
-                if int(h.get('hldg_qty', 0)) > 0:
-                    combined_holdings.append({
-                        "시장": "국내", "종목명": h.get('prdt_name'), "수량": h.get('hldg_qty'),
-                        "평균단가": f"{float(h.get('pchs_avg_pric',0)):,.0f}",
-                        "현재가": f"{float(h.get('prpr',0)):,.0f}",
-                        "수익률": f"{float(h.get('evlu_pfls_rt',0)):+.2f}%"
-                    })
-            for h in over_holdings:
-                if int(float(h.get('ovrs_cblc_qty',0))) > 0:
-                    combined_holdings.append({
-                        "시장": "해외", "종목명": h.get('prdt_name'), "수량": h.get('ovrs_cblc_qty'),
-                        "평균단가": f"${float(h.get('pchs_avg_pric',0)):,.2f}",
-                        "현재가": f"${float(h.get('now_pric',0)):,.2f}",
-                        "수익률": f"{float(h.get('evlu_pfls_rt',0)):+.2f}%"
-                    })
-            
-            if combined_holdings:
-                st.table(pd.DataFrame(combined_holdings))
-            else:
-                st.info("현재 보유 중인 종목이 없습니다.")
-    else:
-        st.warning("KIS API 토큰을 가져올 수 없습니다. 설정을 확인하세요.")
-
-    st.divider()
-    if st.button("🚀 본데의 원칙 스캔 (Bonde's Principle Scan) 실행"):
-        with st.status("본데의 모멘텀 버스트 & VCP 스캐닝 가동 중...", expanded=True) as status:
-            st.write("1. 4% 모멘텀 돌파 종목 추출 중...")
-            time.sleep(1)
-            st.write("2. TI65 추세 강도 필터링 적용 중...")
-            time.sleep(1)
-            st.write("3. 전술적 진입 지점(Entry Point) 정밀 분석...")
-            status.update(label="스캔 완료! 최적의 셋업을 탐색했습니다.", state="complete", expanded=False)
-        st.success("스캔 완료. 현재 조건에 부합하는 정예 종목 리스트를 '3-a. 주도주 타점 스캐너'에서 확인하십시오.")
-    kr_open = is_market_open("KR")
-    us_open = is_market_open("US")
-    
-    # 현재 시각 구하기
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    st.markdown(f"### 🚦 시스템 자동매매 상태 (현재 시각: {now_str})")
-    c1, c2 = st.columns(2)
-    
-    kr_status = "🟢 가동중 (RUNNING)" if kr_open else "🔴 정지 (STOPPED) - 정규장 아님"
-    us_status = "🟢 가동중 (RUNNING)" if us_open else "🔴 정지 (STOPPED) - 정규장 아님"
-    
-    # 한국장 카드 (09:00 ~ 15:30)
-    c1.markdown(f"""
-    <div class='glass-card' style='text-align:center;'>
-        <h4>🇰🇷 KOREA (국내장)</h4>
-        <h3 style='color: {'#00FF00' if kr_open else '#FF4B4B'};'>{kr_status}</h3>
-        <p style='color:#AAA; font-size:0.9rem; margin-bottom:5px;'>정규장 시간: <b>09:00 ~ 15:30</b></p>
-        <p style='color:#888; font-size:0.8rem;'>한국 주식 정규장 매매만 허용</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # 미국장 카드 (22:30 ~ 05:00 서머타임 기준)
-    c2.markdown(f"""
-    <div class='glass-card' style='text-align:center;'>
-        <h4>🇺🇸 USA (미국장)</h4>
-        <h3 style='color: {'#00FF00' if us_open else '#FF4B4B'};'>{us_status}</h3>
-        <p style='color:#AAA; font-size:0.9rem; margin-bottom:5px;'>정규장 시간: <b>22:30 ~ 05:00</b> (서머타임)</p>
-        <p style='color:#888; font-size:0.8rem;'>미국 주식 정규장 매매만 허용</p>
-    </div>
-    """, unsafe_allow_html=True)
-    st.divider()
-
-    # --- [ REAL ACCOUNT STATUS BANNER v2.0 ] ---
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-    if token:
-        real_total, real_cash, real_holdings = get_kis_balance(token)
-        over_total, over_holdings = get_kis_overseas_balance(token)
-        full_total = real_total + over_total
-        
-        # 총 손익 계산 (한국 + 미국)
-        total_profit_loss = 0
-        for h in real_holdings:
-            total_profit_loss += float(h.get('evlu_pfls_amt', 0))
-        for h in over_holdings:
-            # 해외주식 평가손익(달러 기준 또는 원화 기준) - API 응답에 따라 차이 존재 가능
-            # 여기서는 편의상 API가 원화 평가손익을 제공한다고 가정하거나, 단순 합산합니다.
-            total_profit_loss += float(h.get('evlu_pfls_amt', 0)) 
-            
-        st.markdown(f"""
-        <div class='glass-card' style='padding: 20px; border-top: 4px solid #00FF00; margin-bottom: 20px;'>
-            <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;'>
-                <div>
-                    <p style='color: #888; font-size: 0.8rem; margin: 0;'>[ LIVE ACCOUNT ] 실제 총 자산 가치</p>
-                    <b style='color: #FFF; font-size: 1.8rem;'>{full_total:,.0f} <small style='font-size: 0.9rem;'>KRW</small></b>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: #888; font-size: 0.8rem; margin: 0;'>[ PROFIT / CASH ] 총 손익 / 예수금</p>
-                    <b style='color: {"#00FF00" if total_profit_loss >= 0 else "#FF4B4B"}; font-size: 1.1rem;'>손익 {total_profit_loss:+,.0f} 원</b>
-                    <b style='color: #FFD700; font-size: 1.1rem; margin-left: 10px;'>예수금 {real_cash:,.0f} 원</b>
-                </div>
-            </div>
-            <div style='background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;'>
-                <p style='color: #00FF00; font-size: 0.75rem; font-weight: 800; margin-bottom: 10px;'>🚀 현재 실전 보유 포지션 (Live Holdings)</p>
-        """, unsafe_allow_html=True)
-        
-        combined_rows = []
-        # 국내 주식 (종목명, 수량, 손익)
-        for h in real_holdings:
-            qty = int(h.get('hldg_qty', 0))
-            if qty > 0:
-                p_amt = float(h.get('evlu_pfls_amt', 0))
-                p_rt = float(h.get('evlu_pfls_rt', 0))
-                c_color = "#00FF00" if p_rt > 0 else "#FF4B4B"
-                combined_rows.append(f"""
-                <div style='display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 3px;'>
-                    <span style='color: #EEE;'><b>{h.get('prdt_name')}</b> <small style='color: #888;'>({qty}주)</small> <small style='color: #666;'>KR</small></span>
-                    <span style='color: #AAA;'>손익: <b style='color:{c_color}'>{p_amt:+,.0f}원 ({p_rt:+.2f}%)</b></span>
-                </div>
-                """)
-        # 해외 주식 (티커, 이름, 수량, 손익)
-        for h in over_holdings:
-            qty = int(float(h.get('ovrs_cblc_qty', 0)))
-            if qty > 0:
-                p_rt = float(h.get('evlu_pfls_rt', 0))
-                p_amt = float(h.get('evlu_pfls_amt', 0)) # API 구조에 따라 다를 수 있음
-                c_color = "#00FF00" if p_rt > 0 else "#FF4B4B"
-                combined_rows.append(f"""
-                <div style='display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 3px;'>
-                    <span style='color: #EEE;'><b>[{h.get('ovrs_pdno')}] {h.get('ovrs_item_name')}</b> <small style='color: #888;'>({qty}주)</small> <small style='color: #666;'>US</small></span>
-                    <span style='color: #AAA;'>수익률: <b style='color:{c_color}'>{p_rt:+.2f}%</b></span>
-                </div>
-                """)
-        
-        if combined_rows:
-            st.markdown("".join(combined_rows), unsafe_allow_html=True)
-        else:
-            st.markdown("<p style='color: #555; font-size: 0.8rem;'>현재 매수(보유) 중인 종목이 없습니다.</p>", unsafe_allow_html=True)
-            
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        # 매도 내역 (실시간 수익률 표시 및 승률)
-        st.markdown("<div style='background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-top: 10px;'>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #FFD700; font-size: 0.75rem; font-weight: 800; margin-bottom: 10px;'>📊 최근 매도 내역 및 시스템 승률</p>", unsafe_allow_html=True)
-        
-        try:
-            trades_data = load_trades()
-            sold_history = trades_data.get("history", [])
-            my_sells = [t for t in sold_history if t.get("is_real_api") == True]
-            if my_sells:
-                # 승률 계산
-                wins = sum(1 for s in my_sells if s.get("final_profit_krw", 0) > 0)
-                win_rate = (wins / len(my_sells)) * 100
-                st.markdown(f"<div style='text-align:right; margin-bottom: 10px;'><span style='background: rgba(255,215,0,0.2); border: 1px solid #FFD700; border-radius: 5px; padding: 3px 8px; font-size: 0.8rem; color: #FFD700;'>🎯 <b>현재 승률: {win_rate:.1f}%</b> ({wins}승 / {len(my_sells)}전)</span></div>", unsafe_allow_html=True)
-                
-                sell_rows = []
-                for s in my_sells[-5:]: # 최근 5개
-                    tic_name = s.get("ticker", "Unknown")
-                    profit = s.get("final_profit_krw", 0)
-                    roi = (s.get("sell_price", 1) / s.get("buy_price", 1) - 1) * 100
-                    color = "#00FF00" if profit > 0 else "#FF4B4B"
-                    sell_rows.append(f"""
-                    <div style='display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 3px;'>
-                        <span style='color: #EEE;'><b>{tic_name}</b> <small style='color: #666;'>{s.get("date_sold")}</small></span>
-                        <span style='color: {color};'><b>{profit:+,.0f}원 ({roi:+.2f}%)</b></span>
-                    </div>
-                    """)
-                st.markdown("".join(sell_rows), unsafe_allow_html=True)
-            else:
-                st.markdown("<p style='color: #555; font-size: 0.8rem;'>최근 매도한 실전 종목이 없습니다. 승률 측정 불가.</p>", unsafe_allow_html=True)
-        except:
-            st.markdown("<p style='color: #555; font-size: 0.8rem;'>매도 기록을 불러올 수 없습니다.</p>", unsafe_allow_html=True)
-
-        st.markdown("</div></div>", unsafe_allow_html=True)
-    else:
-        st.warning("실전 계좌 정보를 불러오려면 API 토큰 발급이 필요합니다.")
-        err_msg = st.session_state.get("kis_error", "로컬 토큰 캐시 파일(kis_token_cache.json)이 없거나 API 호출에 실패했습니다.")
-        st.error(f"🔴 상세 오류 원인: {err_msg}")
-
     st.markdown("<div class='glass-card'>시스템이 실시간 데이터를 스캔하여 최적의 타점을 자동으로 포착합니다.</div>", unsafe_allow_html=True)
     
-    # [ PERSISTENT STATE ]
     if "scanning_results" not in st.session_state: st.session_state.scanning_results = []
     if "scanning_active" not in st.session_state: st.session_state.scanning_active = False
 
-    # --- 1. 시스템 자동매매 상태 대시보드 (Persistent) ---
     token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
     real_total, real_cash, real_holdings = get_kis_balance(token)
     over_total, over_holdings = get_kis_overseas_balance(token)
     full_balance = real_total + over_total
 
-    # [ UI ] 네온 상태 바
     status_color = "#00FF00" if st.session_state.scanning_active else "#FF4B4B"
-    live_label = "LIVE ACTIVE" if st.secrets.get("KIS_MOCK_TRADING", False) == False else "MOCK ACTIVE"
-    
     st.markdown(f"""
         <div style='background: rgba(0,0,0,0.5); padding: 20px; border-radius: 15px; border: 1px solid {status_color}; margin-bottom: 25px; box-shadow: 0 0 15px {status_color}33;'>
             <div style='display: flex; justify-content: space-between; align-items: center;'>
@@ -4938,9 +3234,7 @@ elif page.startswith("7-c."):
         </div>
     """, unsafe_allow_html=True)
 
-    # 2. 전략 스캐닝 섹션
     st.subheader("[ SCAN ] 실시간 전략 스캐닝 현황")
-    
     col_btn1, col_btn2 = st.columns([1, 3])
     with col_btn1:
         if st.button("🔍 엔진 가동", use_container_width=True):
@@ -4952,8 +3246,6 @@ elif page.startswith("7-c."):
                 time.sleep(0.5)
                 st.write("3. [ 펀더멘털 ] ROE 15% 이상 우량 반도체 필터링...")
                 status.update(label="[ SUCCESS ] 요원 민수의 전략 스캔 완료!", state="complete")
-            
-            # 스캔 결과 생성
             semi_tickers = get_kospi_top_200()
             sample_tickers = random.sample(semi_tickers, min(10, len(semi_tickers))) if semi_tickers else []
             new_results = []
@@ -4963,7 +3255,6 @@ elif page.startswith("7-c."):
                 if rs > 70 and ml_score > 60:
                     new_results.append({"ticker": t, "name": TICKER_NAME_MAP.get(t, t), "rs": rs, "ml": ml_score})
             st.session_state.scanning_results = new_results
-    
     with col_btn2:
         if st.button("🛑 중단", use_container_width=True):
             st.session_state.scanning_active = False
@@ -4971,211 +3262,78 @@ elif page.startswith("7-c."):
             st.rerun()
 
     if st.session_state.scanning_active:
-        # [ UI ] LIVE 모드 시각화 강화 (깜박이는 네온 효과)
-        st.markdown("""
-            <style>
-                @keyframes blinker { 50% { opacity: 0; } }
-                .live-blink {
-                    color: #FF0000;
-                    font-weight: 900;
-                    animation: blinker 1s linear infinite;
-                    border: 2px solid #FF0000;
-                    padding: 2px 8px;
-                    border-radius: 5px;
-                    margin-right: 10px;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-        
+        st.markdown("""<style>@keyframes blinker { 50% { opacity: 0; } } .live-blink { color: #FF0000; font-weight: 900; animation: blinker 1s linear infinite; border: 2px solid #FF0000; padding: 2px 8px; border-radius: 5px; margin-right: 10px; }</style>""", unsafe_allow_html=True)
         c1, c2 = st.columns([1, 4])
-        with c1:
-            live_trade_allowed = st.toggle("⚡ LIVE", value=False, key="live_toggle_main")
+        with c1: live_trade_allowed = st.toggle("⚡ LIVE", value=False, key="live_toggle_main_v999")
         with c2:
-            if live_trade_allowed:
-                st.markdown("<span class='live-blink'>LIVE ACTIVE</span> <b style='color:#FF0000;'>실전 계좌 매매 엔진이 활성화되었습니다.</b>", unsafe_allow_html=True)
-            else:
-                st.write("🛡️ 현재 가상 시뮬레이션 모드입니다.")
-
-        # 스캔 결과 표시
+            if live_trade_allowed: st.markdown("<span class='live-blink'>LIVE ACTIVE</span> <b style='color:#FF0000;'>실전 계좌 매매 엔진이 활성화되었습니다.</b>", unsafe_allow_html=True)
+            else: st.write("🛡️ 현재 가상 시뮬레이션 모드입니다.")
         if st.session_state.scanning_results:
             st.markdown("#### 💎 발견된 최적 타점 종목 (PERSISTENT SCAN)")
             for res in st.session_state.scanning_results:
-                t = res['ticker']
-                t_name = res['name']
+                t, t_name = res['ticker'], res['name']
                 with st.expander(f"🔥 {t_name} ({t}) - RS: {res['rs']} / ML: {res['ml']:.1f}%", expanded=True):
-                    st.write(f"요원 의견: '{t_name}' 종목이 전술적 임계치에 도달. RS 강도 {res['rs']}로 섹터 주도주 후보입니다.")
-                    if st.button(f"[ BUY ] {t_name} 즉시 집행", key=f"buy_btn_{t}"):
+                    st.write(f"요원 의견: '{t_name}' 종목이 전술적 임계치에 도달.")
+                    if st.button(f"[ BUY ] {t_name} 즉시 집행", key=f"buy_btn_{t}_v999"):
                         try:
                             curr_p = float(yf.Ticker(t).history(period="1d")['Close'].iloc[-1])
                             trades = load_trades()
-                            new_trade = {
-                                "id": str(int(time.time())) + f"_{t}", "user": st.session_state.current_user,
-                                "ticker": t, "buy_price": curr_p, "amount": 10,
-                                "strategy": "Active Scanner", "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                "is_kr": True, "is_real_api": live_trade_allowed
-                            }
+                            new_trade = {"id": str(int(time.time())) + f"_{t}", "user": st.session_state.current_user, "ticker": t, "buy_price": curr_p, "amount": 10, "strategy": "Active Scanner", "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "is_kr": True, "is_real_api": live_trade_allowed}
                             trades["auto"].append(new_trade)
                             save_trades(trades)
-                            if live_trade_allowed:
-                                success, msg = execute_kis_market_order(t, 10, True)
-                                if success: st.success(f"🚀 실전 매수 완료! ({t_name})")
-                                else: st.error(f"❌ 실전 매수 실패: {msg}")
-                            st.success(f"✅ {t_name} ({t}) 가상 포트폴리오 편입 완료!")
+                            if live_trade_allowed: execute_kis_market_order(t, 10, True)
+                            st.success(f"✅ {t_name} 편입 완료!")
                         except Exception as e: st.error(f"주문 오류: {e}")
-        else:
-            st.info("엔진 가동을 눌러 실시간 주도주를 스캔하십시오.")
+        else: st.info("엔진 가동을 눌러 실시간 주도주를 스캔하십시오.")
     
     st.divider()
-    # 3. 실시간 보유 종목 수익률 브리핑
     st.subheader("📊 [ ACCOUNT ] 실시간 포지션 수익률 현황")
     trades = load_trades()
     active_trades = trades.get("auto", []) + trades.get("mock", [])
-    
     if active_trades:
-        # 중복 제거 및 티커 리스트 추출
         unique_tickers = list(set([t['ticker'] for t in active_trades]))
         try:
             data_batch = cached_yf_download(tuple(unique_tickers), period="1d")['Close']
             if isinstance(data_batch, pd.Series): data_batch = pd.DataFrame(data_batch).T
         except: data_batch = pd.DataFrame()
-
         cols = st.columns(3)
-        for i, t_info in enumerate(active_trades[-6:]): # 최근 6개 표시
-            tic = t_info['ticker']
-            t_name = TICKER_NAME_MAP.get(tic, tic)
-            buy_p = t_info['buy_price']
+        for i, t_info in enumerate(active_trades[-6:]):
+            tic, t_name, buy_p = t_info['ticker'], TICKER_NAME_MAP.get(t_info['ticker'], t_info['ticker']), t_info['buy_price']
             curr_p = float(data_batch[tic].iloc[-1]) if tic in data_batch.columns else buy_p
             roi = ((curr_p / buy_p) - 1) * 100
-            
             with cols[i % 3]:
-                st.markdown(f"""
-                    <div style='background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border-left: 4px solid {"#00FF00" if roi >= 0 else "#FF4B4B"};'>
-                        <div style='font-size: 0.8rem; color: #AAA;'>{tic}</div>
-                        <div style='font-weight: bold;'>{t_name}</div>
-                        <div style='font-size: 1.1rem; color: {"#00FF00" if roi >= 0 else "#FF4B4B"};'>{roi:+.2f}%</div>
-                    </div>
-                """, unsafe_allow_html=True)
-                st.write("")
-    else:
-        st.info("현재 보유 중인 포지션이 없습니다.")
+                st.markdown(f"<div style='background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border-left: 4px solid {'#00FF00' if roi >= 0 else '#FF4B4B'};'><div style='font-size: 0.8rem; color: #AAA;'>{tic}</div><div style='font-weight: bold;'>{t_name}</div><div style='font-size: 1.1rem; color: {'#00FF00' if roi >= 0 else '#FF4B4B'};'>{roi:+.2f}%</div></div>", unsafe_allow_html=True)
+    else: st.info("현재 보유 중인 포지션이 없습니다.")
 
 elif page.startswith("7-d."):
     st.header("[ REPORT ] 자동투자 성적표 (Performance Report)")
     st.markdown("<div class='glass-card'>시스템이 수행한 전체 자동매매의 통계 데이터를 분석합니다.</div>", unsafe_allow_html=True)
-    
     trades = load_trades()
     history = trades.get("history", [])
-    
-    # 실시간 통계 데이터 계산
     if history:
         total_trades = len(history)
-        
-        # 수익 난 종목 수 (ROI > 0)
-        wins = 0
-        total_roi = 0.0
+        wins = sum(1 for t in history if float(t.get('roi', '0').replace('%','').replace('+','')) > 0)
+        total_roi = sum(float(t.get('roi', '0').replace('%','').replace('+','')) for t in history)
         equity_curve = [0.0]
-        
+        curr_total = 0.0
         for t in history:
-            # ROI 추출 (문자열일 수 있으므로 처리)
-            try:
-                roi_val = float(t.get('roi', '0').replace('%', '').replace('+', ''))
-            except:
-                roi_val = 0.0
-            
-            if roi_val > 0: wins += 1
-            total_roi += roi_val
-            equity_curve.append(total_roi)
-            
+            curr_total += float(t.get('roi', '0').replace('%','').replace('+',''))
+            equity_curve.append(curr_total)
         win_rate = (wins / total_trades) * 100
-        
-        # MDD 계산
         import numpy as np
         curve = np.array(equity_curve)
         peak = np.maximum.accumulate(curve)
-        drawdown = peak - curve
-        mdd = np.max(drawdown) if len(drawdown) > 0 else 0.0
-        
-        # 전일 대비 변동 (가상 시뮬레이션 - 실제로는 이전 기록과 비교 필요)
-        win_rate_delta = f"{random.uniform(0.1, 2.0):.1f}%"
-        roi_delta = f"{random.uniform(1.0, 5.0):.1f}%"
-    else:
-        total_trades = 0
-        win_rate = 0.0
-        total_roi = 0.0
-        mdd = 0.0
-        win_rate_delta = None
-        roi_delta = None
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("총 매매 횟수", f"{total_trades}회")
-    c2.metric("승률 (Win Rate)", f"{win_rate:.1f}%", win_rate_delta)
-    c3.metric("누적 수익률", f"{total_roi:+.1f}%", roi_delta)
-    c4.metric("최대 낙폭 (MDD)", f"-{mdd:.1f}%")
-    
-    st.divider()
-    
-    st.subheader("[ LOG ] 자동투자 매매 평가 및 강제 청산 로그")
-    trades = load_trades()
-    auto_trades = trades.get("auto", [])
-    
-    if auto_trades:
-        with st.spinner("AI 요원 포트폴리오 실시간 평가 중..."):
-            tickers = list(set([t['ticker'] for t in auto_trades]))
-            # 성능 최적화: 캐싱된 다운로더 사용
-            data_batch = cached_yf_download(tuple(tickers), period="5d")['Close'] if not cached_yf_download(tuple(tickers), period="5d").empty else pd.DataFrame()
-            if isinstance(data_batch, pd.Series): data_batch = pd.DataFrame(data_batch).T
-            
-            evaluated_list = []
-            for t in auto_trades.copy():
-                tic = t['ticker']
-                try:
-                    h_series = data_batch[tic].dropna() if tic in data_batch.columns else pd.Series([t['buy_price']])
-                    curr_p = float(h_series.iloc[-1])
-                    roi = ((curr_p / t['buy_price']) - 1) * 100
-                    
-                    # [ USER RULE ] 기본 손절(-3%) / 익절(+25%) 및 급등주 트레일링 스탑
-                    highest_price = h_series.max() # 최근 5일 내 고점
-                    surged_20 = (highest_price / t['buy_price']) >= 1.20
-                    
-                    sell_reason = None
-                    if surged_20 and curr_p <= highest_price * 0.98:
-                        sell_reason = "트레일링스탑(고점대비 -2%)"
-                    elif roi <= -3.0:
-                        sell_reason = "손절(-3%)"
-                    elif roi >= 25.0:
-                        sell_reason = "익절(+25%)"
-                    
-                    if sell_reason:
-                        t["sell_price"] = curr_p
-                        t["date_sold"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        t["reason"] = sell_reason
-                        trades["history"].append(t)
-                        trades["auto"] = [x for x in trades["auto"] if x["id"] != t["id"]]
-                        save_trades(trades)
-                        
-                        if t.get("is_real_api"): execute_kis_market_order(tic, t['amount'], is_buy=False)
-                        st.warning(f"🚨 [ AI SELL ] {tic} 종목이 {sell_reason} 조건에 도달하여 자동 청산되었습니다!")
-                    else:
-                        t["curr_price"] = curr_p
-                        t["roi"] = f"{roi:+.2f}%"
-                        evaluated_list.append(t)
-                except: pass
-                
-        if evaluated_list:
-            df = pd.DataFrame(evaluated_list)[["date", "user", "ticker", "buy_price", "curr_price", "amount", "roi"]]
-            df.columns = ["매수일시", "요원", "종목", "매수가", "현재가", "수량", "수익률"]
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        else:
-            st.info("현재 유지 중인 AI 자동매매 포지션이 없습니다.")
-    else:
-        st.info("현재 실행 중인 자동매매 포지션이 없습니다.")
-
-    st.divider()
-    st.subheader("[ GROWTH ] 자산 성장 곡선 (Equity Curve)")
-    if history:
-        st.line_chart(pd.DataFrame(equity_curve, columns=['Cumulative ROI (%)']))
-    else:
-        st.info("성장 곡선을 표시할 매매 기록이 없습니다.")
+        mdd = np.max(peak - curve) if len(curve) > 0 else 0.0
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("총 매매 횟수", f"{total_trades}회")
+        c2.metric("승률", f"{win_rate:.1f}%")
+        c3.metric("누적 수익률", f"{total_roi:+.1f}%")
+        c4.metric("MDD", f"-{mdd:.1f}%")
+        st.subheader("📈 누적 수익 실적")
+        st.line_chart(equity_curve)
+        st.subheader("[ LOG ] 최근 종료된 매매 기록")
+        st.dataframe(pd.DataFrame(history)[["date_sold", "ticker", "buy_price", "sell_price", "roi", "final_profit_krw"]], use_container_width=True, hide_index=True)
+    else: st.info("기록이 없습니다.")
 
 elif page.startswith("7-e."):
     st.markdown("<h1 style='text-align: center; color: #FFD700; font-size: 3rem;'>[ RANK ] 가상매매 명예의 전당</h1>", unsafe_allow_html=True)
@@ -5197,8 +3355,7 @@ elif page.startswith("7-e."):
             prices = {}
             if unique_tickers:
                 try:
-                    d_batch_raw = cached_yf_download(tuple(unique_tickers), period="1d")
-                    d_batch = d_batch_raw['Close'] if not d_batch_raw.empty else pd.DataFrame()
+                    d_batch = yf.download(unique_tickers, period="1d", progress=False)['Close']
                     if isinstance(d_batch, pd.Series): d_batch = pd.DataFrame(d_batch).T
                     for tick in unique_tickers:
                         prices[tick] = float(d_batch[tick].iloc[-1]) if tick in d_batch.columns else 0
@@ -5242,8 +3399,7 @@ elif page.startswith("7-e."):
         ai_tickers = list(ai_mission_map.values())
         ai_prices = {}
         try:
-            ai_data_raw = cached_yf_download(tuple(ai_tickers), period="1d")
-            ai_data = ai_data_raw['Close'] if not ai_data_raw.empty else pd.DataFrame()
+            ai_data = yf.download(ai_tickers, period="1d", progress=False)['Close']
             if isinstance(ai_data, pd.Series): ai_data = pd.DataFrame(ai_data).T
             for t in ai_tickers:
                 ai_prices[t] = float(ai_data[t].iloc[-1]) if t in ai_data.columns else 0
@@ -5265,10 +3421,6 @@ elif page.startswith("7-e."):
             # 누적 수익 시뮬레이션 (1,000만원 기준)
             rand_perf = (info['win_rate'] * 15000000 * market_multiplier) + (random.randint(-100000, 500000))
             
-            from datetime import timedelta
-            rand_min = random.randint(1, 120)
-            exit_t = (datetime.now() - timedelta(minutes=rand_min)).strftime("%m/%d %H:%M")
-            
             ai_stats.append((name, {
                 "total_profit": rand_perf, 
                 "trade_count": random.randint(30, 100), 
@@ -5276,8 +3428,7 @@ elif page.startswith("7-e."):
                 "ticker": target_ticker,
                 "entry_p": entry_p,
                 "exit_p": exit_p,
-                "is_kr": is_kr_ai,
-                "exit_time": exit_t
+                "is_kr": is_kr_ai
             }))
         
         # Human + AI 통합 정렬
@@ -5300,10 +3451,10 @@ elif page.startswith("7-e."):
                     with col_info1:
                         st.markdown(f"""
                         <div style='padding: 5px;'>
-                            <p style='margin:0; font-size: 0.8rem; color: #888;'>초기 운용 자산: 1,000 만원</p>
-                            <h3 style='margin:5px 0; color: #00FF00;'>보유자산: {total_asset/10000:,.2f} 만원</h3>
+                            <p style='margin:0; font-size: 0.8rem; color: #888;'>초기 운용 자산: 10,000,000 KRW</p>
+                            <h3 style='margin:5px 0; color: #00FF00;'>보유자산: {total_asset:,.0f} 원</h3>
                             <p style='margin:0; font-size: 0.85rem; color: {"#00FF00" if stats["total_profit"] > 0 else "#FF4B4B"};'>
-                                누적 수익금: {stats['total_profit']/10000:+,.2f} 만원
+                                누적 수익금: {stats['total_profit']:+,.0f} 원
                             </p>
                         </div>
                         """, unsafe_allow_html=True)
@@ -5337,60 +3488,12 @@ elif page.startswith("7-e."):
                             <div><span style='color:#888;'>진입가:</span> <b style='color:#FFF;'>{entry_val:{fmt}}{unit}</b></div>
                             <div><span style='color:#888;'>판매가:</span> <b style='color:#FFF;'>{exit_val:{fmt}}{unit}</b></div>
                             <div><span style='color:#888;'>수익률:</span> <b style='color:#00FF00;'>{roi:+.1f}%</b></div>
-                            <div><span style='color:#888;'>판매시점:</span> <b style='color:#FFF;'>{stats.get('exit_time', datetime.now().strftime('%m/%d %H:%M'))}</b></div>
+                            <div><span style='color:#888;'>판매시점:</span> <b style='color:#FFF;'>{datetime.now().strftime('%m/%d %H:%M')}</b></div>
                         </div>
                         """, unsafe_allow_html=True)
             
             if len(combined_ranking) > 0 and combined_ranking[0][0] == st.session_state.get("current_user"):
                 st.balloons()
-
-elif page.startswith("7-a.") or page.startswith("7-b.") or page.startswith("7-c.") or page.startswith("7-d.") or page.startswith("7-e."):
-    st.header(f"[ AUTO ] {page.split(']')[1].strip()} - 자동매매 사령부")
-    st.markdown("<div class='glass-card'>실시간 시장 감시 및 기계적 리스크 관리(손절/익절)를 수행하는 코어 엔진입니다.</div>", unsafe_allow_html=True)
-    
-    st.info("⚠️ [ KIS API ] 실전 투자 연동 상태 모니터링 중...")
-    if not KIS_APP_KEY:
-        st.error("API 키가 설정되지 않았습니다. 환경 변수를 확인하십시오.")
-    else:
-        st.success("API 토큰 발급 대기 및 통신 회선 정상.")
-        
-    kis_token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-    capital = get_kis_balance(kis_token) if kis_token else 10000000
-    
-    st.markdown(f"<div class='glass-card neon-glow'>💰 실시간 사령부 작전 자본금: <b>{capital/10000:,.2f} 만원</b></div>", unsafe_allow_html=True)
-
-    st.subheader("[ ENGINE LOG ] 백그라운드 매매 루프 시뮬레이터")
-    
-    # -3% 기계적 손절 및 +25% 익절 시뮬레이션 UI
-    with st.expander("[ CONFIG ] 전략 파라미터 튜닝", expanded=True):
-        col_s1, col_s2, col_s3 = st.columns(3)
-        target_sl = col_s1.number_input("자동 손절 라인 (%)", min_value=-10.0, max_value=-0.1, value=-3.0, step=0.1)
-        target_tp = col_s2.number_input("자동 익절 라인 (%)", min_value=1.0, max_value=100.0, value=25.0, step=1.0)
-        risk_pct = col_s3.number_input("1회 매매 리스크 (%)", min_value=0.1, max_value=5.0, value=1.0, step=0.1)
-        
-    st.markdown(f"**현재 설정**: <span style='color:#FF4B4B;'>{target_sl}% 손절</span> / <span style='color:#00FF00;'>+{target_tp}% 익절</span> / <b>자본 리스크 {risk_pct}%</b>", unsafe_allow_html=True)
-    
-    if st.button("[ EXEC ] 백그라운드 감시 스레드 가동", use_container_width=True):
-        st.toast("✅ [ AUTO ENGINE ] 감시 스레드가 백그라운드에서 성공적으로 시작되었습니다.", icon="🛰️")
-        send_webhook_alert(f"[ HQ ] 자동매매 감시 엔진 구동 시작. 자본금: {capital:,.0f}원")
-        st.session_state["auto_engine_running"] = True
-    
-    if st.session_state.get("auto_engine_running"):
-        now_time = datetime.now().strftime("%H:%M:%S")
-        st.markdown(f"""
-        <div class='alert-pulse' style='background: rgba(255, 0, 0, 0.05); padding: 15px; border-radius: 10px;'>
-            <h4 style='color: #FF4B4B; margin-top: 0;'>[ LIVE ] 🔴 KIS 전술 엔진 감시 중...</h4>
-            <p style='color: #AAA; font-family: monospace; font-size: 0.9rem;'>
-                >> [{now_time}] KIS API Token Verified.<br>
-                >> [{now_time}] 리스크 룰 적용: {risk_pct}% (Max Loss: {capital*(risk_pct/100):,.0f}원)<br>
-                >> [{now_time}] 보유 종목 현재가 및 손익 감시 루프 대기 중...
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("[ HALT ] 엔진 강제 중지", type="secondary"):
-            st.session_state["auto_engine_running"] = False
-            send_webhook_alert("[ HQ ] 자동매매 감시 엔진이 수동 중단되었습니다.")
-            st.rerun()
 
 elif page.startswith("7-f."):
     st.markdown("<h1 style='text-align: center; color: #00FFFF; font-size: 3rem;'>[ QULLAMAGGI ] 쿨라매기 전략 엔진</h1>", unsafe_allow_html=True)
@@ -5464,150 +3567,113 @@ elif page.startswith("7-f."):
         return sorted(list(set(valid_watchlist)))
 
     # 2. Scanning Logic
-    def scan_bonde_setup(tickers):
+    def scan_kullamaggi_setup(tickers):
         results = []
         if not tickers: return results
         
-        with st.spinner(f"[ SCAN ] {len(tickers)}개 종목의 Pradeep Bonde (Stockbee) 나노 정밀 엔진 가동 중..."):
-            # 최소 100일 치 데이터 확보 (AVGV100 및 65일 이평선 계산용)
-            data_d = yf.download(tickers, period="6mo", interval="1d", progress=False)
-            if data_d.empty: return []
+        with st.spinner(f"[ SCAN ] {len(tickers)}개 종목의 쿨라매기 나노 엔진 가동 중..."):
+            # (A) Daily Data for Patterns
+            data_d = yf.download(tickers, period="3mo", interval="1d", progress=False)
+            close_d = data_d['Close']
+            high_d = data_d['High']
+            low_d = data_d['Low']
             
+            # (B) 15m Data for ORB (Opening Range Breakout)
+            # 최근 2거래일 15분 데이터 수집 (오늘 장 초반 고점 파악용)
             try:
-                close_d = data_d['Close']
-                high_d = data_d['High']
-                low_d = data_d['Low']
-                vol_d = data_d['Volume']
-            except KeyError:
-                return []
-                
+                data_15m = yf.download(tickers, period="2d", interval="15m", progress=False)
+                close_15m = data_15m['Close']
+                high_15m = data_15m['High']
+            except: 
+                data_15m = pd.DataFrame()
+            
             for t in tickers:
                 try:
                     if t not in close_d.columns: continue
-                    c = close_d[t].dropna()
-                    v = vol_d[t].dropna()
-                    h = high_d[t].dropna()
-                    l = low_d[t].dropna()
+                    h = close_d[t].dropna()
+                    if len(h) < 25: continue
                     
-                    if len(c) < 100: continue
-                    
-                    # 오늘(현재) 값과 어제(1일 전) 값
-                    C = float(c.iloc[-1])
-                    C1 = float(c.iloc[-2])
-                    V = float(v.iloc[-1])
-                    V1 = float(v.iloc[-2])
-                    
-                    # 이동평균
-                    AVGC7 = float(c.rolling(7).mean().iloc[-1])
-                    AVGC65 = float(c.rolling(65).mean().iloc[-1])
-                    AVGV50 = float(v.rolling(50).mean().iloc[-1])
-                    AVGV100 = float(v.rolling(100).mean().iloc[-1])
-                    
-                    # 최근 10일 고점, 저점
-                    MAXH10 = float(h.iloc[-10:].max())
-                    MINL10 = float(l.iloc[-10:].min())
-                    
-                    # 모멘텀 점수 계산용 (1개월 수익률)
-                    p_curr = C
-                    p_1m = float(c.iloc[-21]) if len(c) >= 21 else float(c.iloc[0])
+                    # 1M Surge (HTF)
+                    p_curr = h.iloc[-1]
+                    p_1m = h.iloc[-21] if len(h) >= 21 else h.iloc[0]
                     one_month_ret = (p_curr / p_1m - 1) * 100
-                    rs_val = (one_month_ret * 0.7) + (random.uniform(5, 15))
-                    total_score = rs_val * 0.6 + random.uniform(10, 30)
-
-                    setup_name = ""
-                    signal_str = "대기"
                     
-                    # 2LYNCH 규칙 (추격 매수 금지): 3일 연속 상승 중인지 확인
-                    is_extended_3d = (c.iloc[-1] > c.iloc[-2]) and (c.iloc[-2] > c.iloc[-3]) and (c.iloc[-3] > c.iloc[-4])
+                    # 5D Volatility
+                    h_5d = high_d[t].iloc[-5:].max()
+                    l_5d = low_d[t].iloc[-5:].min()
+                    vol_5d = (h_5d - l_5d) / l_5d * 100
                     
-                    # 1. 4% Momentum Burst (심화 로직)
-                    is_4pct_burst = (C > C1 * 1.04) and (V > V1) and (V >= 100000) and ((C - C1) >= 0.25) and (AVGC7 > 1.05 * AVGC65)
-                    # 2LYNCH 필터 적용
-                    if is_4pct_burst and is_extended_3d:
-                        is_4pct_burst = False
+                    # SMA Convergence
+                    sma10 = h.rolling(10).mean().iloc[-1]
+                    sma20 = h.rolling(20).mean().iloc[-1]
+                    dist_10 = abs(p_curr - sma10) / sma10 * 100
+                    dist_20 = abs(p_curr - sma20) / sma20 * 100
                     
-                    # 2. Episodic Pivot (EP) (정석 + 복합)
-                    is_ep_classic = (C > C1 * 1.10) and (V > AVGV50 * 3)
-                    is_ep_large = (C - C1 >= 5) and (C >= 62.50) and (V >= 1000000)
-                    is_ep_small = (C >= 1) and (C > C1 * 1.08) and (V > AVGV100 * 3)
-                    is_ep_9m = (V >= 9000000)
-                    is_ep = is_ep_classic or is_ep_large or is_ep_small or is_ep_9m
+                    # ORB Check (Prev Day High or 15m High Breakdown)
+                    prev_high = high_d[t].iloc[-2]
+                    orb_15m_high = 0
+                    if not data_15m.empty and t in high_15m.columns:
+                        # 오늘 날짜의 데이터만 추출하여 첫 15분봉 고점 확인
+                        today_15m = high_15m[t].dropna()
+                        if len(today_15m) > 0:
+                            orb_15m_high = today_15m.iloc[0] # 장 시작 첫 15분봉 고점
                     
-                    # 3. Anticipation / Low Range Bar
-                    is_vcp = (MAXH10 - MINL10) < (C * 0.1) and (V < AVGV50)
-                    is_ti65_1pct = (AVGC7 > 1.05 * AVGC65) and (C1 * 0.99 <= C <= C1 * 1.01)
-                    min_v_3d = float(v.iloc[-3:].min())
-                    is_anticipation = (is_vcp or is_ti65_1pct) and min_v_3d >= 100000
+                    is_orb_prev = p_curr > prev_high
+                    is_orb_15m = (p_curr > orb_15m_high) if orb_15m_high > 0 else False
                     
-                    if is_ep:
-                        setup_name = "EP (에피소딕 피벗)"
-                        signal_str = "[ BUY ] 강력 매수"
-                        total_score += 30
-                    elif is_4pct_burst:
-                        setup_name = "4% 모멘텀 버스트"
-                        signal_str = "[ BUY ] 돌파 매수"
-                        total_score += 20
-                    elif is_anticipation:
-                        setup_name = "Anticipation (VCP/응축)"
-                        signal_str = "[ BUY ] 선취 매수"
-                        total_score += 15
+                    # Sell Signal
+                    sell_signal = p_curr < sma10
+                    
+                    # 기본 필터링 (필요 시 완화)
+                    if one_month_ret >= 10: 
+                        signal_str = "대기"
+                        if is_orb_prev or is_orb_15m: signal_str = "[ BUY ] 매수"
+                        elif sell_signal: signal_str = "[ EXIT ] 이탈"
                         
-                    # 포착된 셋업만 결과에 추가 (디버그용으로 전부 추가 후 상위 10개 커팅)
-                    if setup_name:
-                        # LOD Stop (진입 당일의 최저점을 손절선으로 절대 엄수)
-                        LOD = float(l.iloc[-1])
-                        stop_loss = round(LOD, 2)
-                        
-                        # 목표가: 35일 이내 8~20% 폭발 노림 (평균 15% 세팅)
-                        target_price = round(C * 1.15, 2)
+                        rs_val = (one_month_ret * 0.7) + (random.uniform(5, 15))
+                        total_score = (rs_val * 0.6) + (vol_5d * -0.2) + (random.uniform(10, 30))
                         
                         results.append({
                             "Ticker": t,
-                            "Price": round(C, 2),
+                            "Price": round(p_curr, 2),
                             "Score": round(total_score, 1),
-                            "Setup": setup_name,
                             "RS": round(rs_val, 1),
                             "ROE": "Calculating...",
                             "1M_Ret": round(one_month_ret, 1),
-                            "EP": round(C, 2),
-                            "SL(LOD)": stop_loss,
-                            "TP": target_price,
+                            "EP": round(p_curr, 2),
+                            "SL": round(p_curr * 0.95, 2),
+                            "TP": round(p_curr * 1.30, 2),
                             "Signal": signal_str
                         })
-                except Exception as e:
-                    continue
+                except: continue
         
-        # 만약 포착된 종목이 없으면, RS 상위 종목을 '대기' 상태로라도 표시
-        if not results:
-            return [{"Ticker": "N/A", "Price": 0, "Score": 0, "Setup": "방어적 장세 (종목 없음)", "RS": 0, "ROE": "N/A", "1M_Ret": 0, "EP": 0, "SL(LOD)": 0, "TP": 0, "Signal": "대기"}]
-        
+        # 0420 신규: 점수순 정렬 후 최소 5개 ~ 최대 10개 추출 보장
         results = sorted(results, key=lambda x: x['Score'], reverse=True)
-        final_count = max(1, min(10, len(results)))
+        final_count = max(5, min(10, len(results)))
         results = results[:final_count]
         
-        # ROE 정밀 페치
+        # 상위 10개에 대해서만 ROE 정밀 페치 (성능 최적화)
         for item in results:
-            if item["Ticker"] != "N/A":
-                item["ROE"] = f"{get_ticker_roe(item['Ticker']):.1f}%"
+            item["ROE"] = f"{get_ticker_roe(item['Ticker']):.1f}%"
             
         return results
 
     # UI Implementation
     col_ctrl1, col_ctrl2 = st.columns([1, 4])
     with col_ctrl1:
-        if st.button("[ EXEC ] Bonde 엔진 가동", use_container_width=True):
+        if st.button("[ EXEC ] 엔진 정밀 가동", use_container_width=True):
             wl = fetch_q_watchlist()
-            st.session_state.q_results = scan_bonde_setup(wl)
+            st.session_state.q_results = scan_kullamaggi_setup(wl)
             st.success("[ SUCCESS ] 엔진 스캔 완료!")
     with col_ctrl2:
-        st.info("실시간 엔진: Pradeep Bonde(Stockbee)의 4% 모멘텀 버스트, EP, VCP 동시 감시 중")
+        st.info("실시간 엔진: HTF 패턴(1개월 30%↑) + 15분봉 ORB 돌파 + 10/20일선 응축 동시 감시")
 
     if st.session_state.get("q_results"):
         df_q = pd.DataFrame(st.session_state.q_results)
         
         # --- 실시간 매수 신호 시각화 ---
         buys = df_q[df_q['Signal'].str.contains("매수")]
-        if not buys.empty and "N/A" not in buys['Ticker'].tolist():
+        if not buys.empty:
             st.markdown("<div class='neon-border'><div class='neon-inner' style='text-align:center;'>", unsafe_allow_html=True)
             st.markdown(f"### [ TARGET ] 사령부 긴급 매수 타점 감지: <span style='color:#00FF00;'>{', '.join(buys['Ticker'].tolist())}</span>", unsafe_allow_html=True)
             st.markdown("</div></div>", unsafe_allow_html=True)
@@ -5618,23 +3684,21 @@ elif page.startswith("7-f."):
         def style_q_df(val):
             try:
                 if "매수" in str(val): return 'color: #00FF00; font-weight: bold; background: rgba(0,255,0,0.1);'
-                if "EP" in str(val): return 'color: #FF00FF; font-weight: bold;'
-                if "4%" in str(val): return 'color: #FFA500; font-weight: bold;'
-                if "VCP" in str(val): return 'color: #00FFFF; font-weight: bold;'
+                if float(val) >= 80: return 'color: #FFD700; font-weight: bold;' # 고득점
             except: pass
             return ''
 
         # 컬럼 순서 재조정 및 표시
-        display_df = df_q[["Ticker", "Price", "Score", "Setup", "Signal", "EP", "SL(LOD)", "TP", "ROE", "RS", "1M_Ret"]]
-        display_df.columns = ["티커", "현재가", "종합점수", "본데 셋업(PCF)", "신호", "진입가(EP)", "당일저가(LOD)", "익절가(TP)", "ROE", "RS", "1M수익"]
+        display_df = df_q[["Ticker", "Price", "Score", "Signal", "EP", "SL", "TP", "ROE", "RS", "1M_Ret"]]
+        display_df.columns = ["티커", "현재가", "종합점수", "신호", "매출시점(EP)", "손절가(SL)", "목표가(TP)", "ROE", "RS", "1M수익"]
         
         st.dataframe(display_df.style.map(style_q_df).format(precision=2), use_container_width=True, hide_index=True)
         
         # 요약 카드
         c1, c2, c3 = st.columns(3)
-        with c1: st.metric("[ BURST ] 4% 모멘텀 포착", f"{len(df_q[df_q['Setup'].str.contains('4%') if 'Setup' in df_q else False])}건")
-        with c2: st.metric("[ EP ] 에피소딕 피벗", f"{len(df_q[df_q['Setup'].str.contains('EP') if 'Setup' in df_q else False])}건")
-        with c3: st.metric("[ COIL ] VCP/응축", f"{len(df_q[df_q['Setup'].str.contains('VCP') if 'Setup' in df_q else False])}건")
+        with c1: st.metric("[ HOT ] HTF 패턴 포착", f"{len(df_q)}건")
+        with c2: st.metric("[ TIGHT ] 에너지 응축", f"High Rate")
+        with c3: st.metric("[ BURST ] 실시간 돌파(ORB)", f"{len(buys)}건")
 
         st.divider()
         st.subheader("[ CHART ] 개별 종목 나노 정밀 차트 분석")
@@ -5652,7 +3716,7 @@ elif page.startswith("7-f."):
             # [ AI ] 요원의 실시간 필드 리포트
             st.markdown("---")
             top_ai = f"[ AI ] {list(AI_OPERATIVES.keys())[0]}"
-            sentiment_score, _, _ = get_market_sentiment_score()
+            sentiment_score, _ = get_market_sentiment_score()
             st.markdown(f"""
             <div class='glass-card' style='border-top: 3px solid #00FFFF; background: rgba(0,255,255,0.02);'>
                 <p style='color: #00FFFF; margin: 0; font-weight: 700;'>[ FIELD-AI ] FIELD REPORT: {top_ai}</p>
