@@ -804,15 +804,6 @@ def fetch_gs_notices():
 로그인 후 해당 메뉴에서 본인만의 안전한 비밀번호로 즉시 변경이 가능합니다. 개인정보 보호를 위해 접속 즉시 수정을 권장합니다."""
     }
 
-@st.cache_resource
-def get_cached_bg_b64():
-    try:
-        target = "StockDragonfly2.png" if os.path.exists("StockDragonfly2.png") else "StockDragonfly.png"
-        if os.path.exists(target):
-            with open(target, "rb") as imm: 
-                return base64.b64encode(imm.read()).decode()
-    except: pass
-    return ""
 
 # --- [ UI ] CSS & Background (Lightweight High-Performance) ---
 # --- [ UI ] CSS & Global Layout ---
@@ -842,7 +833,7 @@ with col_head3:
 with col_head2:
     st.markdown(f"""
         <div style='text-align: center; margin-top: -30px; margin-bottom: 5px; overflow: visible;'>
-            <img src='data:image/png;base64,{logo_b64}' style='width: 110px; margin-bottom: -15px;'>
+            <img src='data:image/png;base64,{assets["logo"]}' style='width: 110px; margin-bottom: -15px;'>
             <h1 style='font-size: clamp(1.8rem, 7.5vw, 3.8rem); font-weight: 900; background: linear-gradient(45deg, #FFD700, #FFFFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.5); white-space: nowrap; margin-bottom: 0px; line-height: 1.1;'>StockDragonfly</h1>
             <p style='color: #888; letter-spacing: 7px; font-size: 0.7rem; margin-top: -5px; opacity: 0.8;'>ULTRA-HIGH PERFORMANCE TERMINAL</p>
         </div>
