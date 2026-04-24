@@ -430,18 +430,29 @@ def get_macro_data():
 
 # --- [ ENGINE ] KIS API & Core Trading Logic ---
 # [ SECURITY ] 사령관님이 제공하신 실제 전술 키 주입
-NEW_KEY = "PSLep6Mc8hCjS6CHhpXnCXKEVVi3UoYbgOF5"
-NEW_SECRET = "cXF1CYSGZBWAl0ytFSIWsRunLQPuzthZKqxWX4GI562Rndn+tBBx7ObQ80R4T76Fb0mLld4mJ0Wz1DdDLZxOQ6lPhkm+1fW9m2+LsFuTHUF90HYy1HnYyEIW7rEL0wyxag0/s/Vt3udBdj5eS+zOR82wjpKg0dA9n4znVP9Hk5udnk0g/Kw="
+NEW_KEY = "PSzuu6dcYxkkHvTyAXm61J1Zta6oBrSZHoaq"
+NEW_SECRET = "H5dGS5kHK3AbpskI0E0ovYAL6aS82Li/4SioJGlLK6ypvlc3ejf1NNpbwkxTpsuO81mhqEFOW62OaFSCRtd/J9/v8c5WVKOf0uMigMblMeMI1riXUaeVf+LuBnSE+kXN1OEkn1MBlQ2GiLd4tFBEEQxOH/cQgFf0YaU2Q1S5OeHnecRCcuQ="
 
 KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", NEW_KEY).strip()
 KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", NEW_SECRET).strip()
 
-raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "4628981901")).replace("-", "")
-KIS_ACCOUNT_NO = raw_acc if len(raw_acc) == 10 else (raw_acc + "01")
+# [ 계좌 프리셋 정의 ]
+ACC_PRESETS = {
+    "위탁(표준)": "4654671301",
+    "미니스탁/소수점": "4628981901",
+    "ISA 중개형": "4444571901"
+}
+
 def get_kis_mock_status():
     return st.session_state.get("kis_mock_mode", st.secrets.get("KIS_MOCK_TRADING", False))
 
+def get_current_acc_no():
+    # 세션 상태에 계좌 정보가 없으면 기본값(위탁 표준) 사용
+    selected_acc_name = st.session_state.get("selected_acc_name", "위탁(표준)")
+    return ACC_PRESETS.get(selected_acc_name, "4654671301")
+
 KIS_MOCK_TRADING = get_kis_mock_status()
+KIS_ACCOUNT_NO = get_current_acc_no()
 
 # [ NEW ] 텔레그램 설정
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
@@ -461,9 +472,15 @@ def get_kis_access_token(app_key, app_secret, mock=True):
     """한국투자증권 API 접근 토큰 발급 (1분 제한 방어 로직 포함)"""
     # [ SAFETY ] KIS 1분 1회 제한 방어
     last_req = st.session_state.get("last_token_req_time", 0)
-    if time.time() - last_req < 62: # 60초보다 넉넉하게 62초
-        st.warning(f"⏳ KIS 보안 정책상 토큰은 1분에 1회만 요청 가능합니다. (남은 시간: {int(62 - (time.time() - last_req))}초)")
-        # 캐시된 값이 있으면 그것을 반환하도록 유도 (이전에 성공했다면)
+    elapsed = time.time() - last_req
+    if elapsed < 60: 
+        placeholder = st.empty()
+        # [ LIVE COUNTDOWN ] 사령관님의 편의를 위해 실시간 타이머 가동
+        for remaining in range(int(60 - elapsed), -1, -1):
+            placeholder.warning(f"⏳ KIS 보안 정책상 토큰은 1분에 1회만 요청 가능합니다. (보안 해제 대기 중: {remaining}초)")
+            if remaining > 0: time.sleep(1)
+        placeholder.empty()
+        # 시간이 다 되면 캐시된 토큰이라도 반환 시도
         return st.session_state.get("last_valid_token")
 
     base_url = "https://openapivts.koreainvestment.com:29443" if mock else "https://openapi.koreainvestment.com:9443"
@@ -1368,6 +1385,17 @@ with st.sidebar:
 
     st.sidebar.divider()
     st.sidebar.markdown("### 🏦 ACCOUNT CONTROL")
+    
+    # [ NEW ] 계좌 셀렉터 도입
+    selected_acc = st.sidebar.selectbox(
+        "교전 계좌 선택", 
+        list(ACC_PRESETS.keys()), 
+        index=list(ACC_PRESETS.keys()).index(st.session_state.get("selected_acc_name", "위탁(표준)")),
+        key="selected_acc_name"
+    )
+    # 계좌 변경 시 전역 변수 즉시 업데이트 효과를 위해 세션 상태 강제 반영
+    KIS_ACCOUNT_NO = ACC_PRESETS[selected_acc]
+    
     is_live = st.sidebar.toggle("🚀 실전 매매 모드 (LIVE)", value=st.session_state.get("is_live_mode", not KIS_MOCK_TRADING), key="is_live_mode")
     st.session_state.kis_mock_mode = not is_live
     st.sidebar.caption(f"📡 현재 연결 키: {KIS_APP_KEY[:5]}***")
