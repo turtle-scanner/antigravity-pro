@@ -244,7 +244,7 @@ MASTER_GAS_URL = st.secrets.get("MASTER_GAS_URL", "https://script.google.com/mac
 def gsheet_sync_bg(sheet_name, cols, row_data):
     """비동기 구글 시트 데이터 전송 (UI 프리징 방지)"""
     def task():
-        try: requests.post(MASTER_GAS_URL, json={"sheetName": sheet_name, "columns": cols, "row": row_data}, timeout=5)
+        try: requests.post(MASTER_GAS_URL, json={"sheetName": sheet_name, "columns": cols, "row": row_data}, timeout=10)
         except: pass
     threading.Thread(target=task, daemon=True).start()
 
@@ -446,7 +446,7 @@ def send_telegram_msg(msg):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         params = {"chat_id": TELEGRAM_CHAT_ID, "text": f"📡 [COMMANDER REPORT]\n{msg}", "parse_mode": "Markdown"}
-        requests.get(url, params=params, timeout=5)
+        requests.get(url, params=params, timeout=10)
     except: pass
 
 @st.cache_data(ttl=3500)
@@ -461,7 +461,7 @@ def get_kis_access_token(app_key, app_secret, mock=True):
         "appsecret": app_secret
     }
     try:
-        res = requests.post(url, headers=headers, json=body, timeout=5)
+        res = requests.post(url, headers=headers, json=body, timeout=10)
         if res.status_code == 200:
             return res.json().get("access_token")
     except Exception as e:
@@ -488,7 +488,7 @@ def get_kis_balance(token, mock=None):
         "CANL_DLY_VW_FNC_G": "0", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""
     }
     try:
-        res = requests.get(url, headers=headers, params=params, timeout=5)
+        res = requests.get(url, headers=headers, params=params, timeout=10)
         if res.status_code == 200:
             data = res.json()
             if data.get('output2'):
@@ -524,7 +524,7 @@ def get_kis_overseas_balance(token, mock=None):
         "WCRC_FRCR_DVS_CD": "01", "NATN_CD": "840", "TR_PACC_CD": "", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""
     }
     try:
-        res = requests.get(url, headers=headers, params=params, timeout=5)
+        res = requests.get(url, headers=headers, params=params, timeout=10)
         if res.status_code == 200:
             data = res.json()
             output2 = data.get('output2', {})
@@ -555,7 +555,7 @@ def get_kis_current_price(ticker, token):
             url = f"{base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
             headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "FHKST01010100"}
             params = {"FID_COND_SCR_DIV_CODE": "11111", "FID_INPUT_ISCD": symbol}
-            resp = requests.get(url, headers=headers, params=params, timeout=5)
+            resp = requests.get(url, headers=headers, params=params, timeout=10)
             return float(resp.json().get('output', {}).get('stck_prpr', 0))
         else:
             url = f"{base_url}/uapi/overseas-stock/v1/quotations/price"
@@ -563,7 +563,7 @@ def get_kis_current_price(ticker, token):
             # 거래소 코드 NAS/NYS/AMS 자동 시도
             for excd in ["NAS", "NYS", "AMS"]:
                 params = {"AUTH": "", "EXCD": excd, "SYMB": ticker}
-                resp = requests.get(url, headers=headers, params=params, timeout=5)
+                resp = requests.get(url, headers=headers, params=params, timeout=10)
                 price = float(resp.json().get('output', {}).get('last', 0))
                 if price > 0: return price
         return 0
@@ -945,7 +945,7 @@ def sync_users_from_sheet():
     """비동기 사용자 데이터 동기화"""
     if not USERS_SHEET_URL: return
     try:
-        resp = safe_get(USERS_SHEET_URL, timeout=5)
+        resp = safe_get(USERS_SHEET_URL, timeout=10)
         if resp:
             df_u = pd.read_csv(io.StringIO(resp.text))
             users = safe_load_json(USER_DB_FILE, {})
@@ -1027,7 +1027,7 @@ def fetch_gs_chat():
 @st.cache_data(ttl=300)
 def fetch_gs_visitors():
     try:
-        response = requests.get(VISITOR_SHEET_URL, timeout=5)
+        response = requests.get(VISITOR_SHEET_URL, timeout=10)
         if response.status_code == 200:
             import io
             return pd.read_csv(io.StringIO(response.text))
