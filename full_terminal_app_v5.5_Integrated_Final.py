@@ -468,17 +468,18 @@ def get_kis_access_token(app_key, app_secret, mock=True):
         print(f"DEBUG: KIS Token Error: {e}")
     return None
 
-def get_kis_balance(token):
+def get_kis_balance(token, mock=None):
     """국내 주식 잔고 및 예수금 현황 조회 (실제 연동)"""
     if not token or not KIS_ACCOUNT_NO: return 0, 0, []
-    base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+    use_mock = mock if mock is not None else KIS_MOCK_TRADING
+    base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
     headers = {
         "Content-Type": "application/json",
         "authorization": f"Bearer {token}",
         "appkey": KIS_APP_KEY,
         "appsecret": KIS_APP_SECRET,
-        "tr_id": "VTTC8434R" if KIS_MOCK_TRADING else "TTTC8434R"
+        "tr_id": "VTTC8434R" if use_mock else "TTTC8434R"
     }
     params = {
         "CANO": KIS_ACCOUNT_NO[:8],
@@ -505,17 +506,18 @@ def get_kis_balance(token):
         st.error(f"⚠️ 국내 통신 오류: {str(e)}")
     return 0, 0, []
 
-def get_kis_overseas_balance(token):
+def get_kis_overseas_balance(token, mock=None):
     """해외 주식 잔고 현황 조회 (실제 연동)"""
     if not token or not KIS_ACCOUNT_NO: return 0, []
-    base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+    use_mock = mock if mock is not None else KIS_MOCK_TRADING
+    base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
     headers = {
         "Content-Type": "application/json",
         "authorization": f"Bearer {token}",
         "appkey": KIS_APP_KEY,
         "appsecret": KIS_APP_SECRET,
-        "tr_id": "VTTW8434R" if KIS_MOCK_TRADING else "TTTW8434R"
+        "tr_id": "VTTW8434R" if use_mock else "TTTW8434R"
     }
     params = {
         "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
@@ -1322,9 +1324,10 @@ with st.sidebar:
     # [ SIDEBAR BALANCE INFO ]
     if st.session_state.get("current_user"):
         try:
-            token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, not is_live)
-            r_total, r_cash, _ = get_kis_balance(token)
-            o_total, _ = get_kis_overseas_balance(token)
+            current_mock = not is_live
+            token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, current_mock)
+            r_total, r_cash, _ = get_kis_balance(token, mock=current_mock)
+            o_total, _ = get_kis_overseas_balance(token, mock=current_mock)
             full_b = r_total + o_total
             st.sidebar.markdown(f"""
                 <div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:5px; border:1px solid #FFD70033;'>
