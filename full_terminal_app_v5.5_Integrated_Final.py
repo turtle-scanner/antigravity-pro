@@ -2577,6 +2577,19 @@ elif page.startswith("5-e."):
                                         if qty > 0:
                                             st.toast(f"🚀 {name} 피벗 돌파! 자본 25% 투입...", icon="⚡")
                                             if execute_kis_market_order(t, qty, is_buy=True):
+                                                current_holdings_count += 1
+                                                report_log[0] += " (체결 성공)"
+                            
+                            elif res["status"] == "PASS":
+                                if res["stage"] == "RS_TARGET":
+                                    st.session_state.rs_target_list.append(res)
+                                    report_log.insert(0, f"🎯 **[ TOP 10 / TARGET ] {name} 확보**")
+                                else:
+                                    st.session_state.universe_list.append(res)
+                                    report_log.insert(0, f"🛡️ **[ TOP 10 / UNIVERSE ] {name} 통과**")
+                            else:
+                                report_log.insert(0, f"❌ {t} 순위권 탈락: {res.get('reason', '점수 미달')}")
+                            
                             report_placeholder.markdown("\n".join(report_log[:20]))
                         
                         status.update(label="[ SUCCESS ] 최정예 10개 종목 압축 및 전략 집행 완료!", state="complete")
@@ -3908,14 +3921,14 @@ elif page.startswith("7-c."):
             if is_truce:
                 status.update(label=f"🛡️ [ TACTICAL TRUCE ] 시장 건강도 악화({breadth:.1f}%). 매수 중단 및 방어 모드.")
             
-            universe = list(set(get_bonde_top_50() + get_nasdaq_200() + get_kospi_top_200() + get_kosdaq_100()))
-            random.shuffle(universe)
-            
+            # [ FINAL OPTIMIZATION ] 10스레드 하이퍼 터보 스캔
             from concurrent.futures import ThreadPoolExecutor
-            def fast_analyze(ticker): return analyze_stockbee_setup(ticker, kis_token=token)
+            def fast_analyze(ticker):
+                try: return analyze_stockbee_setup(ticker, kis_token=token)
+                except: return {"status": "ERROR", "ticker": ticker}
 
-            # [ 3-PHASE HYPER SCAN ]
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            # [ 3-PHASE TURBO SCAN ]
+            with ThreadPoolExecutor(max_workers=10) as executor:
                 ep_pool = list(executor.map(fast_analyze, universe[:40]))
                 dr_pool = list(executor.map(fast_analyze, universe[40:80]))
                 tight_pool = list(executor.map(fast_analyze, universe[80:120]))
