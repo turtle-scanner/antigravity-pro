@@ -244,7 +244,7 @@ MASTER_GAS_URL = st.secrets.get("MASTER_GAS_URL", "https://script.google.com/mac
 def gsheet_sync_bg(sheet_name, cols, row_data):
     """비동기 구글 시트 데이터 전송 (UI 프리징 방지)"""
     def task():
-        try: requests.post(MASTER_GAS_URL, json={"sheetName": sheet_name, "columns": cols, "row": row_data}, timeout=10)
+        try: requests.post(MASTER_GAS_URL, json={"sheetName": sheet_name, "columns": cols, "row": row_data}, timeout=15)
         except: pass
     threading.Thread(target=task, daemon=True).start()
 
@@ -446,7 +446,7 @@ def send_telegram_msg(msg):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         params = {"chat_id": TELEGRAM_CHAT_ID, "text": f"📡 [COMMANDER REPORT]\n{msg}", "parse_mode": "Markdown"}
-        requests.get(url, params=params, timeout=10)
+        requests.get(url, params=params, timeout=15)
     except: pass
 
 @st.cache_data(ttl=3500)
@@ -461,7 +461,7 @@ def get_kis_access_token(app_key, app_secret, mock=True):
         "appsecret": app_secret
     }
     try:
-        res = requests.post(url, headers=headers, json=body, timeout=10)
+        res = requests.post(url, headers=headers, json=body, timeout=15)
         if res.status_code == 200:
             return res.json().get("access_token")
     except Exception as e:
@@ -487,23 +487,23 @@ def get_kis_balance(token, mock=None):
         "AFHR_FLG": "N", "OVAL_DLY_TR_FECONT_YN": "N", "PRCS_DLY_VW_FNC_G": "0",
         "CANL_DLY_VW_FNC_G": "0", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""
     }
-    try:
-        res = requests.get(url, headers=headers, params=params, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            if data.get('output2'):
-                # 예수금(dnca_tot_amt) + 주식평가금(tot_evlu_amt)
-                cash = float(data['output2'][0].get('dnca_tot_amt', 0))
-                eval_amt = float(data['output2'][0].get('tot_evlu_amt', 0))
-                holdings = data.get('output1', [])
-                return cash + eval_amt, cash, holdings
-        else:
-            if res.status_code == 500:
-                st.warning("⚠️ KIS 서버 내부 오류(500)가 발생했습니다. 실전/모의 매매 설정이 API Key와 일치하는지 확인해 주세요.")
+    for attempt in range(2):
+        try:
+            res = requests.get(url, headers=headers, params=params, timeout=15)
+            if res.status_code == 200:
+                data = res.json()
+                if data.get('output2'):
+                    cash = float(data['output2'][0].get('dnca_tot_amt', 0))
+                    eval_amt = float(data['output2'][0].get('tot_evlu_amt', 0))
+                    holdings = data.get('output1', [])
+                    return cash + eval_amt, cash, holdings
+            elif res.status_code == 500:
+                if attempt == 1: st.warning("⚠️ KIS 서버 내부 오류(500). 설정을 확인해 주세요.")
             else:
-                st.error(f"❌ 국내 잔고 조회 실패: {res.status_code}")
-    except Exception as e:
-        st.error(f"⚠️ 국내 통신 오류: {str(e)}")
+                if attempt == 1: st.error(f"❌ 국내 잔고 조회 실패: {res.status_code}")
+        except Exception as e:
+            if attempt == 1: st.error(f"⚠️ 국내 통신 오류 (재시도 실패): {str(e)}")
+        time.sleep(1)
     return 0, 0, []
 
 def get_kis_overseas_balance(token, mock=None):
@@ -527,23 +527,23 @@ def get_kis_overseas_balance(token, mock=None):
         "CTX_AREA_FK200": "", 
         "CTX_AREA_NK200": ""
     }
-    try:
-        res = requests.get(url, headers=headers, params=params, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            output2 = data.get('output2', {})
-            # TTTS3012R 응답 필드: 원화환산평가금액(tot_evlu_pamt), 외화평가금액합계(frcr_evlu_amt2), 외화예수금(frcr_dnca_amt)
-            total_krw = float(output2.get('tot_evlu_pamt', 0))
-            total_usd = float(output2.get('frcr_evlu_amt2', 0))
-            cash_usd = float(output2.get('frcr_dnca_amt', 0))
-            
-            holdings = data.get('output1', [])
-            return {"krw": total_krw, "usd_total": total_usd, "usd_cash": cash_usd}, holdings
-        else:
-            if res.status_code != 500: # 500 에러는 일시적 서버 오류로 간주하고 무시
-                st.error(f"❌ 해외 잔고 조회 실패: {res.status_code}")
-    except Exception as e:
-        st.error(f"⚠️ 해외 통신 오류: {str(e)}")
+    for attempt in range(2):
+        try:
+            res = requests.get(url, headers=headers, params=params, timeout=15)
+            if res.status_code == 200:
+                data = res.json()
+                output2 = data.get('output2', {})
+                total_krw = float(output2.get('tot_evlu_pamt', 0))
+                total_usd = float(output2.get('frcr_evlu_amt2', 0))
+                cash_usd = float(output2.get('frcr_dnca_amt', 0))
+                holdings = data.get('output1', [])
+                return {"krw": total_krw, "usd_total": total_usd, "usd_cash": cash_usd}, holdings
+            else:
+                if attempt == 1 and res.status_code != 500:
+                    st.error(f"❌ 해외 잔고 조회 실패: {res.status_code}")
+        except Exception as e:
+            if attempt == 1: st.error(f"⚠️ 해외 통신 오류 (재시도 실패): {str(e)}")
+        time.sleep(1)
     return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
 
 # --- [ KIS: REAL-TIME RISK MONITORING (PRO EDITION) ] ---
@@ -559,7 +559,7 @@ def get_kis_current_price(ticker, token):
             url = f"{base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
             headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "FHKST01010100"}
             params = {"FID_COND_SCR_DIV_CODE": "11111", "FID_INPUT_ISCD": symbol}
-            resp = requests.get(url, headers=headers, params=params, timeout=10)
+            resp = requests.get(url, headers=headers, params=params, timeout=15)
             return float(resp.json().get('output', {}).get('stck_prpr', 0))
         else:
             url = f"{base_url}/uapi/overseas-stock/v1/quotations/price"
@@ -567,7 +567,7 @@ def get_kis_current_price(ticker, token):
             # 거래소 코드 NAS/NYS/AMS 자동 시도
             for excd in ["NAS", "NYS", "AMS"]:
                 params = {"AUTH": "", "EXCD": excd, "SYMB": ticker}
-                resp = requests.get(url, headers=headers, params=params, timeout=10)
+                resp = requests.get(url, headers=headers, params=params, timeout=15)
                 price = float(resp.json().get('output', {}).get('last', 0))
                 if price > 0: return price
         return 0
@@ -762,7 +762,7 @@ def get_kis_ohlcv(ticker, token):
             "FID_INPUT_DATE_2": datetime.now().strftime("%Y%m%d"),
             "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "0"
         }
-        resp = requests.get(url, headers=headers, params=params, timeout=10)
+        resp = requests.get(url, headers=headers, params=params, timeout=15)
         if resp.status_code != 200: return pd.DataFrame()
         
         res_json = resp.json()
@@ -798,7 +798,7 @@ def get_kis_overseas_ohlcv(ticker, token):
         }
         for excd in ["NAS", "NYS", "AMS"]:
             params = {"AUTH": "", "EXCD": excd, "SYMB": ticker, "GUBN": "0", "BYMD": "", "MODP": "1"}
-            resp = requests.get(url, headers=headers, params=params, timeout=10)
+            resp = requests.get(url, headers=headers, params=params, timeout=15)
             if resp.status_code == 200:
                 output = resp.json().get('output2', [])
                 if output:
@@ -949,7 +949,7 @@ def sync_users_from_sheet():
     """비동기 사용자 데이터 동기화"""
     if not USERS_SHEET_URL: return
     try:
-        resp = safe_get(USERS_SHEET_URL, timeout=10)
+        resp = safe_get(USERS_SHEET_URL, timeout=15)
         if resp:
             df_u = pd.read_csv(io.StringIO(resp.text))
             users = safe_load_json(USER_DB_FILE, {})
@@ -1031,7 +1031,7 @@ def fetch_gs_chat():
 @st.cache_data(ttl=300)
 def fetch_gs_visitors():
     try:
-        response = requests.get(VISITOR_SHEET_URL, timeout=10)
+        response = requests.get(VISITOR_SHEET_URL, timeout=15)
         if response.status_code == 200:
             import io
             return pd.read_csv(io.StringIO(response.text))
@@ -1334,12 +1334,19 @@ with st.sidebar:
         try:
             current_mock = not is_live
             token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, current_mock)
-            r_total, r_cash, _ = get_kis_balance(token, mock=current_mock)
-            over_data, _ = get_kis_overseas_balance(token, mock=current_mock)
             
-            o_total_krw = over_data.get("krw", 0)
-            o_total_usd = over_data.get("usd_total", 0)
-            o_cash_usd = over_data.get("usd_cash", 0)
+            # 독립적 호출로 에러 격리
+            r_total, r_cash = 0, 0
+            try: r_total, r_cash, _ = get_kis_balance(token, mock=current_mock)
+            except: pass
+            
+            o_total_krw, o_total_usd, o_cash_usd = 0, 0, 0
+            try:
+                over_data, _ = get_kis_overseas_balance(token, mock=current_mock)
+                o_total_krw = over_data.get("krw", 0)
+                o_total_usd = over_data.get("usd_total", 0)
+                o_cash_usd = over_data.get("usd_cash", 0)
+            except: pass
             
             full_b = r_total + o_total_krw
             
@@ -1355,7 +1362,7 @@ with st.sidebar:
                 </div>
             """, unsafe_allow_html=True)
         except:
-            st.sidebar.caption("계좌 정보를 불러오는 중...")
+            st.sidebar.caption("인증 세션 확인 중...")
     st.sidebar.divider()
     
     for zone, missions in ZONE_CONFIG.items():
