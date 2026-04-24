@@ -409,11 +409,15 @@ def get_kis_balance(token):
         if res.status_code == 200:
             data = res.json()
             if data.get('output2'):
-                total_eval = float(data['output2'][0].get('tot_evlu_amt', 0))
+                # 예수금(dnca_tot_amt) + 주식평가금(tot_evlu_amt)
                 cash = float(data['output2'][0].get('dnca_tot_amt', 0))
+                eval_amt = float(data['output2'][0].get('tot_evlu_amt', 0))
                 holdings = data.get('output1', [])
-                return total_eval, cash, holdings
-    except: pass
+                return cash + eval_amt, cash, holdings
+        else:
+            st.error(f"❌ 국내 잔고 조회 실패: {res.status_code}")
+    except Exception as e:
+        st.error(f"⚠️ 국내 통신 오류: {str(e)}")
     return 0, 0, []
 
 def get_kis_overseas_balance(token):
@@ -436,10 +440,14 @@ def get_kis_overseas_balance(token):
         res = requests.get(url, headers=headers, params=params, timeout=5)
         if res.status_code == 200:
             data = res.json()
+            # 해외 주식 평가 금액 (원화 환산 기준)
             total_eval = float(data.get('output2', {}).get('tot_evlu_pamt', 0))
             holdings = data.get('output1', [])
             return total_eval, holdings
-    except: pass
+        else:
+            st.error(f"❌ 해외 잔고 조회 실패: {res.status_code}")
+    except Exception as e:
+        st.error(f"⚠️ 해외 통신 오류: {str(e)}")
     return 0, []
 
 # --- [ KIS: REAL-TIME RISK MONITORING (PRO EDITION) ] ---
@@ -2569,20 +2577,6 @@ elif page.startswith("5-e."):
                                         if qty > 0:
                                             st.toast(f"🚀 {name} 피벗 돌파! 자본 25% 투입...", icon="⚡")
                                             if execute_kis_market_order(t, qty, is_buy=True):
-                                                current_holdings_count += 1
-                                                if st.session_state.combat_logs:
-                                                    st.session_state.combat_logs[-1]["msg"] += f" (비중 25% 집중 투입)"
-                            
-                            elif res["status"] == "PASS":
-                                if res["stage"] == "RS_TARGET":
-                                    st.session_state.rs_target_list.append(res)
-                                    report_log.insert(0, f"🎯 **[ TOP 10 / TARGET ] {name} 확보**")
-                                else:
-                                    st.session_state.universe_list.append(res)
-                                    report_log.insert(0, f"🛡️ **[ TOP 10 / UNIVERSE ] {name} 통과**")
-                            else:
-                                report_log.insert(0, f"❌ {t} 순위권 탈락: {res.get('reason', '점수 미달')}")
-                            
                             report_placeholder.markdown("\n".join(report_log[:20]))
                         
                         status.update(label="[ SUCCESS ] 최정예 10개 종목 압축 및 전략 집행 완료!", state="complete")
@@ -3724,24 +3718,21 @@ elif page.startswith("7-c."):
             
             with grid_col1:
                 st.markdown("<div style='background:rgba(255,75,75,0.1); padding:10px; border-radius:10px; border-top:3px solid #FF4B4B;'><h4 style='margin:0; color:#FF4B4B;'>⚡ EP (폭발) TOP 5</h4></div>", unsafe_allow_html=True)
-                # 엄격한 EP 필터링 (is_ep 플래그 전용)
-                ep_candidates = sorted([r for r in st.session_state.get('scanned_pool', []) if r.get('is_ep')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+                ep_candidates = st.session_state.get('ep_results', [])[:5]
                 for idx, res in enumerate(ep_candidates, 1):
                     st.markdown(f"**{idx}.** 🚀 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FF4B4B; float:right;'>{res.get('day_pct', 0):+.2f}%</span>", unsafe_allow_html=True)
                 if not ep_candidates: st.caption("전술적 폭발 대기 중...")
             
             with grid_col2:
                 st.markdown("<div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #FFD700;'><h4 style='margin:0; color:#FFD700;'>⏳ DR (지연반응) TOP 5</h4></div>", unsafe_allow_html=True)
-                # 엄격한 DR 필터링 (is_dr 플래그 전용)
-                dr_candidates = sorted([r for r in st.session_state.get('scanned_pool', []) if r.get('is_dr')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+                dr_candidates = st.session_state.get('dr_results', [])[:5]
                 for idx, res in enumerate(dr_candidates, 1):
                     st.markdown(f"**{idx}.** ⏳ **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FFD700; float:right;'>RS: {res.get('rs', 0)}</span>", unsafe_allow_html=True)
                 if not dr_candidates: st.caption("촉매제 반응 분석 중...")
 
             with grid_col3:
                 st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축) TOP 5</h4></div>", unsafe_allow_html=True)
-                # 엄격한 TIGHT 필터링 (is_tight 플래그 전용)
-                tight_candidates = sorted([r for r in st.session_state.get('scanned_pool', []) if r.get('is_tight')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+                tight_candidates = st.session_state.get('tight_results', [])[:5]
                 for idx, res in enumerate(tight_candidates, 1):
                     st.markdown(f"**{idx}.** 🎯 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#00FF00; float:right;'>T: {res.get('tight', 0):.2f}%</span>", unsafe_allow_html=True)
                 if not tight_candidates: st.caption("에너지 응축 패턴 정밀 스캔...")
@@ -3934,9 +3925,13 @@ elif page.startswith("7-c."):
             st.session_state.tight_results = sorted([r for r in tight_pool if r.get('is_tight')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
             st.session_state.scanned_pool = ep_pool + dr_pool + tight_pool
 
-            # 2. 포트폴리오 리밸런싱 및 매수 집행
-            if st.session_state.get("live_toggle_v6_pro") and not is_truce:
+            # 2. 개별 종목 매수 집행 (사령관 지시: 시장 상황과 무관하게 패턴 포착 시 즉시 매수)
+            if st.session_state.get("live_toggle_v6_pro"):
                 all_candidates = sorted(st.session_state.ep_results + st.session_state.dr_results + st.session_state.tight_results, key=lambda x: x.get('quality', 0), reverse=True)
+                
+                # 시장 상황 브리핑만 수행 (매수 차단은 하지 않음)
+                if is_truce:
+                    st.sidebar.warning(f"⚠️ [CAUTION] 시장 건강도 낮음({breadth:.1f}%). 개별 종목 중심 공격적 운용 중.")
                 
                 for cand in all_candidates[:3]:
                     ticker = cand['ticker']
@@ -3948,10 +3943,10 @@ elif page.startswith("7-c."):
                     if any((h.get('pdno') or h.get('ovrs_pdno')) == ticker for h in holdings): continue
                     
                     if len(holdings) >= 4:
-                        # 리밸런싱: 가장 수익률 낮은 종목과 교체 (Bonde Elite Rule)
+                        # 리밸런싱: 가장 수익률 낮은 종목과 교체
                         worst_h = min(holdings, key=lambda x: float(x.get('evlu_erng_rt', 0)))
                         w_ticker = worst_h.get('pdno') or worst_h.get('ovrs_pdno')
-                        if float(worst_h.get('evlu_erng_rt', 0)) < 5.0: # 수익률 5% 미만인 종목만 교체 대상으로 고려
+                        if float(worst_h.get('evlu_erng_rt', 0)) < 5.0:
                             execute_kis_market_order(w_ticker, int(worst_h['hldg_qty']), is_buy=False)
                             send_telegram_msg(f"♻️ [REBALANCE] {w_ticker} 방출 -> {cand['name']} 영입!")
                         else: continue
