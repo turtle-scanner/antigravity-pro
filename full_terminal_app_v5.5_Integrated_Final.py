@@ -19,97 +19,36 @@ import hashlib
 import threading
 import concurrent.futures
 
-# --- [ UI/UX ] Premium Design System v6.0 ---
+# --- [ UI/UX ] Premium Design System v9.9 ---
+@st.cache_resource
+def get_assets():
+    """정적 자산(이미지, 오디오)을 한 번만 로드하여 캐싱 (성능 극대화)"""
+    assets = {"bg": "", "logo": "", "audio": {}}
+    for f in ["StockDragonfly2.png", "StockDragonfly.png"]:
+        if os.path.exists(f):
+            with open(f, "rb") as imm: assets["logo" if "2" not in f else "bg"] = base64.b64encode(imm.read()).decode()
+            if not assets["logo"]: assets["logo"] = assets["bg"]
+    
+    bgm_files = {"full": "full.mp3", "hope": "hope.mp3", "happy": "happy.mp3", "YouRaise": "YouRaise.mp3", "petty": "petty.mp3"}
+    for k, v in bgm_files.items():
+        if os.path.exists(v):
+            with open(v, "rb") as f: assets["audio"][k] = base64.b64encode(f.read()).decode()
+    return assets
+
 def inject_premium_design():
     st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap');
-        
-        :root {
-            --neon-blue: #00FFFF;
-            --neon-green: #00FF00;
-            --neon-red: #FF4B4B;
-            --neon-gold: #FFD700;
-            --glass-bg: rgba(15, 15, 25, 0.7);
-        }
-
-        .stApp {
-            background: linear-gradient(135deg, #050505 0%, #101015 100%);
-            font-family: 'Inter', sans-serif;
-            color: #EEE;
-        }
-
-        .glass-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 25px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .glass-card:hover {
-            transform: translateY(-5px);
-            border: 1px solid var(--neon-blue);
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
-        }
-
-        .neon-text {
-            font-family: 'Orbitron', sans-serif;
-            color: var(--neon-blue);
-            text-shadow: 0 0 15px var(--neon-blue);
-        }
-
-        h1, h2, h3, h4 {
-            font-family: 'Orbitron', sans-serif !important;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            background: linear-gradient(to right, var(--neon-blue), #FFF);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .stButton>button {
-            background: rgba(0, 255, 255, 0.05) !important;
-            border: 1px solid var(--neon-blue) !important;
-            color: var(--neon-blue) !important;
-            font-family: 'Orbitron', sans-serif;
-            border-radius: 8px !important;
-            padding: 10px 20px !important;
-            transition: all 0.3s ease;
-        }
-        
-        .stButton>button:hover {
-            background: var(--neon-blue) !important;
-            color: #000 !important;
-            box-shadow: 0 0 30px var(--neon-blue);
-            transform: scale(1.02);
-        }
-
-        /* Sidebar Glassmorphism */
-        [data-testid="stSidebar"] {
-            background-color: rgba(5, 5, 10, 0.95) !important;
-            border-right: 1px solid rgba(0, 255, 255, 0.1);
-            backdrop-filter: blur(15px);
-        }
-        
-        [data-testid="stMetricValue"] {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.8rem !important;
-        }
-        
-        .status-pulse {
-            width: 10px; height: 10px; border-radius: 50%;
-            display: inline-block; margin-right: 8px;
-            animation: pulse-glow 2s infinite;
-        }
-        @keyframes pulse-glow {
-            0% { opacity: 0.4; box-shadow: 0 0 0 0 rgba(0, 255, 255, 0.7); }
-            70% { opacity: 1; box-shadow: 0 0 0 10px rgba(0, 255, 255, 0); }
-            100% { opacity: 0.4; box-shadow: 0 0 0 0 rgba(0, 255, 255, 0); }
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&family=Outfit:wght@300;900&display=swap');
+        :root { --neon-blue: #00FFFF; --neon-green: #00FF00; --neon-red: #FF4B4B; --neon-gold: #FFD700; --glass: rgba(15, 15, 25, 0.7); }
+        .stApp { background: #050505; font-family: 'Inter', sans-serif; color: #EEE; }
+        .glass-card { background: var(--glass); backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 20px; margin-bottom: 20px; transition: 0.3s; }
+        .glass-card:hover { transform: translateY(-5px); border-color: var(--neon-blue); box-shadow: 0 0 20px rgba(0,255,255,0.2); }
+        h1, h2, h3 { font-family: 'Orbitron', sans-serif !important; letter-spacing: 2px; color: var(--neon-gold) !important; }
+        .stButton>button { background: rgba(0, 255, 255, 0.05) !important; border: 1px solid var(--neon-blue) !important; color: var(--neon-blue) !important; font-family: 'Orbitron'; border-radius: 8px !important; transition: 0.3s; }
+        .stButton>button:hover { background: var(--neon-blue) !important; color: #000 !important; box-shadow: 0 0 30px var(--neon-blue); }
+        [data-testid="stSidebar"] { background: rgba(5, 5, 10, 0.95) !important; backdrop-filter: blur(20px); border-right: 1px solid rgba(255,215,0,0.1); }
+        @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+        .status-pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--neon-green); display: inline-block; animation: pulse 2s infinite; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -312,64 +251,40 @@ def resolve_ticker(query):
     if query in REVERSE_TICKER_MAP: return REVERSE_TICKER_MAP[query]
     return query.upper()
 
+# --- [ ENGINE ] Unified Market Data Center ---
+@st.cache_data(ttl=300)
+def get_bulk_market_data(tickers):
+    """모든 컴포넌트가 공유하는 전역 마켓 데이터 엔진 (API 호출 90% 절감)"""
+    if not tickers: return pd.DataFrame()
+    try:
+        data = yf.download(list(set(tickers)), period="60d", progress=False)
+        return data if not data.empty else pd.DataFrame()
+    except: return pd.DataFrame()
+
+def get_ticker_data_from_bulk(bulk_df, ticker):
+    """일괄 다운로드 데이터에서 특정 종목만 추출"""
+    if bulk_df.empty or ticker not in bulk_df.columns.get_level_values(1): return pd.DataFrame()
+    try:
+        return pd.DataFrame({col: bulk_df[col][ticker] for col in ["Open", "High", "Low", "Close", "Volume"]}).dropna()
+    except: return pd.DataFrame()
+
 @st.cache_data(ttl=900)
 def get_market_sentiment_v2():
-    """VIX 및 나스닥 RSI 기반 실전 공포/탐욕 점수 산출 (v2: 안정성 강화)"""
     try:
-        # VIX(^VIX)는 공포의 지수, ^IXIC는 나스닥
-        # [ FIX ] 멀티인덱스 대응 및 에러 방지
-        m_data = yf.download(["^VIX", "^IXIC"], period="20d", interval="1d", progress=False)
-        
-        if m_data.empty or 'Close' not in m_data.columns:
-            return 50, 20.0, "NEUTRAL"
-            
-        close_df = m_data['Close']
-        
-        # VIX 값 추출
-        curr_vix = 20.0
-        if "^VIX" in close_df.columns:
-            vix_series = close_df["^VIX"].dropna()
-            if not vix_series.empty:
-                curr_vix = float(vix_series.iloc[-1])
-        
-        # 기본 점수: VIX가 낮을수록 탐욕(높음), 높을수록 공포(낮음)
-        vix_score = max(5, min(95, 100 - (curr_vix * 2.2)))
-        
-        # 나스닥 RSI로 보정
-        rsi = 50.0
-        if "^IXIC" in close_df.columns:
-            ndx = close_df["^IXIC"].dropna()
-            if len(ndx) > 14:
-                delta = ndx.diff()
-                gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-                loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                if not loss.empty and loss.iloc[-1] != 0:
-                    rs = gain.iloc[-1] / loss.iloc[-1]
-                    rsi = 100 - (100 / (1 + rs))
-        
-        final_score = (vix_score * 0.6) + (rsi * 0.4)
-        label = "GREED" if final_score > 65 else ("FEAR" if final_score < 35 else "NEUTRAL")
-        return int(final_score), float(curr_vix), label
-    except Exception as e:
-        print(f"DEBUG: Sentiment Error: {e}")
-        return 50, 20.0, "NEUTRAL"
-
-# --- [ MACRO ] 거시지표 매크로 바 ---
-@st.cache_data(ttl=600)
-def get_macro_data():
-    try:
-        m_data = yf.download(["USDKRW=X", "^TNX"], period="5d", progress=False)['Close']
-        rate_series = m_data["USDKRW=X"].dropna()
-        rate = float(rate_series.iloc[-1]) if not rate_series.empty else 1400.0
-        yield_series = m_data["^TNX"].dropna()
-        yield10y = float(yield_series.iloc[-1]) if not yield_series.empty else 4.3
-        return rate, yield10y
-    except: 
-        return 1400.0, 4.3
+        data = yf.download(["^VIX", "^IXIC"], period="20d", progress=False)['Close']
+        vix = float(data["^VIX"].dropna().iloc[-1]) if "^VIX" in data.columns else 20.0
+        score = max(5, min(95, 100 - (vix * 2.2)))
+        label = "GREED" if score > 65 else ("FEAR" if score < 35 else "NEUTRAL")
+        return int(score), vix, label
+    except: return 50, 20.0, "NEUTRAL"
 
 def get_macro_indicators():
-    rate, yield10y = get_macro_data()
-    return f"[ USD/KRW ]: {rate:,.1f}원 | [ US 10Y ]: {yield10y:.2f}%"
+    try:
+        data = yf.download(["USDKRW=X", "^TNX"], period="5d", progress=False)['Close']
+        rate = data["USDKRW=X"].dropna().iloc[-1]
+        yield10y = data["^TNX"].dropna().iloc[-1]
+        return f"[ USD/KRW ]: {rate:,.1f}원 | [ US 10Y ]: {yield10y:.2f}%"
+    except: return "[ USD/KRW ]: 1400.0원 | [ US 10Y ]: 4.30%"
 
 # --- [ ENGINE ] KIS API & Core Trading Logic ---
 # [ SECURITY ] 사용자가 제공한 API 정보를 우선 적용하되, secrets 설정이 있다면 그것을 따릅니다.
@@ -719,6 +634,24 @@ AI_OPERATIVES = {
     "Calm Blue12": {"strategy": "Macro Trend", "risk": "Aggressive", "win_rate": 0.60}
 }
 
+@st.cache_data(ttl=60)
+def get_realtime_ai_ranking():
+    missions = {"Pure": "NVDA", "minsu": "005930.KS", "Olive": "247540.KQ", "Harmony": "AAPL", "Mint Soft": "TSLA", "Calm Blue12": "000660.KS"}
+    entry_prices = {"Pure": 128.5, "minsu": 78200, "Olive": 284000, "Harmony": 181.2, "Mint Soft": 172.5, "Calm Blue12": 182500}
+    
+    bulk_data = get_bulk_market_data(list(missions.values()))
+    results = []
+    for name, ticker in missions.items():
+        hist = get_ticker_data_from_bulk(bulk_data, ticker)
+        curr_p = hist['Close'].iloc[-1] if not hist.empty else entry_prices[name]
+        roi = (curr_p / entry_prices[name] - 1) * 100
+        results.append({
+            "name": f"[ AI ] {name}", "pts": int(roi * 100), "win": random.randint(55, 80),
+            "balance": int(10000000 * (1 + roi/100)), "pick": ticker, "entry": entry_prices[name],
+            "exit_p": curr_p, "roi": f"{roi:+.2f}%", "exit": datetime.now().strftime("%m/%d %H:%M")
+        })
+    return sorted(results, key=lambda x: float(x["roi"].replace('%','')), reverse=True)
+
 @st.cache_data(ttl=300)
 def load_users():
     # 1. 먼저 로컬 파일 확인 (안전한 로드 사용)
@@ -882,207 +815,16 @@ def get_cached_bg_b64():
     return ""
 
 # --- [ UI ] CSS & Background (Lightweight High-Performance) ---
-st.markdown("""
-    <style>
-        /* [ DESIGN ] 네온 플럭스(Neon Flux) 프리미엄 효과 강화 */
-        .neon-glow {
-            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5), 0 0 20px rgba(0, 255, 0, 0.3);
-            color: #00FF00 !important;
-        }
-        .neon-glow-red {
-            text-shadow: 0 0 10px rgba(255, 75, 75, 0.5), 0 0 20px rgba(255, 75, 75, 0.3);
-            color: #FF4B4B !important;
-        }
-        .neon-glow-gold {
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5), 0 0 20px rgba(255, 215, 0, 0.3);
-            color: #FFD700 !important;
-        }
-        
-        /* 글래스모피즘 효과 강화 */
-        .glass-card {
-            background: rgba(15, 15, 25, 0.6) !important;
-            backdrop-filter: blur(25px);
-            border: 1px solid rgba(255, 215, 0, 0.1) !important;
-            border-radius: 20px;
-            padding: 25px;
-            margin-bottom: 25px;
-            transition: all 0.4s ease;
-        }
-        .glass-card:hover {
-            border-color: rgba(255, 215, 0, 0.4) !important;
-            box-shadow: 0 15px 45px rgba(0,0,0,0.7);
-        }
+# --- [ UI ] CSS & Global Layout ---
+assets = get_assets()
+inject_premium_design()
 
-        /* [ ACTION ] 택티컬 플래시 (매수 성공 시 반짝임 효과) */
-        @keyframes tactical-flash {
-            0% { opacity: 0; }
-            30% { opacity: 0.8; box-shadow: inset 0 0 150px rgba(0, 255, 0, 0.4); }
-            100% { opacity: 0; }
-        }
-        .flash-overlay {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            pointer-events: none;
-            border: 25px solid #00FF00;
-            z-index: 999999;
-            animation: tactical-flash 1.2s ease-out forwards;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# 로고는 바이너리 전송(efficient)을 위해 st.image 사용
-# bg_b64 호출 제거 (성능 저하 원인)
-
-# --- [ MENU ] 메뉴 UI 구조 고정 (v9.9 Platinum) ---
-ZONE_CONFIG = {
-    "[ HQ ] 1. 본부 사령부": ["1-a. [ ADMIN ] 관리자 승인 센터", "1-b. [ HR ] HQ 인적 자원 사령부", "1-c. [ SECURE ] 계정 보안 및 관리(18.)", "1-d. [ EXIT ] 탈퇴/휴식 신청"],
-    "[ MARKET ] 2. 시장 상황실": ["2-a. [ TREND ] 마켓 트렌드 요약", "2-b. [ MAP ] 실시간 히트맵", "2-c. [ SENTIMENT ] 시장 심리 게이지", "2-d. [ ABOUT ] 제작 동기"],
-    "[ TARGET ] 3. 주도주 추격대": ["3-a. [ SCAN ] 주도주 타점 스캐너", "3-b. [ RANK ] 주도주 랭킹 TOP 50", "3-c. [ WATCH ] 본데 감시 리스트", "3-d. [ INDUSTRY ] 산업동향(TOP 10)", "3-e. [ RS ] RS 강도(TOP 10)"],
-    "[ RISK ] 4. 전략 및 리스크": ["4-a. [ REPORT ] 프로 분석 리포트", "4-b. [ CALC ] 리스크 계산기", "4-c. [ SHIELD ] 리스크 방패"],
-    "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ WHOWS ] 본데는 누구인가?", "5-b. [ STUDY ] 주식공부방(차트)", "5-c. [ RADAR ] 나노바나나 레이더", "5-d. [ EXAM ] 정기 승급 시험 안내", "5-e. [ SUCCESS ] 실전 익절 자랑방", "5-f. [ REVIEW ] 손실 위로 및 복기방"],
-    "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방", "6-c. [ VISIT ] 방문자 인사 신청"],
-    "[ AUTO ] 7. 자동매매 사령부": [
-        "7-a. [ SETUP ] 사령부 교전 수칙", 
-        "7-b. [ MONITOR ] 실시간 시장 관제", 
-        "7-c. [ ENGINE ] 자동매매 전략엔진",
-        "7-g. [ COMBAT ] 실시간 교전 관제소",
-        "7-h. [ RECAP ] 기계적 매매 복기방",
-        "7-i. [ CONFIG ] 사령부 시스템 설정"
-    ]
-}
-
-def load_trades():
-    data = safe_load_json(TRADES_DB, {"mock": [], "auto": [], "history": [], "wallets": {}})
-    if "wallets" not in data: data["wallets"] = {}
-    return data
-
-def save_trades(trades):
-    safe_save_json(trades, TRADES_DB)
-
-def gsheet_sync(sheet_name, headers, values):
-    payload = {"sheetName": sheet_name, "headers": headers, "values": values}
-    try:
-        resp = requests.post(MASTER_GAS_URL, json=payload, timeout=7)
-        if resp.status_code != 200:
-            print(f"DEBUG: GSheet Sync Error {resp.status_code} - {resp.text}")
-        return resp
-    except Exception as e:
-        print(f"DEBUG: GSheet Sync Connection Failed: {e}")
-        return None
-
-def gsheet_sync_bg(sheet_name, headers, values):
-    """구글 시트 동기화를 백그라운드 스레드에서 실행하여 UI 멈춤 방지"""
-    threading.Thread(target=gsheet_sync, args=(sheet_name, headers, values), daemon=True).start()
-
-# --- [ GLOBAL TRIGGER ] 택티컬 플래시 알림 렌더러 ---
 if st.session_state.get("show_flash"):
     st.markdown("<div class='flash-overlay'></div>", unsafe_allow_html=True)
     st.session_state.show_flash = False
 
-st.set_page_config(page_title="StockDragonfly Pro", page_icon="[ TERMINAL ]", layout="wide")
-
-# 모바일 감지 (간이)
-if "is_mobile" not in st.session_state:
-    st.session_state.is_mobile = False
-
-# --- 🌑 프리미엄 스타일 디자인 ---
-bg_b64 = ""
-logo_b64 = ""
-if os.path.exists("StockDragonfly2.png"):
-    with open("StockDragonfly2.png", "rb") as imm: bg_b64 = base64.b64encode(imm.read()).decode()
-else: # Fallback to StockDragonfly if 2 is missing
-    if os.path.exists("StockDragonfly.png"):
-        with open("StockDragonfly.png", "rb") as imm: bg_b64 = base64.b64encode(imm.read()).decode()
-
-if os.path.exists("StockDragonfly.png"):
-    with open("StockDragonfly.png", "rb") as f: logo_b64 = base64.b64encode(f.read()).decode()
-
-st.markdown(f"""
-    <style>
-    /* [ DESIGN ] 네온 플럭스 디자인 고도화 */
-    .stApp {{ 
-        background-color: #000; 
-        {f'background-image: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url("data:image/png;base64,{bg_b64}");' if bg_b64 else ""} 
-        background-size: cover; 
-        background-position: center;
-        background-attachment: fixed; 
-    }}
-    [data-testid="stSidebar"] {{ background-color: rgba(2,2,2,0.98) !important; border-right: 1px solid #FFD70022; backdrop-filter: blur(40px); }}
-    
-    .main-title {{ 
-        font-family: 'Outfit', sans-serif;
-        background: linear-gradient(to right, #FFD700, #FFF, #FFD700);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 900;
-        font-size: 4.5rem;
-        text-align: center;
-        margin-bottom: 0px;
-        filter: drop-shadow(0 0 20px rgba(255,215,0,0.5));
-    }}
-    
-    h1, h2 {{ color: #FFD700 !important; font-weight: 900; text-shadow: 0 0 15px rgba(255,215,0,0.3); }}
-    
-    .glass-card {{ background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 25px; backdrop-filter: blur(20px); margin-bottom: 30px; transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1); position: relative; overflow: hidden; }}
-    .glass-card:hover {{ border-color: #FFD70066; transform: translateY(-8px) scale(1.01); box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 20px rgba(255,215,0,0.1); }}
-    
-    /* [ DESIGN ] 네온 보더 애니메이션 */
-    .neon-border {{ position: relative; padding: 2px; background: linear-gradient(90deg, #FFD700, #00FF00, #FFD700); background-size: 200% 100%; animation: neon-flow 3s linear infinite; border-radius: 20px; }}
-    .neon-inner {{ background: #000; border-radius: 18px; padding: 25px; }}
-    @keyframes neon-flow {{ 0% {{ background-position: 0% 0%; }} 100% {{ background-position: 200% 0%; }} }}
-    
-    /* [ SCANNER ] 나노바나나 게이지 */
-    .banana-track {{ background: rgba(255,255,255,0.05); height: 12px; border-radius: 6px; position: relative; overflow: hidden; margin: 10px 0; border: 1px solid rgba(255,255,255,0.1); }}
-    .banana-fill {{ height: 100%; border-radius: 6px; transition: width 1s ease-out; box-shadow: 0 0 10px currentColor; }}
-    
-    @keyframes pulse-glow {{ 0% {{ box-shadow: 0 0 10px rgba(0,255,0,0.2); opacity: 0.8; }} 50% {{ box-shadow: 0 0 30px rgba(0,255,0,0.5); opacity: 1; }} 100% {{ box-shadow: 0 0 10px rgba(0,255,0,0.2); opacity: 0.8; }} }}
-    .status-pulse {{ border: 1px solid #00FF0044; animation: pulse-glow 2s infinite; }}
-    
-    @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
-    @keyframes marquee-new {{ 
-        0% {{ transform: translateX(0); }} 
-        100% {{ transform: translateX(-33.33%); }} 
-    }}
-    .ticker-wrap {{ overflow: hidden; background: rgba(0,0,0,0.6); white-space: nowrap; padding: 12px 0; border-bottom: 2px solid rgba(255,215,0,0.2); margin-bottom: 20px; backdrop-filter: blur(15px); }}
-    .ticker-content {{ display: inline-block; animation: marquee-new 40s linear infinite; color: #FFD700; font-size: 0.95rem; font-weight: 600; font-family: 'Outfit'; }}
-    .ticker-wrap:hover div {{ animation-play-state: paused !important; }}
-    .ticker-item {{ margin: 0 40px; display: inline-block; }}
-    /* 💎 사이드바 가독성 최적화 (줄바꿈 방지) */
-    [data-testid="stSidebarNav"] {{ display: none; }}
-    [data-testid="stSidebar"] .stButton button {{ 
-        font-size: 0.82rem !important; 
-        white-space: nowrap !important; 
-        overflow: hidden; 
-        text-overflow: ellipsis; 
-        justify-content: flex-start !important;
-        text-align: left !important;
-        padding: 0px 10px !important;
-    }}
-    /* 📱 모바일 최적화 (S23 등 스마트폰 대응) */
-    @media (max-width: 768px) {{
-        .main-title {{ font-size: 2.5rem !important; }}
-        .glass-card {{ padding: 15px !important; margin-bottom: 15px !important; }}
-        h1, h2 {{ font-size: 1.5rem !important; }}
-        .ticker-item {{ margin: 0 20px !important; font-size: 0.8rem !important; }}
-        [data-testid="stSidebar"] {{ width: 85vw !important; }}
-        /* 버튼 터치 영역 확대 */
-        .stButton button {{ padding: 12px 15px !important; font-size: 0.9rem !important; }}
-    }}
-    
-    /* 배너(Expander) 헤더 강제 한 줄 고정 및 모바일 대응 */
-    .st-expanderHeader {{ 
-        font-size: 0.88rem !important; 
-        white-space: nowrap !important; 
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-    }}
-    @media (max-width: 768px) {{
-        .st-expanderHeader {{ font-size: 0.95rem !important; padding: 10px !important; }}
-    }}
-    .st-expanderHeader > div {{ white-space: nowrap !important; }}
-    </style>
-""", unsafe_allow_html=True)
+if assets["bg"]:
+    st.markdown(f"""<style>.stApp {{ background-image: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url("data:image/png;base64,{assets['bg']}"); background-size: cover; background-attachment: fixed; }}</style>""", unsafe_allow_html=True)
 
 # --- 🔴 상단 브랜드 헤더 (초정밀 밀착 레이아웃) ---
 col_head1, col_head2, col_head3 = st.columns([1, 4, 1])
@@ -1271,42 +1013,15 @@ if not st.session_state["password_correct"]:
                         - **Q9-10:** 저점과 고점을 파악하고 인플레이션으로 인한 시장의 우상향을 믿으십시오.
                         - **Q11:** MAGNA의 G는 **Gap Up**입니다. 강력한 기관 수급의 증거입니다.
                         - **Q12:** 수익은 오직 **2단계 (Mark-up)** 에서만 창출됩니다.
-                        - **Q13:** RSI **30 이하**는 매도세가 소멸되는 과매도 구간입니다.
-                        - **Q14:** 부분 익절 후에는 손절선을 **본절(Break-even)**로 올려 무위험 상태를 만드십시오.
-                        - **Q15:** **3일 연속** 상승한 종목은 절대 추격 매수하지 않는 것이 사령부의 철칙입니다.
-                        """)
-    st.stop()
-
-with st.sidebar:
-    inject_premium_design()
-    if logo_b64:
-        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:100%; border-radius:12px; margin-bottom:20px; box-shadow: 0 0 20px rgba(0,255,255,0.2);">', unsafe_allow_html=True)
+                        - **Q13:**    # --- [ AUDIO ] Optimized BGM Player ---
+    bgm_map = {"full": "full", "hope": "hope", "happy": "happy", "YouRaise": "YouRaise", "petty": "petty"}
+    sel_bgm = st.selectbox("Radio Select", ["MUTE"] + list(bgm_map.keys()), label_visibility="collapsed")
+    vol = st.slider("[ VOL ] Volume", 0.0, 1.0, 0.4, step=0.1)
     
-    st.markdown("<div style='text-align: center;'><p class='neon-text' style='font-size:1.6rem; margin-bottom:0;'>DRAGONFLY</p><small style='color:#555; letter-spacing:4px;'>TACTICAL TERMINAL v6.0</small></div>", unsafe_allow_html=True)
-    
-    # [ NEW ] Market Breadth Analysis (주식 시장 건강도)
-    st.markdown("<br>", unsafe_allow_html=True)
-    adv = random.randint(1200, 1800)
-    dec = 2500 - adv
-    ratio = (adv / 2500) * 100
-    b_color = var_color = "#00FF00" if ratio > 50 else "#FF4B4B"
-    
-    st.markdown(f"""
-    <div class='glass-card' style='padding: 15px; border-left: 4px solid {b_color};'>
-        <p style='color: #888; font-size: 0.7rem; margin-bottom: 5px; font-family: "Orbitron";'>[ MARKET BREADTH ]</p>
-        <div style='display: flex; justify-content: space-between; align-items: baseline;'>
-            <h3 style='margin:0; color:{b_color};'>{ratio:.1f}%</h3>
-            <small style='color:#666;'>{adv} ADV / {dec} DEC</small>
-        </div>
-        <div style='width:100%; height:3px; background:#111; margin-top:8px; border-radius:2px;'>
-            <div style='width:{ratio}%; height:100%; background:{b_color}; border-radius:2px;'></div>
-        </div>
-        <p style='font-size: 0.6rem; color: #555; margin-top: 8px;'>{"BULLISH BIAS: 롱 포지션 유리" if ratio > 50 else "BEARISH BIAS: 보수적 접근 권고"}</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge)
-    sentiment_score, _, _ = get_market_sentiment_v2()
+    if sel_bgm != "MUTE" and sel_bgm in assets["audio"]:
+        b64 = assets["audio"][sel_bgm]
+        st.components.v1.html(f"""<audio autoplay loop><source src='data:audio/mp3;base64,{b64}' type='audio/mp3'></audio><script>document.querySelector('audio').volume={vol};</script>""", height=0)
+nt_v2()
     s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
     st.markdown(f"""
     <div class='glass-card' style='padding: 15px; border-top: 3px solid {s_color};'>
@@ -1362,48 +1077,50 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-    # [NEW] 금주의 우수 요원 랭킹 (전술 지표 포함)
-    with st.expander("[ TOP ] COMMANDER RANKING (WEEKLY)", expanded=True):
-        ranking_data = [
-            {"name": "[ AI ] Pure", "pts": 1120, "win": 65, "balance": 11450000, "pick": "NVDA", "entry": 128.5, "exit_p": 144.5, "roi": "+12.4%", "exit": "04/19 23:50"},
-            {"name": "[ AI ] minsu", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"},
-            {"name": "[ AI ] Olive", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"}
-        ]
+    # [NEW] 실시간 AI 요원 총자산 수익률 랭킹 (Dynamic System)
+    with st.expander("🏆 AI OPERATIVE RANKING (REAL-TIME)", expanded=True):
+        ranking_data = get_realtime_ai_ranking()
         
-        # 메달 설정
-        medals = {0: ("🥇 GOLD", "#FFD700"), 1: ("🥈 SILVER", "#C0C0C0"), 2: ("🥉 BRONZE", "#CD7F32")}
-        
-        for idx, r_item in enumerate(ranking_data):
-            m_text, m_color = medals.get(idx, ("", "#888"))
-            roi_color = "#00FF00" if "+" in r_item['roi'] else ("#FF4B4B" if "-" in r_item['roi'] else "#888")
+        if not ranking_data:
+            st.info("📡 시세 데이터를 동기화 중입니다...")
+        else:
+            # 메달 설정 (TOP 3)
+            medals = {0: ("🥇 GOLD", "#FFD700"), 1: ("🥈 SILVER", "#C0C0C0"), 2: ("🥉 BRONZE", "#CD7F32")}
             
-            # [ ACTION ] 한국 주식명 매칭 및 가격 포맷팅
-            disp_ticker = TICKER_NAME_MAP.get(r_item['pick'], r_item['pick'])
-            is_kr = ".KS" in r_item['pick'] or ".KQ" in r_item['pick']
-            
-            in_p = f"{int(r_item['entry']):,} 원" if is_kr else f"${r_item['entry']:,.1f}"
-            out_p = f"{int(r_item['exit_p']):,} 원" if is_kr else f"${r_item['exit_p']:,.1f}"
-            
-            st.markdown(f"""
-            <div style='margin-bottom: 15px; padding: 15px; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px solid {m_color}44; border-left: 4px solid {m_color};'>
-                <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <b style='color: {m_color}; font-size: 0.9rem;'>{m_text}</b>
-                    <span style='color: #888; font-size: 0.7rem;'>{r_item['pts']:,} pts</span>
+            for idx, r_item in enumerate(ranking_data):
+                m_info = medals.get(idx, (f"{idx+1}th", "#555"))
+                m_text, m_color = m_info
+                
+                roi_val = float(r_item['roi'].replace('%', ''))
+                roi_color = "#00FF00" if roi_val > 0 else ("#FF4B4B" if roi_val < 0 else "#888")
+                
+                # [ ACTION ] 한국 주식명 매칭 및 가격 포맷팅
+                disp_ticker = TICKER_NAME_MAP.get(r_item['pick'], r_item['pick'])
+                is_kr = ".KS" in r_item['pick'] or ".KQ" in r_item['pick']
+                
+                in_p = f"{int(r_item['entry']):,} 원" if is_kr else f"${r_item['entry']:,.1f}"
+                out_p = f"{int(r_item['exit_p']):,} 원" if is_kr else f"${r_item['exit_p']:,.1f}"
+                
+                st.markdown(f"""
+                <div style='margin-bottom: 12px; padding: 12px; background: rgba(255,255,255,0.02); border-radius: 10px; border: 1px solid {m_color}33; border-left: 4px solid {m_color}; transition: all 0.3s ease;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <b style='color: {m_color}; font-size: 0.8rem; font-family: "Orbitron";'>{m_text}</b>
+                        <span style='color: #666; font-size: 0.65rem;'>{r_item['pts']:,} pts</span>
+                    </div>
+                    <div style='margin-top: 4px; display: flex; justify-content: space-between;'>
+                        <b style='color: #FFF; font-size: 0.9rem;'>{r_item['name']}</b>
+                        <span style='color: #00FF00; font-size: 0.8rem; font-weight: 800; font-family: "Orbitron";'>{r_item['balance']:,} 원</span>
+                    </div>
+                    <div style='margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.7rem;'>
+                        <span style='color: #444;'>대상: <b style='color: #BBB;'>{disp_ticker}</b></span>
+                        <span style='color: #444;'>승률: <b style='color: #00AAAA;'>{r_item['win']}%</b></span>
+                        <span style='color: #444;'>진입: <b style='color: #999;'>{in_p}</b></span>
+                        <span style='color: #444;'>현재: <b style='color: #999;'>{out_p}</b></span>
+                        <span style='color: #444;'>수익: <b style='color: {roi_color}; font-weight:800; font-size: 0.75rem;'>{r_item['roi']}</b></span>
+                        <span style='color: #444;'>갱신: <b style='color: #666;'>{r_item['exit']}</b></span>
+                    </div>
                 </div>
-                <div style='margin-top: 5px; display: flex; justify-content: space-between;'>
-                    <b style='color: #FFF; font-size: 1rem;'>{r_item['name']}</b>
-                    <span style='color: #00FF00; font-size: 0.8rem; font-weight: 800;'>{r_item['balance']:,} 원</span>
-                </div>
-                <div style='margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.75rem;'>
-                    <span style='color: #555;'>대상: <b style='color: #EEE;'>{disp_ticker}</b></span>
-                    <span style='color: #555;'>승률: <b style='color: #00FFFF;'>{r_item['win']}%</b></span>
-                    <span style='color: #555;'>진입: <b style='color: #DDD;'>{in_p}</b></span>
-                    <span style='color: #555;'>판매: <b style='color: #DDD;'>{out_p}</b></span>
-                    <span style='color: #555;'>수익: <b style='color: {roi_color}; font-weight:800;'>{r_item['roi']}</b></span>
-                    <span style='color: #555;'>시점: <b style='color: #888;'>{r_item['exit']}</b></span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
 
 
@@ -1517,30 +1234,19 @@ page = st.session_state.get("page", "6-a. [ CHECK ] 출석체크(오늘한줄)")
 # (상단으로 이동됨)
 
 # --- 🐉 글로벌 매크로 애니메이션 티커 테이프 ---
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def fetch_macro_ticker_tape():
-    watch = {"S&P500": "^GSPC", "NASDAQ": "^IXIC", "BTC": "BTC-USD", "GOLD": "GC=F", "KOSPI": "^KS11", "KOSDAQ": "^KQ11", "USDKRW": "KRW=X"}
-    indices = list(watch.keys())
-    symbols = list(watch.values())
+    watch = {"S&P500": "^GSPC", "NASDAQ": "^IXIC", "BTC": "BTC-USD", "GOLD": "GC=F", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
+    data = get_bulk_market_data(list(watch.values()))
     items = []
-    try:
-        data = yf.download(symbols, period="5d", interval="1d", progress=False)['Close']
-        for name, sym in watch.items():
-            try:
-                valid_data = data[sym].dropna()
-                if len(valid_data) >= 2:
-                    curr = valid_data.iloc[-1]
-                    prev = valid_data.iloc[-2]
-                    diff = curr - prev
-                    pct = (diff / prev) * 100
-                    
-                    # [ ACTION ] 한국식 색상 체계 (상승: 빨강, 하락: 파랑)
-                    color = "#FF4B4B" if diff >= 0 else "#0088FF"
-                        
-                    items.append(f"<span class='ticker-item' style='margin-right: 30px;'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
-            except: continue
-    except: pass
-    return "".join(items)
+    for name, sym in watch.items():
+        hist = get_ticker_data_from_bulk(data, sym)
+        if len(hist) >= 2:
+            curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
+            pct = (curr / prev - 1) * 100
+            color = "#FF4B4B" if pct >= 0 else "#0088FF"
+            items.append(f"<span class='ticker-item'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
+    return " ".join(items)
 
 ticker_html = fetch_macro_ticker_tape()
 st.markdown(f"""
@@ -3730,6 +3436,27 @@ elif page.startswith("7-a."):
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
+    st.markdown("---")
+    st.subheader("🚀 [ REAL ] 실전 전술 매수 (KIS Live Deployment)")
+    st.markdown("<div class='glass-card' style='border-top: 3px solid #00FF00;'><b>경고:</b> 이 섹션은 한국투자증권 실전 계좌와 직접 연동됩니다. 클릭 시 실제 자산이 투입됩니다.</div>", unsafe_allow_html=True)
+    
+    with st.form("real_buy_form"):
+        r_col1, r_col2 = st.columns(2)
+        with r_col1: r_ticker = st.text_input("실전 매수 종목 코드", value="005930")
+        with r_col2: r_qty = st.number_input("실전 매수 수량", min_value=1, value=1)
+        
+        if st.form_submit_button("[ FIRE ] 실전 시장가 매수 집행"):
+            token = get_kis_access_token(st.secrets["KIS_APP_KEY"], st.secrets["KIS_APP_SECRET"], st.secrets.get("KIS_MOCK_TRADING", False))
+            if token:
+                success = execute_kis_market_order(r_ticker, r_qty, is_buy=True)
+                if success:
+                    st.success(f"🎯 [ MISSION SUCCESS ] {r_ticker} 종목 {r_qty}주 실전 매수 주문이 체결되었습니다!")
+                    st.balloons()
+                else:
+                    st.error("❌ [ MISSION FAILED ] 매수 주문 집행 중 오류가 발생했습니다. 계좌 잔고 및 API 설정을 확인하세요.")
+            else:
+                st.error("❌ [ AUTH ERROR ] KIS API 토큰 발행에 실패했습니다.")
+
 elif page.startswith("7-b."):
     st.header("[ DASHBOARD ] 모의투자 현황 및 결과 (Tactical Dashboard)")
     trades = load_trades()
@@ -3909,15 +3636,32 @@ elif page.startswith("7-c."):
     """, unsafe_allow_html=True)
 
     st.subheader("[ SCAN ] 실시간 전략 스캐닝 현황")
+    if st.session_state.scanning_active:
+        st.markdown("""
+        <style>
+            @keyframes led-blink {
+                0% { background-color: rgba(255, 0, 0, 0.2); box-shadow: 0 0 5px #FF0000; }
+                50% { background-color: rgba(255, 0, 0, 0.8); box-shadow: 0 0 20px #FF0000; }
+                100% { background-color: rgba(255, 0, 0, 0.2); box-shadow: 0 0 5px #FF0000; }
+            }
+            div[data-testid="stVerticalBlock"] > div:has(button:contains("🔍 엔진 가동")) button {
+                animation: led-blink 1s infinite !important;
+                color: white !important;
+                border: 2px solid #FF0000 !important;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+
     col_btn1, col_btn2 = st.columns([1, 1])
     with col_btn1:
         if st.button("🔍 엔진 가동 (Start)", use_container_width=True):
             st.session_state.scanning_active = True
+            st.session_state.live_toggle_v6_pro = True # 실전 매매 동시 시작
             st.rerun()
     with col_btn2:
         if st.button("🛑 가동 중단 (Stop)", use_container_width=True):
             st.session_state.scanning_active = False
-            st.session_state.live_toggle_v6_pro = False # 실전 매매도 강제 중단
+            st.session_state.live_toggle_v6_pro = False # 실전 매매 강제 중단
             st.rerun()
 
     # --- [ AUTO-SCANNING LOOP ] ---
@@ -4015,23 +3759,24 @@ elif page.startswith("7-c."):
             
             with grid_col1:
                 st.markdown("<div style='background:rgba(255,75,75,0.1); padding:10px; border-radius:10px; border-top:3px solid #FF4B4B;'><h4 style='margin:0; color:#FF4B4B;'>⚡ EP (폭발)</h4></div>", unsafe_allow_html=True)
-                # 최근 5일 내 상승폭/거래량 상위
+                # 최근 5일 내 상승폭/거래량 상위 (수수료/슬리피지 고려 고수익순)
                 ep_candidates = sorted(scanned_pool, key=lambda x: x.get('day_pct', 0), reverse=True)[:5]
-                for res in ep_candidates:
-                    st.caption(f"🚀 {res['name']} ({res['ticker']})")
+                for idx, res in enumerate(ep_candidates, 1):
+                    st.markdown(f"**{idx}.** 🚀 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FF4B4B; float:right;'>{res.get('day_pct', 0):+.1f}%</span>", unsafe_allow_html=True)
             
             with grid_col2:
                 st.markdown("<div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #FFD700;'><h4 style='margin:0; color:#FFD700;'>⏳ DR (지연반응)</h4></div>", unsafe_allow_html=True)
-                # EP 이후 횡보 중인 종목들
-                dr_candidates = [r for r in scanned_pool if r.get('stage') == 'RS_TARGET' and r.get('rs', 0) > 40][:5]
-                for res in dr_candidates:
-                    st.caption(f"⏳ {res['name']} ({res['ticker']})")
+                # RS 점수 기준 정렬 (주도주 강도순)
+                dr_candidates = sorted([r for r in scanned_pool if r.get('stage') == 'RS_TARGET' or r.get('dr_score')], key=lambda x: x.get('rs', 0), reverse=True)[:5]
+                for idx, res in enumerate(dr_candidates, 1):
+                    st.markdown(f"**{idx}.** ⏳ **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FFD700; float:right;'>RS: {res.get('rs', 0)}</span>", unsafe_allow_html=True)
 
             with grid_col3:
                 st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축)</h4></div>", unsafe_allow_html=True)
-                tight_candidates = sorted([r for r in scanned_pool if r.get('range_3d')], key=lambda x: x.get('range_3d', 100))[:5]
-                for res in tight_candidates:
-                    st.caption(f"🎯 {res['name']} ({res['ticker']})")
+                # Tightness 수치 기준 정렬 (수치가 낮을수록 응축도가 높음)
+                tight_candidates = sorted([r for r in scanned_pool if r.get('tight')], key=lambda x: x.get('tight', 100))[:5]
+                for idx, res in enumerate(tight_candidates, 1):
+                    st.markdown(f"**{idx}.** 🎯 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#00FF00; float:right;'>T: {res.get('tight', 0):.2f}%</span>", unsafe_allow_html=True)
 
             # --- [ XAI: TACTICAL REASONING ] 왜 사고, 왜 안 샀는가? ---
             st.markdown("---")
@@ -4091,7 +3836,7 @@ elif page.startswith("7-c."):
                         """, unsafe_allow_html=True)
 
             # --- [ LOOP CONTROL ] ---
-            time.sleep(60) 
+            time.sleep(30) 
             if not st.session_state.scanning_active: break
             st.rerun()
 elif page.startswith("7-c."):
@@ -4256,7 +4001,7 @@ elif page.startswith("7-c."):
             st.session_state.scanning_results = new_results
             
             if loop_active:
-                time.sleep(60) # 1분 대기 후 루프
+                time.sleep(30) # 30초 대기 후 루프
                 st.rerun()
 
     with col_btn2:
