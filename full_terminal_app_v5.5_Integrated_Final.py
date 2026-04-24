@@ -577,52 +577,95 @@ def analyze_stockbee_setup(ticker, hist_df=None):
     """
 def get_naver_ohlcv(ticker, count=100):
     """네이버 증권 API를 통한 한국 주식 데이터 수집 (지연 없는 실시간급 데이터)"""
-def get_naver_ohlcv(ticker, count=200):
-    """네이버 증권 API를 통한 한국 주식 데이터 수집 (안정성 강화 버전)"""
+def get_kis_ohlcv(ticker, token, count=100):
+    """한국투자증권 OpenAPI를 통한 실시간 일봉 데이터 수집 (안정성 최우선)"""
+    if not token: return pd.DataFrame()
     try:
         symbol = ticker.split('.')[0]
-        url = f"https://fchart.naver.com/sise.nhn?symbol={symbol}&timeType=day&count={count}&startTime=20240101"
-        resp = requests.get(url, timeout=5)
-        if resp.status_code != 200 or not resp.text: return pd.DataFrame()
+        base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+        url = f"{base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
+        headers = {
+            "Content-Type": "application/json",
+            "authorization": f"Bearer {token}",
+            "appkey": KIS_APP_KEY,
+            "appsecret": KIS_APP_SECRET,
+            "tr_id": "FHKST03010100"
+        }
+        params = {
+            "FID_COND_SCR_DIV_CODE": "16641",
+            "FID_INPUT_ISCD": symbol,
+            "FID_INPUT_DATE_1": (datetime.now() - pd.Timedelta(days=365)).strftime("%Y%m%d"),
+            "FID_INPUT_DATE_2": datetime.now().strftime("%Y%m%d"),
+            "FID_PERIOD_DIV_CODE": "D",
+            "FID_ORG_ADJ_PRC": "0"
+        }
+        resp = requests.get(url, headers=headers, params=params, timeout=5)
+        if resp.status_code != 200: return pd.DataFrame()
         
-        import xml.etree.ElementTree as ET
-        try:
-            root = ET.fromstring(resp.text)
-        except: return pd.DataFrame() # XML 형식이 아닐 경우
-            
-        items = root.findall('.//item')
-        if not items: return pd.DataFrame()
+        raw_data = resp.json().get('output2', [])
+        if not raw_data: return pd.DataFrame()
         
         data = []
-        for item in items:
-            raw_data = item.get('data')
-            if not raw_data: continue
-            row = raw_data.split('|')
-            if len(row) < 6: continue
-            try:
-                data.append({
-                    'Date': datetime.strptime(row[0], '%Y%m%d'),
-                    'Open': float(row[1]), 'High': float(row[2]),
-                    'Low': float(row[3]), 'Close': float(row[4]),
-                    'Volume': float(row[5])
-                })
-            except: continue
-        
-        if not data: return pd.DataFrame()
-        df = pd.DataFrame(data).drop_duplicates(subset=['Date']).set_index('Date').sort_index()
+        for row in reversed(raw_data): # 최신순으로 오므로 뒤집어서 과거부터 정렬
+            if not row.get('stck_bsop_date'): continue
+            data.append({
+                'Date': datetime.strptime(row['stck_bsop_date'], '%Y%m%d'),
+                'Open': float(row['stck_oprc']),
+                'High': float(row['stck_hgpr']),
+                'Low': float(row['stck_lwpr']),
+                'Close': float(row['stck_clpr']),
+                'Volume': float(row['acml_vol'])
+            })
+        df = pd.DataFrame(data).set_index('Date')
         return df
-    except Exception as e:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
-def analyze_stockbee_setup(ticker, hist_df=None):
-    """프라딥 본데(Stockbee) 전략 정밀 분석 엔진 v4.0 (Global Hybrid Data Engine)"""
+def get_kis_overseas_ohlcv(ticker, token):
+    """한국투자증권 OpenAPI를 통한 해외(미국) 주식 실시간 일봉 수집"""
+    if not token: return pd.DataFrame()
+    try:
+        # 미국 시장 구분 (나스닥 기본, 필요시 뉴욕/아멕스 확장)
+        excd = "NAS" # 기본 나스닥
+        url = f"https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+        url += "/uapi/overseas-stock/v1/quotations/dailyprice"
+        headers = {
+            "Content-Type": "application/json",
+            "authorization": f"Bearer {token}",
+            "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
+            "tr_id": "HHDFS76240000"
+        }
+        params = {"AUTH": "", "EXCD": excd, "SYMB": ticker, "GUBN": "0", "BYMD": "", "MODP": "1"}
+        resp = requests.get(url, headers=headers, params=params, timeout=5)
+        if resp.status_code != 200:
+            # 실패 시 NYSE로 재시도
+            params["EXCD"] = "NYS"
+            resp = requests.get(url, headers=headers, params=params, timeout=5)
+            if resp.status_code != 200: return pd.DataFrame()
+
+        raw = resp.json().get('output2', [])
+        if not raw: return pd.DataFrame()
+        
+        data = []
+        for r in reversed(raw):
+            data.append({
+                'Date': datetime.strptime(r['xy_date'], '%Y%m%d'),
+                'Open': float(r['open']), 'High': float(r['high']),
+                'Low': float(r['low']), 'Close': float(r['clos']),
+                'Volume': float(r['tvol'])
+            })
+        return pd.DataFrame(data).set_index('Date')
+    except: return pd.DataFrame()
+
+def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
+    """프라딥 본데(Stockbee) 전략 정밀 분석 엔진 v6.0 (Global KIS Core)"""
     try:
         is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
-        # [ DATA SOURCING ] 한국 주식은 네이버, 해외 주식은 yfinance 사용 (신뢰도 극대화)
-        if is_kr:
-            hist = get_naver_ohlcv(ticker, count=200)
+        # [ GLOBAL KIS DATA ENGINE ] 한/미 모두 KIS OpenAPI 우선 사용
+        if kis_token:
+            hist = get_kis_ohlcv(ticker, kis_token) if is_kr else get_kis_overseas_ohlcv(ticker, kis_token)
         else:
-            hist = hist_df if hist_df is not None else yf.Ticker(ticker).history(period="1y")
+            # 토큰 없을 경우만 외부 소스 사용 (안전 장치)
+            hist = get_naver_ohlcv(ticker) if is_kr else (hist_df if hist_df is not None else yf.Ticker(ticker).history(period="1y"))
             
         if len(hist) < 70: 
             return {"status": "REJECT", "reason": f"데이터 부족 (필요:70봉, 현재:{len(hist)}봉)", "ticker": ticker, "name": ticker}
@@ -3819,11 +3862,12 @@ elif page.startswith("7-c."):
                 all_hist = get_bulk_market_data(batch_targets, period="75d")
                 
                 for t in batch_targets:
-                    st.write(f">> {t} 실시간 분석 중...")
+                    st.write(f">> {t} KIS 실시간 분석 중...")
                     is_kr = t.endswith(".KS") or t.endswith(".KQ")
                     t_hist = get_ticker_data_from_bulk(all_hist, t)
                     
-                    analysis = analyze_stockbee_setup(t, hist_df=t_hist)
+                    # KIS 토큰을 분석 엔진에 전달하여 증권사 데이터 우선 수집
+                    analysis = analyze_stockbee_setup(t, hist_df=t_hist, kis_token=token)
                     if analysis["status"] == "SUCCESS":
                         name = TICKER_NAME_MAP.get(t, t)
                         st.success(f"✅ {name}({t}) 포착! 근거: {analysis['reason']}")
