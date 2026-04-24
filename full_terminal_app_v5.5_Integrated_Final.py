@@ -117,10 +117,9 @@ def inject_premium_design():
         .metric-label { color: #888; font-size: 0.8rem; text-transform: uppercase; }
         .metric-value { font-size: 1.5rem; color: var(--neon-gold); font-weight: 700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
         
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--neon-blue); border-radius: 10px; }
+        /* [ SCANNER ] 나노바나나 게이지 */
+        .banana-track { background: rgba(255,255,255,0.05); height: 12px; border-radius: 6px; position: relative; overflow: hidden; margin: 10px 0; border: 1px solid rgba(255,255,255,0.1); }
+        .banana-fill { height: 100%; border-radius: 6px; transition: width 1s ease-out; box-shadow: 0 0 10px currentColor; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1341,6 +1340,7 @@ ZONE_CONFIG = {
     "[ HQ ] 1. 본부 사령부": ["1-a. [ ADMIN ] 관리자 승인 센터", "1-b. [ HR ] HQ 인적 자원 사령부", "1-c. [ SECURE ] 계정 보안 및 관리(18.)", "1-d. [ EXIT ] 탈퇴/휴식 신청"],
     "[ MARKET ] 2. 시장 상황실": ["2-a. [ TREND ] 마켓 트렌드 요약", "2-b. [ MAP ] 실시간 히트맵", "2-c. [ SENTIMENT ] 시장 심리 게이지", "2-d. [ ABOUT ] 제작 동기"],
     "[ TARGET ] 3. 주도주 추격대": ["3-a. [ SCAN ] 주도주 타점 스캐너", "3-b. [ RANK ] 주도주 랭킹 TOP 50", "3-c. [ WATCH ] 본데 감시 리스트", "3-d. [ INDUSTRY ] 산업동향(TOP 10)", "3-e. [ RS ] RS 강도(TOP 10)"],
+    "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ WHOWS ] 본데는 누구인가?", "5-b. [ STUDY ] 주식공부방(차트)", "5-c. [ RADAR ] 나노바나나 레이더"],
     "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방"],
     "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ SETUP ] 사령부 교전 수칙", "7-b. [ MONITOR ] 실시간 시장 관제", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-g. [ COMBAT ] 실시간 교전 관제소", "7-i. [ CONFIG ] 사령부 시스템 설정"]
 }
@@ -1670,6 +1670,79 @@ def get_footer_quote():
     return random.choice(BONDE_FOOTER_QUOTES)
 
 # --- [PLACEHOLDER_LOGIC_START] ---
+elif page.startswith("5-a."):
+    st.header("[ ACADEMY ] 본데(Bonde)는 누구인가?")
+    st.markdown("<div class='glass-card'>사령부의 전략적 모태가 된 전설적인 트레이더 프라딥 본데(Pradeep Bonde)의 철학을 계승합니다.</div>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style='background: rgba(255,215,0,0.05); padding: 30px; border-radius: 20px; border-left: 5px solid #FFD700;'>
+        <h3>[ PHILOSOPHY ] 주도주 매매의 정석</h3>
+        <p style='font-size: 1.1rem; line-height: 1.8; color: #EEE;'>
+            프라딥 본데는 주식 시장에서 '모멘텀'과 '수급'의 원리를 가장 나노 단위로 체계화한 대가입니다.<br><br>
+            <b>1. Episodic Pivot (EP):</b> 강력한 펀더멘털의 변화가 가격과 거래량의 폭발로 나타나는 지점을 공략합니다.<br>
+            <b>2. 4% Momentum Burst:</b> 응축된 에너지(VCP)가 4% 이상의 상승과 거래량 동반으로 분출될 때를 타점으로 삼습니다.<br>
+            <b>3. RS(Relative Strength):</b> 시장보다 강한 종목만이 살아남는다는 원칙하에 상위 1%의 종목만을 스캔합니다.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+elif page.startswith("5-b."):
+    st.header("[ STUDY ] 사령부 주식 공부방 (Chart Academy)")
+    st.markdown("<div class='glass-card'>눈이 아닌 뇌로 차트를 읽는 법을 훈련합니다.</div>", unsafe_allow_html=True)
+    
+    st.subheader("📍 핵심 정석 패턴 (Standard Setups)")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.info("**1. 컵앤핸들 (Cup and Handle)**\n\n깊은 조정을 거친 후 손잡이 부분에서 변동성이 타이트해질 때가 진입 시점입니다.")
+        st.info("**2. VCP (Volatility Contraction Pattern)**\n\n변동성이 20% -> 10% -> 5%로 줄어들며 매물이 소화되는 과정입니다.")
+    with c2:
+        st.success("**3. Episodic Pivot (EP)**\n\n뉴스나 실적 발표와 함께 발생하는 강력한 갭 상승과 대량 거래를 포착합니다.")
+        st.success("**4. 3-Day Rule**\n\n3일 연속 상승한 종목은 추격 매수하지 않고 눌림을 기다리는 인내를 배웁니다.")
+
+elif page.startswith("5-c."):
+    st.markdown("<h1 style='text-align: center; color: #00FF00;'>🛰️ 나노바나나 정밀 레이더</h1>", unsafe_allow_html=True)
+    st.markdown("<div class='glass-card' style='text-align: center;'>현재 사령부 감시망 내에서 에너지가 응축되어 돌파가 임박한 '황금 바나나' 종목들을 실시간 추적합니다.</div>", unsafe_allow_html=True)
+    
+    # [ UPGRADE ] 3-a에서 스캔한 실제 데이터를 나노바나나 레이더와 연동
+    if "antigravity_scan" in st.session_state:
+        res = st.session_state.antigravity_scan
+        # 모든 히트 종목 통합
+        all_hits = res.get("9M_EP", []) + res.get("Burst", []) + res.get("Story_EP", []) + res.get("Delayed_EP", [])
+        
+        if not all_hits:
+            st.warning("⚠️ 현재 레이더망에 포착된 임박 종목이 없습니다. 3-a에서 스캔을 먼저 실행하십시오.")
+        else:
+            cols = st.columns(3)
+            for i, stock in enumerate(all_hits[:9]):
+                # 가상의 Ready 지수 산출 (수익률과 거래량 기반 가중치)
+                ready_score = min(99, 70 + (stock.get('CH', 0) * 2))
+                with cols[i % 3]:
+                    color = "#00FF00" if ready_score >= 90 else "#FFD700"
+                    st.markdown(f"""
+                    <div class='glass-card' style='border-top: 5px solid {color}; padding: 15px;'>
+                        <div style='display: flex; justify-content: space-between; align-items: center;'>
+                            <h3 style='margin: 0; font-size: 1.1rem;'>{stock['T']}</h3>
+                            <span style='color: {color}; font-weight: 800;'>{ready_score}%</span>
+                        </div>
+                        <div class='banana-track'>
+                            <div class='banana-fill' style='width: {ready_score}%; background: {color}; color: {color};'></div>
+                        </div>
+                        <p style='font-size: 0.75rem; color: #888; margin-top: 8px;'>📡 분석: {stock.get('TIC', 'NANO')} 전략 포착 완료</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+    else:
+        st.info("📡 [ SYSTEM ] 현재 나노 엔진이 예열 중입니다. **3-a. [ SCAN ]** 메뉴에서 먼저 정밀 스캔을 실행하면 이곳에 황금 바나나 리스트가 나타납니다.")
+        
+    st.divider()
+    st.markdown("""
+    <div style='background: rgba(0,0,0,0.3); padding: 20px; border-radius: 12px; border: 1px solid rgba(0,255,0,0.2);'>
+        <h4 style='color: #00FF00; margin-top: 0;'>🍌 왜 '나노바나나' 인가?</h4>
+        <p style='font-size: 0.9rem; color: #BBB; line-height: 1.6;'>
+            바나나가 초록색에서 노란색으로 맛있게 익어가는 것처럼, 주식도 지루한 횡보(초록)를 거쳐 폭발적인 시세 분출(노란색)로 이어지는 찰나의 순간이 있습니다.<br>
+            사령부는 그 찰나를 <b>나노 단위</b>로 쪼개어 분석하여 사령관님께 가장 신선한 타점을 보고합니다.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
 if page.startswith("6-a."):
     st.header("[ CHECK ] 사령부 출석체크 및 오늘 한 줄")
     
