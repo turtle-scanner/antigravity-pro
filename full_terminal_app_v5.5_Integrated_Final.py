@@ -624,23 +624,29 @@ def analyze_stockbee_setup(ticker, hist_df=None):
         if day_pct >= 4.0 and v >= 100000 and v > p_v and cond_tight_yesterday:
             setups.append("4% Momentum Burst")
 
-        if not setups:
-            return {"status": "PASS", "stage": "SCAN", "reason": "조건 미충족", "close": c}
-
-        # [ REFINEMENT ] 시장 하락장에서의 돌파는 50% 확률로 실패하므로 경고 또는 차단
-        if market_regime == "BEAR":
-            return {"status": "REJECT", "stage": "MARKET_FILTER", "reason": "시장 하락장(지수 SMA10 하향)"}
-
-        # RS Score 및 TI65
+        # RS Score 및 TI65 (상시 계산)
         rs = round(((c / df['Close'].iloc[-126]) * 0.7 + (c / df['Close'].iloc[-63]) * 0.3) * 100, 1) if len(df) >= 126 else 50
         sma65 = df['Close'].rolling(65).mean().iloc[-1] if len(df) >= 65 else c
+        v_ratio = (v / p_v) if p_v > 0 else 1.0
         
+        # 종합 품질 점수 (Bonde Quality Factor)
+        quality_score = round((rs * 0.4) + (adr_20 * 10 * 0.3) + (v_ratio * 10 * 0.3), 1)
+
+        result_base = {
+            "ticker": ticker, "close": c, "rs": rs, "day_pct": round(day_pct, 2),
+            "adr": adr_20, "tight": tight_score, "volume": v, "v_ratio": v_ratio,
+            "ti65": round(c / sma65, 3), "quality": quality_score, "name": TICKER_NAME_MAP.get(ticker, ticker)
+        }
+
+        if not setups:
+            return {**result_base, "status": "PASS", "stage": "SCAN", "reason": "조건 미충족"}
+
+        if market_regime == "BEAR":
+            return {**result_base, "status": "REJECT", "stage": "MARKET_FILTER", "reason": "시장 하락장(지수 SMA10 하향)"}
+
         return {
-            "status": "SUCCESS", "stage": "EXECUTION", "ticker": ticker, "close": c, 
-            "rs": rs, "day_pct": round(day_pct, 2), "reason": f"🚀 {setups[0]} 포착!",
-            "setups": setups, "lod": round(df['Low'].iloc[-1], 2), "pct": round(day_pct, 2), 
-            "ti65": round(c / sma65, 3), "adr": adr_20, "tight": tight_score, "market": market_regime,
-            "volume": v, "prev_volume": p_v
+            **result_base, "status": "SUCCESS", "stage": "EXECUTION", 
+            "reason": f"🚀 {setups[0]} 포착!", "setups": setups, "lod": round(df['Low'].iloc[-1], 2)
         }
 
     except Exception as e:
@@ -3603,26 +3609,25 @@ elif page.startswith("7-c."):
             
             with grid_col1:
                 st.markdown("<div style='background:rgba(255,75,75,0.1); padding:10px; border-radius:10px; border-top:3px solid #FF4B4B;'><h4 style='margin:0; color:#FF4B4B;'>⚡ EP (폭발)</h4></div>", unsafe_allow_html=True)
-                # 최근 5일 내 상승폭/거래량 상위 (수수료/슬리피지 고려 고수익순)
-                ep_candidates = sorted(scanned_pool, key=lambda x: x.get('day_pct', 0), reverse=True)[:5]
+                # 품질 점수(Quality)와 당일 변동성 기준 정렬 (최상위 주도주)
+                ep_candidates = sorted(scanned_pool, key=lambda x: (x.get('quality', 0), x.get('day_pct', 0)), reverse=True)[:5]
                 for idx, res in enumerate(ep_candidates, 1):
-                    st.markdown(f"**{idx}.** 🚀 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FF4B4B; float:right;'>{res.get('day_pct', 0):+.1f}%</span>", unsafe_allow_html=True)
+                    color = "#FF4B4B" if res.get('status') == 'SUCCESS' else "#888"
+                    st.markdown(f"**{idx}.** 🚀 **{res['name']}** <small>({res['ticker']})</small> <span style='color:{color}; float:right;'>{res.get('day_pct', 0):+.1f}%</span>", unsafe_allow_html=True)
             
             with grid_col2:
                 st.markdown("<div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #FFD700;'><h4 style='margin:0; color:#FFD700;'>⏳ DR (지연반응)</h4></div>", unsafe_allow_html=True)
-                # RS 점수 기준 상위 후보군 노출 (필터 완화)
-                dr_candidates = sorted(scanned_pool, key=lambda x: x.get('rs', 0), reverse=True)[:5]
+                # RS 점수와 품질 점수 기준 상위 후보군 노출
+                dr_candidates = sorted(scanned_pool, key=lambda x: (x.get('rs', 0), x.get('quality', 0)), reverse=True)[:5]
                 for idx, res in enumerate(dr_candidates, 1):
                     st.markdown(f"**{idx}.** ⏳ **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FFD700; float:right;'>RS: {res.get('rs', 0)}</span>", unsafe_allow_html=True)
-                if not dr_candidates: st.caption("전술적 감시 대상 스캔 중...")
 
             with grid_col3:
                 st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축)</h4></div>", unsafe_allow_html=True)
-                # Tightness 수치 기준 상위 후보군 노출 (필터 완화)
-                tight_candidates = sorted(scanned_pool, key=lambda x: x.get('tight', 100))[:5]
+                # Tightness(낮을수록 좋음)와 품질 점수 기준 정렬
+                tight_candidates = sorted(scanned_pool, key=lambda x: (x.get('tight', 100), -x.get('quality', 0)))[:5]
                 for idx, res in enumerate(tight_candidates, 1):
                     st.markdown(f"**{idx}.** 🎯 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#00FF00; float:right;'>T: {res.get('tight', 0):.2f}%</span>", unsafe_allow_html=True)
-                if not tight_candidates: st.caption("응축 패턴 정밀 분석 중...")
 
             # --- [ XAI: TACTICAL REASONING ] 왜 사고, 왜 안 샀는가? ---
             st.markdown("---")
