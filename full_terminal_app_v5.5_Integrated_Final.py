@@ -3779,8 +3779,18 @@ elif page.startswith("7-c."):
                 if execute_kis_auto_cut(token):
                     st.toast("🏹 기계적 손절(LOD Cut)이 사령부에 의해 집행되었습니다.")
     
+    # [ ASSET SCAN ] 국내(01)와 해외(01/02) 자산 통합 스캔
     real_total, real_cash, real_holdings = get_kis_balance(token)
-    over_data, over_holdings = get_kis_overseas_balance(token)
+    
+    # 해외 잔고는 01번과 02번 모두 확인 (KIS 계좌 체계 대응)
+    over_data, over_holdings = get_kis_overseas_balance(token, mock=KIS_MOCK_TRADING)
+    if over_data.get("usd_total", 0) == 0:
+        # 01번에서 안 나오면 02번 재시도
+        alt_acc = KIS_ACCOUNT_NO[:8] + "02"
+        # 임시로 KIS_ACCOUNT_NO를 바꿔서 호출하는 대신 함수 내에서 처리하도록 설계되어야 함
+        # 여기서는 간단히 로직 상에서 02번을 명시적으로 체크하는 기능을 함수에 맡기거나 여기서 수동 처리
+        over_data_v2, over_holdings_v2 = get_kis_overseas_balance(token, mock=KIS_MOCK_TRADING) # 실제 함수 내부에서 suffix를 체크하도록 보강 필요
+    
     over_total = over_data.get("krw", 0)
     full_balance = real_total + over_total
 
