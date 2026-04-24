@@ -458,27 +458,38 @@ def send_telegram_msg(msg):
 
 @st.cache_data(ttl=3500, show_spinner=False)
 def get_kis_access_token(app_key, app_secret, mock=True):
-    """한국투자증권 API 접근 토큰 발급 (캐싱 적용)"""
+    """한국투자증권 API 접근 토큰 발급 (1분 제한 방어 로직 포함)"""
+    # [ SAFETY ] KIS 1분 1회 제한 방어
+    last_req = st.session_state.get("last_token_req_time", 0)
+    if time.time() - last_req < 62: # 60초보다 넉넉하게 62초
+        st.warning(f"⏳ KIS 보안 정책상 토큰은 1분에 1회만 요청 가능합니다. (남은 시간: {int(62 - (time.time() - last_req))}초)")
+        # 캐시된 값이 있으면 그것을 반환하도록 유도 (이전에 성공했다면)
+        return st.session_state.get("last_valid_token")
+
     base_url = "https://openapivts.koreainvestment.com:29443" if mock else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/oauth2/tokenP"
     headers = {"content-type": "application/json"}
     body = {"grant_type": "client_credentials", "appkey": app_key, "appsecret": app_secret}
     
+    st.session_state.last_token_req_time = time.time()
     try:
         res = requests.post(url, headers=headers, json=body, timeout=15)
         res_data = res.json()
         if res.status_code == 200:
             token = res_data.get("access_token")
-            if token: return token
+            if token:
+                st.session_state.last_valid_token = token
+                return token
         
-        # 에러 발생 시 캐시하지 않고 즉시 에러 보고
         err_msg = res_data.get('msg1', res_data.get('error_description', 'Unknown Error'))
-        st.error(f"🔑 [KIS AUTH ERROR] {err_msg} (Target: {'Mock' if mock else 'Real'})")
+        if "1분당 1회" in err_msg:
+             st.warning("⚠️ KIS 토큰 발급 제한(1분)에 걸렸습니다. 잠시 후 자동 재시도합니다.")
+        else:
+             st.error(f"🔑 [KIS AUTH ERROR] {err_msg} (Target: {'Mock' if mock else 'Real'})")
     except Exception as e:
         st.error(f"📡 [NETWORK ERROR] KIS 서버 연결 실패: {str(e)}")
     
-    # 실패 시 None을 반환하되, 다음 호출 때 재시도할 수 있도록 캐시 스킵 유도 (실제로는 None도 캐시되므로 주의)
-    return None
+    return st.session_state.get("last_valid_token")
 
 def get_kis_balance(token, mock=None):
     """국내 주식 잔고 및 예수금 현황 조회 (실제 연동)"""
@@ -544,10 +555,16 @@ def get_kis_overseas_balance(token, mock=None):
                 d = res.json()
                 o2 = d.get('output2', {})
                 if o2:
-                    total_usd = float(o2.get('frcr_evlu_amt2', 0)) # 외화평가금액2
-                    cash_usd = float(o2.get('frcr_dnca_amt') or o2.get('frcr_dncl_amt_2') or 0)   # 외화예수금액
+                    total_usd = float(o2.get('frcr_evlu_amt2') or o2.get('tot_evlu_pamt') or 0) # 외화평가금액
+                    cash_usd = float(o2.get('frcr_dnca_amt') or o2.get('frcr_dncl_amt_2') or o2.get('frcr_drwg_psbl_amt_1') or 0)   # 외화예수금액
                     total_krw = float(o2.get('tot_evlu_pamt') or o2.get('tot_asst_amt') or 0)
-                    if total_usd + cash_usd > 0:
+                    
+                    # 미니스탁의 경우 총 자산금액(tot_asst_amt)에 잡히는 경우가 많음
+                    if total_usd + cash_usd == 0 and total_krw > 0:
+                        # 원화로만 잡히는 경우 역산 (임시)
+                        total_usd = total_krw / 1350 
+                        
+                    if total_usd + cash_usd > 0 or total_krw > 0:
                         return {"krw": total_krw, "usd_total": total_usd + cash_usd, "usd_cash": cash_usd}, d.get('output1', [])
         except: pass
 
