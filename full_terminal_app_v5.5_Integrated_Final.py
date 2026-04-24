@@ -350,10 +350,22 @@ def get_macro_indicators():
 # [ SECURITY ] 사용자가 제공한 API 정보를 우선 적용하되, secrets 설정이 있다면 그것을 따릅니다.
 KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "")
 KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "")
-# 계좌번호 키 명칭 동기화 (KIS_ACCOUNT 또는 KIS_ACCOUNT_NO 대응)
 raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "46289819")).replace("-", "")
 KIS_ACCOUNT_NO = raw_acc + "01" if len(raw_acc) == 8 else raw_acc
 KIS_MOCK_TRADING = st.secrets.get("KIS_MOCK_TRADING", False)
+
+# [ NEW ] 텔레그램 설정
+TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
+
+def send_telegram_msg(msg):
+    """사령관님께 실시간 전술 보고 전송 (텔레그램)"""
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID: return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        params = {"chat_id": TELEGRAM_CHAT_ID, "text": f"📡 [COMMANDER REPORT]\n{msg}", "parse_mode": "Markdown"}
+        requests.get(url, params=params, timeout=5)
+    except: pass
 
 @st.cache_data(ttl=3500)
 def get_kis_access_token(app_key, app_secret, mock=True):
@@ -457,6 +469,27 @@ def get_kis_current_price(ticker, token):
         return 0
     except: return 0
 
+def get_market_breadth(token):
+    """[ MARKET BREADTH ] 시장 건강도 체크 (종목들의 SMA50 상회 비율)"""
+    try:
+        # 코스피 200 샘플 20종목 기반 간이 브레스 측정 (속도 최적화)
+        sample_tickers = ["005930.KS", "000660.KS", "373220.KS", "207940.KS", "005380.KS", "005490.KS", "000270.KS", "035420.KS"]
+        above_count = 0
+        from concurrent.futures import ThreadPoolExecutor
+        
+        def check_sma50(t):
+            df = get_kis_ohlcv(t, token)
+            if len(df) < 50: return False
+            return df['Close'].iloc[-1] > df['Close'].rolling(50).mean().iloc[-1]
+            
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            results = list(executor.map(check_sma50, sample_tickers))
+            above_count = sum(results)
+            
+        breadth_pct = (above_count / len(sample_tickers)) * 100
+        return breadth_pct
+    except: return 50.0 # 에러 시 보수적으로 50% 반환
+
 def execute_kis_auto_cut(token):
     """[ SUPREME RISK ENGINE ] 익절(+21%), 손절(-3%), 파워무브(고점-3%) 통합 집행"""
     try:
@@ -469,8 +502,6 @@ def execute_kis_auto_cut(token):
             buy_p = float(h.get('pchs_avg_pric', 0))
             if qty <= 0: continue
             
-            # 실시간 시세 및 최근 히스토리(3일) 확인
-            token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
             is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
             hist = get_kis_ohlcv(ticker, token) if is_kr else get_kis_overseas_ohlcv(ticker, token)
             
@@ -479,30 +510,20 @@ def execute_kis_auto_cut(token):
             high_3d = hist['High'].iloc[-3:].max() if len(hist) >= 3 else hist['High'].max()
             roi = (curr_p / buy_p - 1) * 100
             
-            # [ RULE 1: POWER MOVE ] 3일 내 20% 이상 상승 시 트레일링 스톱 (-3% from High)
-            is_power_move = (high_3d / buy_p - 1) >= 0.20
-            
-            if is_power_move:
-                stop_price = high_3d * 0.97
-                if curr_p <= stop_price:
-                    log_msg = f"🔥 [ POWER MOVE EXIT ] {ticker} 고점 대비 -3% 이탈로 수익 보존 매도!"
-                    st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": log_msg, "type": "SUCCESS"})
-                    if execute_kis_market_order(ticker, qty, is_buy=False): return True
-            
-            # [ RULE 2: TARGET PROFIT ] 일반 익절 +21%
+            if (high_3d / buy_p - 1) >= 0.20: # Power Move
+                if curr_p <= high_3d * 0.97:
+                    if execute_kis_market_order(ticker, qty, is_buy=False): 
+                        send_telegram_msg(f"🔥 [POWER MOVE EXIT] {ticker} 익절 완료! (+{roi:.1f}%)")
+                        return True
             elif roi >= 21.0:
-                log_msg = f"💰 [ TAKE PROFIT ] {ticker} 목표 수익률 +21% 달성! 이익 실현."
-                st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": log_msg, "type": "SUCCESS"})
-                if execute_kis_market_order(ticker, qty, is_buy=False): return True
-                
-            # [ RULE 3: STOP LOSS ] 기계적 손절 -3%
+                if execute_kis_market_order(ticker, qty, is_buy=False):
+                    send_telegram_msg(f"💰 [TAKE PROFIT] {ticker} 목표달성 익절! (+{roi:.1f}%)")
+                    return True
             elif roi <= -3.0:
-                log_msg = f"💣 [ STOP LOSS ] {ticker} 손실율 -3% 도달. 즉시 탈출."
-                st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": log_msg, "type": "ERROR"})
-                if execute_kis_market_order(ticker, qty, is_buy=False): return True
-                
-    except Exception as e:
-        pass
+                if execute_kis_market_order(ticker, qty, is_buy=False):
+                    send_telegram_msg(f"💣 [STOP LOSS] {ticker} 기계적 손절 집행. ({roi:.1f}%)")
+                    return True
+    except: pass
     return False
 
 def play_tactical_sound(sound_type="buy"):
@@ -3765,30 +3786,25 @@ elif page.startswith("7-c."):
                     seen.add(r['ticker'])
             
             for res in unique_details[:8]:
+                with st.expander(f"📈 {res['name']} ({res['ticker']}) - RS: {res.get('rs', 0)} / ADR: {res.get('adr', 0)}%", expanded=False):
+                    d_col1, d_col2 = st.columns([2, 1])
                     with d_col1:
-                        # [ DUAL CHART SYSTEM ] KIS OpenAPI + TradingView
+                        # [ SIMPLE TACTICAL CHART ] 핵심 지표만 남긴 미니멀 차트
                         token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
                         is_kr = res['ticker'].endswith(".KS") or res['ticker'].endswith(".KQ")
                         df = get_kis_ohlcv(res['ticker'], token) if is_kr else get_kis_overseas_ohlcv(res['ticker'], token)
                         
-                        tabs = st.tabs(["📊 전술 차트 (KIS)", "📈 분석 위젯 (TV)"])
-                        with tabs[0]:
-                            if not df.empty:
-                                df['SMA7'] = df['Close'].rolling(7).mean()
-                                df['SMA65'] = df['Close'].rolling(65).mean()
-                                fig = go.Figure()
-                                fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='시세'))
-                                fig.add_trace(go.Scatter(x=df.index, y=df['SMA7'], line=dict(color='#00FFFF', width=1), name='SMA7'))
-                                fig.add_trace(go.Scatter(x=df.index, y=df['SMA65'], line=dict(color='#FFD700', width=1.5), name='SMA65'))
-                                fig.update_layout(template='plotly_dark', height=300, margin=dict(l=0,r=0,t=0,b=0), xaxis_rangeslider_visible=False)
-                                st.plotly_chart(fig, use_container_width=True)
-                            else: st.warning("KIS OpenAPI 데이터를 불러오는 중입니다...")
-                        
-                        with tabs[1]:
-                            symbol = res['ticker'].split('.')[0]
-                            exchange = "KRX" if is_kr else "NASDAQ"
-                            tv_url = f"https://s.tradingview.com/widgetembed/?frameElementId=tradingview_76d4d&symbol={exchange}%3A{symbol}&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=%5B%5D&theme=dark&style=1&timezone=Asia%2FSeoul"
-                            st.components.v1.iframe(tv_url, height=300)
+                        if not df.empty:
+                            df['SMA7'] = df['Close'].rolling(7).mean()
+                            df['SMA65'] = df['Close'].rolling(65).mean()
+                            fig = go.Figure()
+                            fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='P'))
+                            fig.add_trace(go.Scatter(x=df.index, y=df['SMA7'], line=dict(color='#00FFFF', width=1), name='7'))
+                            fig.add_trace(go.Scatter(x=df.index, y=df['SMA65'], line=dict(color='#FFD700', width=1.5), name='65'))
+                            fig.update_layout(template='plotly_dark', height=250, margin=dict(l=0,r=0,t=0,b=0), xaxis_rangeslider_visible=False, showlegend=False)
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.caption("📡 KIS 차트 데이터 수신 중...")
                     
                     with d_col2:
                         roe = get_ticker_roe(res['ticker'])
@@ -3887,49 +3903,63 @@ elif page.startswith("7-c."):
                 st.rerun()
 
     if st.session_state.engine_active:
-        with st.status("📡 [ HYPER SCAN ] 병렬 전술 스캐닝 가동 중...", expanded=True) as status:
+        with st.status("📡 [ ELITE TACTICAL AI ] 가동 중...", expanded=True) as status:
+            # 1. 마켓 브레스 체크 (전술적 휴전 여부 판단)
+            breadth = get_market_breadth(token)
+            st.session_state.market_breadth = breadth
+            is_truce = breadth < 40.0 # 40% 미만 시 매수 금지
+            
+            if is_truce:
+                status.update(label=f"🛡️ [ TACTICAL TRUCE ] 시장 건강도 악화({breadth:.1f}%). 매수 중단 및 방어 모드.")
+            
             universe = list(set(get_bonde_top_50() + get_nasdaq_200() + get_kospi_top_200() + get_kosdaq_100()))
             random.shuffle(universe)
             
-            # [ OPTIMIZATION ] 병렬 분석 엔진 (최대 5개 스레드)
             from concurrent.futures import ThreadPoolExecutor
-            
-            def fast_analyze(ticker):
-                return analyze_stockbee_setup(ticker, kis_token=token)
+            def fast_analyze(ticker): return analyze_stockbee_setup(ticker, kis_token=token)
 
-            # [ PHASE 1: EP EXPLOSION ]
-            status.update(label="⚡ PHASE 1: EP (폭발) 병렬 분석 중...")
+            # [ 3-PHASE HYPER SCAN ]
             with ThreadPoolExecutor(max_workers=5) as executor:
                 ep_pool = list(executor.map(fast_analyze, universe[:40]))
-            
-            st.session_state.ep_results = sorted([r for r in ep_pool if r.get('is_ep')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
-            for res in st.session_state.ep_results:
-                if st.session_state.get("live_toggle_v6_pro"):
-                    execute_kis_market_order(res['ticker'], 1, is_buy=True)
-
-            # [ PHASE 2: DR DELAYED REACTION ]
-            status.update(label="⏳ PHASE 2: DR (지연반응) 병렬 분석 중...")
-            with ThreadPoolExecutor(max_workers=5) as executor:
                 dr_pool = list(executor.map(fast_analyze, universe[40:80]))
-                
-            st.session_state.dr_results = sorted([r for r in dr_pool if r.get('is_dr')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
-            for res in st.session_state.dr_results:
-                if st.session_state.get("live_toggle_v6_pro"):
-                    execute_kis_market_order(res['ticker'], 1, is_buy=True)
-
-            # [ PHASE 3: TIGHT CONTRACTION ]
-            status.update(label="🔥 PHASE 3: TIGHT (응축) 병렬 분석 중...")
-            with ThreadPoolExecutor(max_workers=5) as executor:
                 tight_pool = list(executor.map(fast_analyze, universe[80:120]))
 
+            st.session_state.ep_results = sorted([r for r in ep_pool if r.get('is_ep')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+            st.session_state.dr_results = sorted([r for r in dr_pool if r.get('is_dr')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
             st.session_state.tight_results = sorted([r for r in tight_pool if r.get('is_tight')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
-            for res in st.session_state.tight_results:
-                if st.session_state.get("live_toggle_v6_pro"):
-                    execute_kis_market_order(res['ticker'], 1, is_buy=True)
-
-            status.update(label="✅ [ COMPLETE ] 초고속 사이클 완료.", state="complete")
             st.session_state.scanned_pool = ep_pool + dr_pool + tight_pool
-            time.sleep(10) # 속도 최적화로 대기 시간 단축
+
+            # 2. 포트폴리오 리밸런싱 및 매수 집행
+            if st.session_state.get("live_toggle_v6_pro") and not is_truce:
+                all_candidates = sorted(st.session_state.ep_results + st.session_state.dr_results + st.session_state.tight_results, key=lambda x: x.get('quality', 0), reverse=True)
+                
+                for cand in all_candidates[:3]:
+                    ticker = cand['ticker']
+                    # 현재 보유 종목 확인
+                    _, _, kr_h = get_kis_balance(token)
+                    _, us_h = get_kis_overseas_balance(token)
+                    holdings = kr_h + us_h
+                    
+                    if any((h.get('pdno') or h.get('ovrs_pdno')) == ticker for h in holdings): continue
+                    
+                    if len(holdings) >= 4:
+                        # 리밸런싱: 가장 수익률 낮은 종목과 교체 (Bonde Elite Rule)
+                        worst_h = min(holdings, key=lambda x: float(x.get('evlu_erng_rt', 0)))
+                        w_ticker = worst_h.get('pdno') or worst_h.get('ovrs_pdno')
+                        if float(worst_h.get('evlu_erng_rt', 0)) < 5.0: # 수익률 5% 미만인 종목만 교체 대상으로 고려
+                            execute_kis_market_order(w_ticker, int(worst_h['hldg_qty']), is_buy=False)
+                            send_telegram_msg(f"♻️ [REBALANCE] {w_ticker} 방출 -> {cand['name']} 영입!")
+                        else: continue
+                    
+                    # 매수 집행
+                    invest_amt = full_balance * 0.25
+                    is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
+                    qty = max(1, int(invest_amt / cand['close'])) if is_kr else max(1, int(invest_amt / (cand['close'] * 1350)))
+                    if execute_kis_market_order(ticker, qty, is_buy=True):
+                        send_telegram_msg(f"🚀 [NEW ENTRY] {cand['name']}({ticker}) 포착! {qty}주 매수 완료.")
+
+            status.update(label="✅ [ COMPLETE ] 전술 사이클 완료.", state="complete")
+            time.sleep(10)
             st.rerun()
     else:
         st.info("⚠️ 엔진이 정지된 상태입니다. '엔진 수동 재가동' 버튼을 누르면 실시간 포착이 시작됩니다.")
