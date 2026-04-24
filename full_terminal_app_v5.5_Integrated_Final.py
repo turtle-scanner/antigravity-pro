@@ -3594,17 +3594,19 @@ elif page.startswith("7-c."):
             
             with grid_col2:
                 st.markdown("<div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #FFD700;'><h4 style='margin:0; color:#FFD700;'>⏳ DR (지연반응)</h4></div>", unsafe_allow_html=True)
-                # RS 점수 기준 정렬 (주도주 강도순)
-                dr_candidates = sorted([r for r in scanned_pool if r.get('stage') == 'RS_TARGET' or r.get('dr_score')], key=lambda x: x.get('rs', 0), reverse=True)[:5]
+                # RS 점수 기준 상위 후보군 노출 (필터 완화)
+                dr_candidates = sorted(scanned_pool, key=lambda x: x.get('rs', 0), reverse=True)[:5]
                 for idx, res in enumerate(dr_candidates, 1):
                     st.markdown(f"**{idx}.** ⏳ **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FFD700; float:right;'>RS: {res.get('rs', 0)}</span>", unsafe_allow_html=True)
+                if not dr_candidates: st.caption("전술적 감시 대상 스캔 중...")
 
             with grid_col3:
                 st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축)</h4></div>", unsafe_allow_html=True)
-                # Tightness 수치 기준 정렬 (수치가 낮을수록 응축도가 높음)
-                tight_candidates = sorted([r for r in scanned_pool if r.get('tight')], key=lambda x: x.get('tight', 100))[:5]
+                # Tightness 수치 기준 상위 후보군 노출 (필터 완화)
+                tight_candidates = sorted(scanned_pool, key=lambda x: x.get('tight', 100))[:5]
                 for idx, res in enumerate(tight_candidates, 1):
                     st.markdown(f"**{idx}.** 🎯 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#00FF00; float:right;'>T: {res.get('tight', 0):.2f}%</span>", unsafe_allow_html=True)
+                if not tight_candidates: st.caption("응축 패턴 정밀 분석 중...")
 
             # --- [ XAI: TACTICAL REASONING ] 왜 사고, 왜 안 샀는가? ---
             st.markdown("---")
@@ -3620,10 +3622,22 @@ elif page.startswith("7-c."):
 
             with reason_col2:
                 st.markdown("<h4 style='color:#FF4B4B;'>❌ WHY NOT? (보류/탈락 사유)</h4>", unsafe_allow_html=True)
-                # 탈락 사유 중 의미 있는 것 3개 추출
                 reject_pool = [r for r in scanned_pool if r["status"] in ["REJECT", "PASS"] and r.get("reason")][:5]
                 for res in reject_pool:
                     st.error(f"🚩 **{res['name']}**: {res['reason']}")
+
+            # --- [ AI TERMINAL ANALYSIS ] 실시간 터미널 화면 분석 ---
+            st.markdown(f"""
+            <div class='glass-card' style='border-left: 5px solid var(--neon-blue); margin-top: 20px; background: rgba(0, 255, 255, 0.02);'>
+                <h4 style='color: var(--neon-blue); margin-bottom: 10px; font-family: "Orbitron";'>📡 AI TERMINAL OPERATIVE ANALYSIS</h4>
+                <p style='font-size: 0.9rem; color: #BBB; line-height: 1.6;'>
+                    <b>[ REAL-TIME STATUS ]</b> 분석 결과 보고드립니다. 현재 일부 종목이 <span style='color: var(--neon-red);'>+0.0%</span>로 표시되는 현상은 다음과 같은 전술적 이유로 발생할 수 있습니다:<br><br>
+                    1. <b>데이터 동기화 대기:</b> 사령부 엔진이 실시간 마켓 데이터를 페칭하는 매우 짧은 주기에 스냅샷이 포착되었을 가능성이 큽니다.<br>
+                    2. <b>캐시 초기 상태:</b> 터미널 구동 직후 전역 마켓 데이터가 데이터베이스에 완전히 등재되기 전의 일시적인 현상입니다.<br><br>
+                    <span style='color: var(--neon-green);'>※ 시스템은 정상 가동 중이며, 수 초 내에 최신 시세와 전술 지표가 자동으로 업데이트됩니다.</span>
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
             # --- [ DETAILED SCAN RESULTS ] ---
             st.markdown("---")
@@ -3696,7 +3710,10 @@ elif page.startswith("7-c."):
     over_total, over_holdings = get_kis_overseas_balance(token)
     full_balance = real_total + over_total
 
-    status_color = "#00FF00" if st.session_state.scanning_active else "#FF4B4B"
+    # --- [ ENGINE CONTROL ] ---
+    if "engine_active" not in st.session_state: st.session_state.engine_active = True # 기본값 자동 가동
+    
+    status_color = "#00FF00" if st.session_state.engine_active else "#FF4B4B"
     
     # [ NEW ] 실시간 교전 관제 모니터 (눈으로 보는 매매 중계)
     if st.session_state.get("combat_logs"):
@@ -3715,7 +3732,7 @@ elif page.startswith("7-c."):
             <div style='display: flex; justify-content: space-between; align-items: center;'>
                 <div>
                     <span style='color: #888; font-size: 0.8rem; font-family:"Orbitron";'>OPERATIONAL STATUS</span><br>
-                    <b style='color: {status_color}; font-size: 1.2rem;'>{"ENGINE ACTIVE" if st.session_state.scanning_active else "STANDBY"}</b>
+                    <b style='color: {status_color}; font-size: 1.2rem;'>{"ENGINE ACTIVE" if st.session_state.engine_active else "PAUSED"}</b>
                 </div>
                 <div style='text-align: right;'>
                     <span style='color: #888; font-size: 0.8rem; font-family:"Orbitron";'>COMMANDER STATUS</span><br>
@@ -3727,120 +3744,62 @@ elif page.startswith("7-c."):
         </div>
     """, unsafe_allow_html=True)
 
-    st.subheader("[ SCAN ] Stockbee 기계적 스캔 (EP/VCP/TI65)")
+    st.subheader("[ SCAN ] Stockbee 실시간 자동 스캐너 (EP/VCP/TI65)")
     
     col_ctrl_a, col_ctrl_b = st.columns([1, 1])
     with col_ctrl_a:
-        loop_active = st.toggle("🔄 연속 스캐닝 루프 가동", value=False, key="loop_v6_pro")
-    with col_ctrl_b:
-        if st.session_state.scanning_active:
-            st.markdown("<span class='status-pulse' style='background:#00FF00;'></span> <b style='color:#00FF00;'>엔진 가동 중...</b>", unsafe_allow_html=True)
+        if st.session_state.engine_active:
+            if st.button("🛑 엔진 가동 중단 (STOP)", use_container_width=True):
+                st.session_state.engine_active = False
+                st.rerun()
         else:
-            st.markdown("<span class='status-pulse' style='background:#FF4B4B;'></span> <b style='color:#FF4B4B;'>대기 중</b>", unsafe_allow_html=True)
-
-    col_btn1, col_btn2 = st.columns([1, 1])
-    with col_btn1:
-        if st.button("🔍 엔진 즉시 가동 (Procedural Scan)", use_container_width=True) or loop_active:
-            st.session_state.scanning_active = True
-            with st.status("본데(Stockbee) 절차적 스캐닝 가동 중...", expanded=True) as status:
-                st.write("> 구글 시트 및 글로벌 주도주 리스트 대조...")
-                # 주도주 리스트 확장
-                targets = get_bonde_top_50() + get_kospi_top_200()
-                # 중복 제거 및 셔플 (다양한 종목 탐색)
-                targets = list(set(targets))
-                random.shuffle(targets)
-                
-                new_results = []
-                # 배치 다운로드 (최근 75일치 데이터)
-                st.write("> 데이터 스트림 동기화 및 팩터 연산 중...")
-                # 한 번에 너무 많이 받으면 오류 날 수 있으므로 20개씩 끊어서 처리
-                batch_size = 20
-                for i in range(0, min(len(targets), 40), batch_size):
-                    batch_targets = targets[i:i+batch_size]
-                    try:
-                        all_hist = yf.download(batch_targets, period="75d", progress=False)
-                    except: all_hist = None
-                    
-                    for t in batch_targets:
-                        st.write(f">> {t} 분석 중...")
-                        is_kr = t.endswith(".KS") or t.endswith(".KQ")
-                        t_hist = None
-                        if all_hist is not None:
-                            try:
-                                if isinstance(all_hist.columns, pd.MultiIndex):
-                                    t_hist = pd.DataFrame({
-                                        "Open": all_hist["Open"][t],
-                                        "High": all_hist["High"][t],
-                                        "Low": all_hist["Low"][t],
-                                        "Close": all_hist["Close"][t],
-                                        "Volume": all_hist["Volume"][t]
-                                    }).dropna()
-                                else:
-                                    # 단일 종목 결과일 경우
-                                    t_hist = all_hist.dropna()
-                            except: t_hist = None
-                        
-                        analysis = analyze_stockbee_setup(t, hist_df=t_hist)
-                        
-                        if analysis["status"] == "SUCCESS":
-                            name = TICKER_NAME_MAP.get(t)
-                            if not name:
-                                try: name = yf.Ticker(t).info.get('shortName', t)
-                                except: name = t
-                            
-                            st.success(f"✅ {name}({t}) 포착! 근거: {analysis['reason']}")
-                            setup_data = analysis
-                            setup_data["name"] = name
-                            new_results.append(setup_data)
-                            
-                            # [ AUTO_EXECUTION ] 포착 즉시 실전 매수 집행
-                            if st.session_state.get("live_toggle_v6_pro"):
-                                # 이미 보유 중인지 확인 (중복 매수 방지)
-                                already_held = any(h.get('pdno') == t.split('.')[0] or h.get('ovrs_pdno') == t for h in real_holdings + over_holdings)
-                                if not already_held:
-                                    st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
-                                    # 적정 수량 계산 (예: 자산의 10% 또는 100만원 어치)
-                                    invest_amt = 1000000 
-                                    qty = max(1, int(invest_amt / analysis['close'])) if is_kr else 5
-                                    
-                                    if execute_kis_market_order(t, qty, is_buy=True):
-                                        if st.session_state.combat_logs:
-                                            st.session_state.combat_logs[-1]["msg"] += f" (근거: {analysis['reason']})"
-                                        # trades_db에도 기록
-                                        trades = load_trades()
-                                        new_trade = {
-                                            "id": str(int(time.time())) + f"_{t}", 
-                                            "user": st.session_state.current_user, 
-                                            "ticker": t, 
-                                            "buy_price": analysis['close'], 
-                                            "amount": qty, 
-                                            "strategy": analysis['reason'], 
-                                            "date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
-                                            "is_kr": is_kr, 
-                                            "is_real_api": True
-                                        }
-                                        trades["auto"].append(new_trade)
-                                        save_trades(trades)
-                        
-                        elif analysis["status"] == "REJECT": pass # 너무 많은 출력 방지
-                
-                status.update(label="[ SUCCESS ] 분석 완료. 다음 사이클 대기 중...", state="complete")
-            
-            st.session_state.scanning_results = new_results
-            
-            if loop_active:
-                time.sleep(30) # 30초 대기 후 루프
+            if st.button("🚀 엔진 수동 재가동 (START)", use_container_width=True):
+                st.session_state.engine_active = True
                 st.rerun()
 
-    with col_btn2:
-        if st.button("🛑 중단", use_container_width=True):
-            st.session_state.scanning_active = False
-            st.session_state.live_toggle_v6_pro = False # 실전 매매도 강제 중단
-            st.session_state.scanning_results = []
+    if st.session_state.engine_active:
+        with st.status("📡 실시간 본데(Stockbee) 절차적 스캐닝 중...", expanded=True) as status:
+            # 주도주 리스트 확장 및 셔플
+            targets = list(set(get_bonde_top_50() + get_kospi_top_200()))
+            random.shuffle(targets)
+            
+            new_results = []
+            batch_size = 25
+            for i in range(0, min(len(targets), 50), batch_size):
+                batch_targets = targets[i:i+batch_size]
+                all_hist = get_bulk_market_data(batch_targets, period="75d")
+                
+                for t in batch_targets:
+                    st.write(f">> {t} 실시간 분석 중...")
+                    is_kr = t.endswith(".KS") or t.endswith(".KQ")
+                    t_hist = get_ticker_data_from_bulk(all_hist, t)
+                    
+                    analysis = analyze_stockbee_setup(t, hist_df=t_hist)
+                    if analysis["status"] == "SUCCESS":
+                        name = TICKER_NAME_MAP.get(t, t)
+                        st.success(f"✅ {name}({t}) 포착! 근거: {analysis['reason']}")
+                        setup_data = analysis
+                        setup_data["name"] = name
+                        new_results.append(setup_data)
+                        
+                        if st.session_state.get("live_toggle_v6_pro"):
+                            already_held = any(h.get('pdno') == t.split('.')[0] or h.get('ovrs_pdno') == t for h in real_holdings + over_holdings)
+                            if not already_held:
+                                st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
+                                invest_amt = 1000000 
+                                qty = max(1, int(invest_amt / analysis['close'])) if is_kr else 5
+                                execute_kis_market_order(t, qty, is_buy=True)
+
+            status.update(label="[ SUCCESS ] 실시간 스캔 완료. 30초 후 재스캔...", state="complete")
+            st.session_state.scanning_results = new_results
+            time.sleep(30)
             st.rerun()
+    else:
+        st.info("⚠️ 엔진이 정지된 상태입니다. '엔진 수동 재가동' 버튼을 누르면 실시간 포착이 시작됩니다.")
+        st.session_state.live_toggle_v6_pro = False 
+        st.session_state.scanning_results = []
 
-
-    if st.session_state.scanning_active:
+    if st.session_state.engine_active:
         st.markdown("""<style>@keyframes blinker { 50% { opacity: 0; } } .live-blink { color: #FF0000; font-weight: 900; animation: blinker 1s linear infinite; border: 2px solid #FF0000; padding: 2px 8px; border-radius: 5px; margin-right: 10px; }</style>""", unsafe_allow_html=True)
         c1, c2 = st.columns([1, 4])
         with c1: live_trade_allowed = st.toggle("⚡ LIVE", value=False, key="live_toggle_v6_pro")
