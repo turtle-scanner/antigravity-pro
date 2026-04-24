@@ -38,17 +38,89 @@ def get_assets():
 def inject_premium_design():
     st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&family=Outfit:wght@300;900&display=swap');
-        :root { --neon-blue: #00FFFF; --neon-green: #00FF00; --neon-red: #FF4B4B; --neon-gold: #FFD700; --glass: rgba(15, 15, 25, 0.7); }
-        .stApp { background: #050505; font-family: 'Inter', sans-serif; color: #EEE; }
-        .glass-card { background: var(--glass); backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 20px; margin-bottom: 20px; transition: 0.3s; }
-        .glass-card:hover { transform: translateY(-5px); border-color: var(--neon-blue); box-shadow: 0 0 20px rgba(0,255,255,0.2); }
-        h1, h2, h3 { font-family: 'Orbitron', sans-serif !important; letter-spacing: 2px; color: var(--neon-gold) !important; }
-        .stButton>button { background: rgba(0, 255, 255, 0.05) !important; border: 1px solid var(--neon-blue) !important; color: var(--neon-blue) !important; font-family: 'Orbitron'; border-radius: 8px !important; transition: 0.3s; }
-        .stButton>button:hover { background: var(--neon-blue) !important; color: #000 !important; box-shadow: 0 0 30px var(--neon-blue); }
-        [data-testid="stSidebar"] { background: rgba(5, 5, 10, 0.95) !important; backdrop-filter: blur(20px); border-right: 1px solid rgba(255,215,0,0.1); }
-        @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-        .status-pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--neon-green); display: inline-block; animation: pulse 2s infinite; }
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;900&display=swap');
+        
+        :root {
+            --neon-blue: #00F2FF;
+            --neon-green: #39FF14;
+            --neon-red: #FF3131;
+            --neon-gold: #FFD700;
+            --bg-dark: #050508;
+            --glass: rgba(10, 12, 18, 0.85);
+        }
+        
+        .stApp { 
+            background: linear-gradient(135deg, #050508 0%, #0A0B14 100%);
+            font-family: 'JetBrains Mono', monospace; 
+            color: #E0E0E0; 
+        }
+        
+        .glass-card { 
+            background: var(--glass); 
+            backdrop-filter: blur(20px); 
+            border: 1px solid rgba(0, 242, 255, 0.15); 
+            border-radius: 15px; 
+            padding: 20px; 
+            margin-bottom: 20px; 
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+        }
+        
+        .glass-card:hover { 
+            transform: translateY(-5px); 
+            border-color: var(--neon-blue); 
+            box-shadow: 0 0 25px rgba(0, 242, 255, 0.3); 
+        }
+        
+        h1, h2, h3 { 
+            font-family: 'Orbitron', sans-serif !important; 
+            letter-spacing: 3px; 
+            text-transform: uppercase;
+            background: linear-gradient(to right, var(--neon-blue), var(--neon-gold));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 5px rgba(0, 242, 255, 0.5));
+        }
+        
+        .stButton>button { 
+            background: rgba(0, 242, 255, 0.05) !important; 
+            border: 1px solid var(--neon-blue) !important; 
+            color: var(--neon-blue) !important; 
+            font-family: 'Orbitron'; 
+            font-weight: 700;
+            border-radius: 12px !important; 
+            padding: 0.6rem 2rem !important;
+            transition: 0.3s; 
+        }
+        
+        .stButton>button:hover { 
+            background: var(--neon-blue) !important; 
+            color: #000 !important; 
+            box-shadow: 0 0 35px var(--neon-blue); 
+        }
+        
+        [data-testid="stSidebar"] { 
+            background: rgba(3, 3, 5, 0.98) !important; 
+            backdrop-filter: blur(25px); 
+            border-right: 1px solid rgba(0, 242, 255, 0.1); 
+        }
+        
+        .status-pulse { 
+            width: 12px; height: 12px; border-radius: 50%; background: var(--neon-green); 
+            display: inline-block; box-shadow: 0 0 15px var(--neon-green);
+            animation: pulse 1.5s infinite; 
+            margin-right: 10px;
+        }
+        
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.4; } 100% { transform: scale(1); opacity: 1; } }
+        
+        .metric-label { color: #888; font-size: 0.8rem; text-transform: uppercase; }
+        .metric-value { font-size: 1.5rem; color: var(--neon-gold); font-weight: 700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--neon-blue); border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -346,10 +418,20 @@ def get_macro_indicators():
         return f"[ USD/KRW ]: {rate:,.1f}원 | [ US 10Y ]: {yield10y:.2f}%"
     except: return "[ USD/KRW ]: 1400.0원 | [ US 10Y ]: 4.30%"
 
+@st.cache_data(ttl=3600)
+def get_macro_data():
+    """실시간 환율 및 거시 지표 수치 반환"""
+    try:
+        data = get_bulk_market_data(["USDKRW=X"], "5d")['Close']
+        rate = float(data["USDKRW=X"].dropna().iloc[-1])
+        return rate, 4.3
+    except:
+        return 1400.0, 4.3
+
 # --- [ ENGINE ] KIS API & Core Trading Logic ---
 # [ SECURITY ] 사용자가 제공한 API 정보를 우선 적용하되, secrets 설정이 있다면 그것을 따릅니다.
-KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "")
-KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "")
+KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "PSwPjCXRoSuY1Uz59aDWYKpIPix7VgNB8QUX")
+KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "4WF33M5pnD3Y3qskLfWAlwo0eFxpYIK+TdIXNVW9r+wSLAAF/WVxtqDIvNBDNakV28aFM9ZO+v8069JwBlYDpS1lBvoFf7j9dgSsPwjiwclbvyJ7nMYl5m62wH7VInWWtXgl/8hDnmihzDidKEIss87UdT42JANMvOrCSEF18e5SilJKRIA=")
 raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "46289819")).replace("-", "")
 KIS_ACCOUNT_NO = raw_acc + "01" if len(raw_acc) == 8 else raw_acc
 KIS_MOCK_TRADING = st.secrets.get("KIS_MOCK_TRADING", False)
@@ -3430,411 +3512,161 @@ elif page.startswith("7-a."):
                 st.error("❌ [ AUTH ERROR ] KIS API 토큰 발행에 실패했습니다.")
 
 elif page.startswith("7-b."):
-    st.header("[ DASHBOARD ] 모의투자 현황 및 결과 (Tactical Dashboard)")
-    trades = load_trades()
-    uid = st.session_state.current_user
-    user_trades = [t for t in trades["mock"] if t["user"] == uid]
-    EX_RATE, _ = get_macro_data() # 실시간 환율 반영
-
-    if uid not in trades["wallets"]:
-        trades["wallets"][uid] = 10000000.0
-        save_trades(trades)
+    st.header("[ MONITOR ] 사령부 자산 관제소 (Tactical Monitor)")
     
-    st.markdown(f"""
-        <span style='color: #AAA;'>[ CASH ] 가상 사령부 금고 잔고 (예수금):</span> 
-        <b style='color: #FFD700; font-size: 1.2rem; margin-left: 10px;'>{trades['wallets'][uid]:,.0f} KRW</b>
-    </div>
-    """, unsafe_allow_html=True)
+    tab_mock, tab_real = st.tabs(["📊 가상(Simulation) 계좌", "🏦 실전(KIS) 계좌"])
+    
+    with tab_mock:
+        trades = load_trades()
+        uid = st.session_state.current_user
+        user_trades = [t for t in trades["mock"] if t["user"] == uid]
+        EX_RATE, _ = get_macro_data() # 실시간 환율 반영
 
-    st.subheader("[ PORTFOLIO ] 현재 보유 중인 가상 포트폴리오")
-    if not user_trades:
-        st.info("현재 보유 중인 가상 종목이 없습니다. 7-a에서 매수를 진행해 주세요.")
-    else:
-        results = []
-        ticker_total_value = 0
-        with st.spinner("가상 사령부 나노-배치 데이터 동기화 중..."):
-            tickers = list(set([t['ticker'] for t in user_trades]))
-            if tickers:
-                # 🚀 성능 최적화: 현재가와 SMA10을 위한 20일치 데이터를 한 번에 가져옴
-                data_batch = yf.download(tickers, period="30d", progress=False)
-                close_batch = data_batch['Close']
-                if isinstance(close_batch, pd.Series): close_batch = pd.DataFrame(close_batch).T
-                
-                for i, t in enumerate(user_trades):
-                    try:
-                        tic = t['ticker']
-                        if tic not in close_batch.columns: continue
-                        
-                        h_series = close_batch[tic].dropna()
-                        curr_p_raw = float(h_series.iloc[-1])
-                        sma10 = h_series.rolling(10).mean().iloc[-1]
-                        
-                        is_kr = t.get("is_kr", tic.endswith(".KS") or tic.endswith(".KQ"))
-                        
-                        if is_kr:
-                            cost_krw = t['buy_price'] * t['amount']
-                            curr_val_krw = curr_p_raw * t['amount']
-                            price_display = f"{curr_p_raw:,.0f}원"
-                        else:
-                            cost_krw = t['buy_price'] * t['amount'] * EX_RATE
-                            curr_val_krw = curr_p_raw * t['amount'] * EX_RATE
-                            price_display = f"${curr_p_raw:,.2f}"
-                        
-                        profit_krw = curr_val_krw - cost_krw
-                        roi = ((curr_p_raw / t['buy_price']) - 1) * 100
-                        ticker_total_value += curr_val_krw
-                        
-                        # 섹터 데이터 수집용 (아래 원형 차트에 사용)
-                        results.append({"Ticker": tic, "Value(KRW)": curr_val_krw})
-
-                        # --- [ TARGET ] SMA10 트레일링 스탑 정밀 게이지 ---
-                        vcolor = "#00FF00" if curr_p_raw >= sma10 else "#FF4B4B"
-                        dist_sma = (curr_p_raw / sma10 - 1) * 100
-                        
-                        with st.expander(f"🔍 {tic} 전술 분석 (SMA10: {sma10:,.2f})", expanded=False):
-                            c_sub1, c_sub2 = st.columns([1, 2])
-                            with c_sub1:
-                                st.markdown(f"""
-                                <div style='text-align:center; padding:15px; background:rgba(0,0,0,0.2); border-radius:10px; border-top:3px solid {vcolor};'>
-                                    <small style='color:#888;'>10일선 대비</small><br>
-                                    <b style='color:{vcolor}; font-size:1.5rem;'>{dist_sma:+,.2f}%</b><br>
-                                    <small style='color:{"#00FF00" if dist_sma > 0 else "#FF4B4B"};'>
-                                        {"[ SAFE ] 안전 구역" if dist_sma > 0 else "[ ALERT ] 위기(데드라인)"}
-                                    </small>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            with c_sub2:
-                                # 🚀 배치 데이터를 활용하여 개별 다운로드 없이 차트 생성
-                                fig_p = px.line(h_series, title=f"{tic} 30일 추세")
-                                fig_p.add_hline(y=t['buy_price'], line_dash="dash", line_color="yellow", annotation_text="ENTRY")
-                                fig_p.add_hline(y=sma10, line_dash="dot", line_color="cyan", annotation_text="SMA10")
-                                fig_p.update_layout(height=180, margin=dict(t=30, b=0, l=0, r=0))
-                                st.plotly_chart(fig_p, use_container_width=True)
-
-                        c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1])
-                        c1.markdown(f"<p class='neon-glow' style='margin:0;'>{tic}</p>", unsafe_allow_html=True)
-                        c2.write(f"{t['amount']}주")
-                        c3.write(price_display)
-                        
-                        res_color = "#00FF00" if profit_krw > 0 else "#FF4B4B"
-                        c4.markdown(f"<span style='color:{res_color}; font-weight:700;'>{profit_krw:+,.0f} 원 ({roi:+.2f}%)</span>", unsafe_allow_html=True)
-                        
-                        if c5.button("[ SELL ] 매도", key=f"sell_{t['id']}_{i}"):
-                            trades["wallets"][uid] += curr_val_krw
-                            sell_record = t.copy()
-                            sell_record["sell_price"] = curr_p_raw
-                            sell_record["final_profit_krw"] = profit_krw
-                            sell_record["date_sold"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            trades["history"].append(sell_record)
-                            trades["mock"] = [trade for trade in trades["mock"] if trade["id"] != t["id"]]
-                            save_trades(trades)
-                            st.rerun()
-                    except: pass
+        if uid not in trades["wallets"]:
+            trades["wallets"][uid] = 10000000.0
+            save_trades(trades)
         
         st.markdown(f"""
-        <div class='glass-card' style='border-top: 3px solid #00FF00; margin-top: 20px;'>
-            <h3 style='margin:0;'>[ TOTAL ] 총 자산 평가액: <span style='color:#00FF00;'>{(trades['wallets'][uid] + ticker_total_value):,.0f} KRW</span></h3>
-            <p style='margin:0; font-size:0.9rem; color:#888;'>예수금({trades['wallets'][uid]:,.0f}) + 주식평가({ticker_total_value:,.0f})</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # --- [ SECTOR ] Portfolio Sector Allocation ---
-        st.divider()
-        st.subheader("[ SECTOR ] 포트폴리오 섹터별 비중 (Sector Allocation)")
-        if results:
-            df_sector = pd.DataFrame(results)
-            # 가상의 섹터 매핑 (간소화)
-            sector_map = {
-                "NVDA": "반도체/AI", "TSLA": "전기차", "AAPL": "빅테크", "MSFT": "클라우드/AI",
-                "PLTR": "소프트웨어", "SMCI": "하드웨어", "AMD": "반도체", "NFLX": "콘텐츠",
-                "005930.KS": "반도체", "000660.KS": "반도체", "196170.KQ": "바이오"
-            }
-            df_sector['Sector'] = df_sector['Ticker'].apply(lambda x: sector_map.get(x, "기타/혼합"))
-            
-            fig_pie = px.pie(df_sector, values='Value(KRW)', names='Sector', title='섹터별 투자 비중',
-                             hole=.4, color_discrete_sequence=px.colors.sequential.Gold)
-            fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
-            st.plotly_chart(fig_pie, use_container_width=True)
-
-    st.divider()
-    st.subheader("[ HISTORY ] 가상매매 종결 내역 (Sell History)")
-    user_history = [t for t in trades.get("history", []) if t["user"] == st.session_state.current_user]
-    if user_history:
-        h_df = pd.DataFrame(user_history)
-        h_df = h_df[["date", "date_sold", "ticker", "buy_price", "sell_price", "amount", "final_profit_krw"]]
-        h_df.columns = ["매수일시", "매도일시", "종목", "매수가($)", "매도가($)", "수량", "확정수익(원)"]
-        
-        def color_profit(val):
-            color = '#ff4b4b' if val > 0 else '#6366f1' if val < 0 else 'white'
-            return f'color: {color}; font-weight: bold;'
-
-        st.dataframe(h_df.style.applymap(color_profit, subset=["확정수익(원)"]), use_container_width=True)
-        
-        total_p = h_df["확정수익(원)"].sum()
-        p_status = "UP" if total_p > 0 else "DOWN"
-        st.markdown(f"### [{p_status}] 총 누적 실현 수익: <span style='color:{('#ff4b4b' if total_p > 0 else '#6366f1')};'>{total_p:+,.0f} 원</span>", unsafe_allow_html=True)
-    else:
-        st.info("아직 매도 종결된 내역이 없습니다.")
-
-elif page.startswith("7-c."):
-    st.title("🛰️ AUTONOMOUS ENGINE")
-    st.markdown("<div class='glass-card'>실시간 데이터 스트림을 분석하여 프라딥 본데의 'EP/VCP' 셋업을 자동 탐색합니다.</div>", unsafe_allow_html=True)
-    
-    if "scanning_results" not in st.session_state: st.session_state.scanning_results = []
-    if "scanning_active" not in st.session_state: st.session_state.scanning_active = False
-
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-    real_total, real_cash, real_holdings = get_kis_balance(token)
-    over_total, over_holdings = get_kis_overseas_balance(token)
-    full_balance = real_total + over_total
-
-    status_color = "#00FF00" if st.session_state.scanning_active else "#FF4B4B"
-    st.markdown(f"""
-        <div class='glass-card' style='border-left: 5px solid {status_color};'>
-            <div style='display: flex; justify-content: space-between; align-items: center;'>
-                <div>
-                    <span style='color: #888; font-size: 0.8rem; font-family:"Orbitron";'>OPERATIONAL STATUS</span><br>
-                    <b style='color: {status_color}; font-size: 1.2rem;'>
-                        <span class='status-pulse' style='background:{status_color};'></span>
-                        {"ENGINE ACTIVE" if st.session_state.scanning_active else "SYSTEM STANDBY"}
-                    </b>
-                </div>
-                <div style='text-align: right;'>
-                    <span style='color: #888; font-size: 0.8rem; font-family:"Orbitron";'>COMMANDER EQUITY</span><br>
-                    <b style='color: var(--neon-gold); font-size: 1.6rem; font-family:"Orbitron";'>{full_balance:,.0f} <small style='font-size:0.8rem;'>KRW</small></b>
-                </div>
+            <div class='glass-card' style='border-top: 3px solid var(--neon-gold);'>
+                <span style='color: #AAA;'>[ CASH ] 가상 사령부 금고 잔고 (예수금):</span> 
+                <b style='color: #FFD700; font-size: 1.2rem; margin-left: 10px;'>{trades['wallets'][uid]:,.0f} KRW</b>
             </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.subheader("[ SCAN ] 실시간 전략 스캐닝 현황")
-    if st.session_state.scanning_active:
-        st.markdown("""
-        <style>
-            @keyframes led-blink {
-                0% { background-color: rgba(255, 0, 0, 0.2); box-shadow: 0 0 5px #FF0000; }
-                50% { background-color: rgba(255, 0, 0, 0.8); box-shadow: 0 0 20px #FF0000; }
-                100% { background-color: rgba(255, 0, 0, 0.2); box-shadow: 0 0 5px #FF0000; }
-            }
-            div[data-testid="stVerticalBlock"] > div:has(button:contains("🔍 엔진 가동")) button {
-                animation: led-blink 1s infinite !important;
-                color: white !important;
-                border: 2px solid #FF0000 !important;
-            }
-        </style>
         """, unsafe_allow_html=True)
 
-    col_btn1, col_btn2 = st.columns([1, 1])
-    with col_btn1:
-        if st.button("🔍 엔진 가동 (Start)", use_container_width=True):
-            st.session_state.scanning_active = True
-            st.session_state.live_toggle_v6_pro = True # 실전 매매 동시 시작
-            st.rerun()
-    with col_btn2:
-        if st.button("🛑 가동 중단 (Stop)", use_container_width=True):
-            st.session_state.scanning_active = False
-            st.session_state.live_toggle_v6_pro = False # 실전 매매 강제 중단
-            st.rerun()
-
-    # --- [ AUTO-SCANNING LOOP ] ---
-    if st.session_state.scanning_active:
-        # 실시간 전술 브리핑 판넬
-        st.markdown("---")
-        st.markdown(f"#### 📡 LIVE TACTICAL MONITORING (Loop Active)")
-        report_placeholder = st.empty()
-        
-        while st.session_state.scanning_active:
-            # 현재 시각 동기화
-            now = datetime.now()
-            current_time_str = now.strftime('%Y-%m-%d %H:%M:%S')
-            report_log = [f"🕒 Last Update: {current_time_str}"]
-            
-            with st.status(f"[ MONITORING ] {current_time_str} 전술 스캐닝 가동 중...", expanded=True) as status:
-                targets = sorted(list(set(get_bonde_top_50() + get_kospi_top_200())))
-                st.session_state.universe_list = []
-                st.session_state.rs_target_list = []
-                st.session_state.execution_list = []
-                
-                try:
-                    all_hist = yf.download(targets[:40], period="1y", progress=False)
-                except: all_hist = None
-                
-                scanned_pool = []
-                for t in targets[:40]: 
-                    t_hist = None
-                    if all_hist is not None:
+        st.subheader("[ PORTFOLIO ] 현재 보유 중인 가상 포트폴리오")
+        if not user_trades:
+            st.info("현재 보유 중인 가상 종목이 없습니다. 7-a에서 매수를 진행해 주세요.")
+        else:
+            # ... (virtual portfolio logic)
+            results = []
+            ticker_total_value = 0
+            with st.spinner("가상 데이터 동기화 중..."):
+                tickers = list(set([t['ticker'] for t in user_trades]))
+                if tickers:
+                    data_batch = get_bulk_market_data(tickers, period="30d")
+                    close_batch = data_batch['Close']
+                    if isinstance(close_batch, pd.Series): close_batch = pd.DataFrame(close_batch).T
+                    
+                    for i, t in enumerate(user_trades):
                         try:
-                            t_hist = pd.DataFrame({
-                                "Close": all_hist["Close"][t], "High": all_hist["High"][t],
-                                "Low": all_hist["Low"][t], "Volume": all_hist["Volume"][t]
-                            }).dropna()
-                        except: t_hist = None
-                    
-                    res = analyze_stockbee_setup(t, hist_df=t_hist)
-                    res["ticker"] = t
-                    res["name"] = TICKER_NAME_MAP.get(t, t)
-                    scanned_pool.append(res)
-                    
-                    # 실시간 중계
-                    report_placeholder.markdown(f"📡 `{t}` 분석 중... (진행률: {len(scanned_pool)}/40)")
-
-                # RS 기반 랭킹 및 필터링
-                top_10_pool = sorted(scanned_pool, key=lambda x: x.get('rs', 0), reverse=True)[:10]
-                token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-                _, _, real_holdings = get_kis_balance(token)
-                _, over_holdings = get_kis_overseas_balance(token)
-                current_holdings_count = len(real_holdings) + len(over_holdings)
-
-                for res in top_10_pool:
-                    name, t = res['name'], res['ticker']
-                    if res["status"] == "SUCCESS":
-                        st.session_state.execution_list.append(res)
-                        
-                        # [ TACTICAL RECORDING ] 주문 결과와 상관없이 전술 기록에 무조건 저장
-                        trades = load_trades()
-                        new_log = {
-                            "id": str(int(time.time())) + f"_{t}", "user": st.session_state.get("current_user", "Commander"),
-                            "ticker": t, "name": name, "buy_price": res['close'], "reason": res['reason'],
-                            "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "status": "포착됨"
-                        }
-                        
-                        if st.session_state.get("live_toggle_v6_pro"):
-                            if current_holdings_count < 4:
-                                invest_amount = full_balance * 0.25
-                                qty = int(invest_amount / res['close']) if res['close'] > 0 else 0
-                                if qty > 0:
-                                    success = execute_kis_market_order(t, qty, is_buy=True)
-                                    if success:
-                                        report_log.append(f"🚀 **[ BUY ] {name}** (체결 성공)")
-                                        new_log["status"] = "체결완료"
-                                    else:
-                                        report_log.append(f"⚠️ **[ BUY ] {name}** (잔액부족/실패 - 기록 보존)")
-                                        new_log["status"] = "잔액부족(기록)"
-                        else:
-                            report_log.append(f"🎯 **[ SIGNAL ] {name}** (모의 포착)")
-                        
-                        trades["auto"].append(new_log)
-                        save_trades(trades)
-                    elif res["status"] == "PASS":
-                        if res["stage"] == "RS_TARGET": st.session_state.rs_target_list.append(res)
-                        else: st.session_state.universe_list.append(res)
-
-                status.update(label="[ SUCCESS ] 정밀 분석 완료. 다음 사이클 대기 중...", state="complete")
+                            tic = t['ticker']
+                            if tic not in close_batch.columns: continue
+                            h_series = close_batch[tic].dropna()
+                            curr_p_raw = float(h_series.iloc[-1])
+                            sma10 = h_series.rolling(10).mean().iloc[-1]
+                            is_kr = t.get("is_kr", tic.endswith(".KS") or tic.endswith(".KQ"))
+                            if is_kr:
+                                cost_krw = t['buy_price'] * t['amount']
+                                curr_val_krw = curr_p_raw * t['amount']
+                                price_display = f"{curr_p_raw:,.0f}원"
+                            else:
+                                cost_krw = t['buy_price'] * t['amount'] * EX_RATE
+                                curr_val_krw = curr_p_raw * t['amount'] * EX_RATE
+                                price_display = f"${curr_p_raw:,.2f}"
+                            
+                            profit_krw = curr_val_krw - cost_krw
+                            roi = ((curr_p_raw / t['buy_price']) - 1) * 100
+                            ticker_total_value += curr_val_krw
+                            results.append({"Ticker": tic, "Value(KRW)": curr_val_krw})
+                            
+                            c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1])
+                            c1.markdown(f"<p class='neon-glow' style='margin:0;'>{tic}</p>", unsafe_allow_html=True)
+                            c2.write(f"{t['amount']}주")
+                            c3.write(price_display)
+                            res_color = "#00FF00" if profit_krw > 0 else "#FF4B4B"
+                            c4.markdown(f"<span style='color:{res_color}; font-weight:700;'>{profit_krw:+,.0f} 원 ({roi:+.2f}%)</span>", unsafe_allow_html=True)
+                            if c5.button("[ SELL ] 매도", key=f"sell_{t['id']}_{i}"):
+                                trades["wallets"][uid] += curr_val_krw
+                                sell_record = t.copy()
+                                sell_record["sell_price"] = curr_p_raw
+                                sell_record["final_profit_krw"] = profit_krw
+                                sell_record["date_sold"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                trades["history"].append(sell_record)
+                                trades["mock"] = [trade for trade in trades["mock"] if trade["id"] != t["id"]]
+                                save_trades(trades)
+                                st.rerun()
+                        except: pass
             
-            # 대시보드 갱신
-            report_placeholder.markdown("\n".join(report_log))
-            
-            # --- [ BONDE TACTICAL GRID ] 실시간 전술 상황판 ---
-            st.markdown("---")
-            st.markdown("### 🏹 BONDE TACTICAL GRID (Stage Ranking)")
-            grid_col1, grid_col2, grid_col3 = st.columns(3)
-            
-            with grid_col1:
-                st.markdown("<div style='background:rgba(255,75,75,0.1); padding:10px; border-radius:10px; border-top:3px solid #FF4B4B;'><h4 style='margin:0; color:#FF4B4B;'>⚡ EP (폭발) TOP 5</h4></div>", unsafe_allow_html=True)
-                ep_candidates = st.session_state.get('ep_results', [])[:5]
-                for idx, res in enumerate(ep_candidates, 1):
-                    st.markdown(f"**{idx}.** 🚀 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FF4B4B; float:right;'>{res.get('day_pct', 0):+.2f}%</span>", unsafe_allow_html=True)
-                if not ep_candidates: st.caption("전술적 폭발 대기 중...")
-            
-            with grid_col2:
-                st.markdown("<div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #FFD700;'><h4 style='margin:0; color:#FFD700;'>⏳ DR (지연반응) TOP 5</h4></div>", unsafe_allow_html=True)
-                dr_candidates = st.session_state.get('dr_results', [])[:5]
-                for idx, res in enumerate(dr_candidates, 1):
-                    st.markdown(f"**{idx}.** ⏳ **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FFD700; float:right;'>RS: {res.get('rs', 0)}</span>", unsafe_allow_html=True)
-                if not dr_candidates: st.caption("촉매제 반응 분석 중...")
-
-            with grid_col3:
-                st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축) TOP 5</h4></div>", unsafe_allow_html=True)
-                tight_candidates = st.session_state.get('tight_results', [])[:5]
-                for idx, res in enumerate(tight_candidates, 1):
-                    st.markdown(f"**{idx}.** 🎯 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#00FF00; float:right;'>T: {res.get('tight', 0):.2f}%</span>", unsafe_allow_html=True)
-                if not tight_candidates: st.caption("에너지 응축 패턴 정밀 스캔...")
-
-            # --- [ XAI: TACTICAL REASONING ] 왜 사고, 왜 안 샀는가? ---
-            st.markdown("---")
-            reason_col1, reason_col2 = st.columns(2)
-            
-            with reason_col1:
-                st.markdown("<h4 style='color:#00FF00;'>✅ WHY BUY? (매수 근거)</h4>", unsafe_allow_html=True)
-                if st.session_state.execution_list:
-                    for res in st.session_state.execution_list[:3]:
-                        st.success(f"**{res['name']}**: {res['reason']} (자본 25% 투입)")
-                else:
-                    st.info("현재 매수 조건을 완벽히 충족한 종목이 없습니다.")
-
-            with reason_col2:
-                st.markdown("<h4 style='color:#FF4B4B;'>❌ WHY NOT? (보류/탈락 사유)</h4>", unsafe_allow_html=True)
-                reject_pool = [r for r in scanned_pool if r["status"] in ["REJECT", "PASS"] and r.get("reason")][:5]
-                for res in reject_pool:
-                    st.error(f"🚩 **{res['name']}** <small>({res['ticker']})</small>: {res['reason']}")
-
-            # --- [ AI TERMINAL ANALYSIS ] 실시간 터미널 화면 분석 ---
             st.markdown(f"""
-            <div class='glass-card' style='border-left: 5px solid var(--neon-blue); margin-top: 20px; background: rgba(0, 255, 255, 0.02);'>
-                <h4 style='color: var(--neon-blue); margin-bottom: 10px; font-family: "Orbitron";'>📡 AI TERMINAL OPERATIVE ANALYSIS</h4>
-                <p style='font-size: 0.9rem; color: #BBB; line-height: 1.6;'>
-                    <b>[ REAL-TIME STATUS ]</b> 분석 결과 보고드립니다. 현재 일부 종목이 <span style='color: var(--neon-red);'>+0.0%</span>로 표시되는 현상은 다음과 같은 전술적 이유로 발생할 수 있습니다:<br><br>
-                    1. <b>데이터 동기화 대기:</b> 사령부 엔진이 실시간 마켓 데이터를 페칭하는 매우 짧은 주기에 스냅샷이 포착되었을 가능성이 큽니다.<br>
-                    2. <b>캐시 초기 상태:</b> 터미널 구동 직후 전역 마켓 데이터가 데이터베이스에 완전히 등재되기 전의 일시적인 현상입니다.<br><br>
-                    <span style='color: var(--neon-green);'>※ 시스템은 정상 가동 중이며, 수 초 내에 최신 시세와 전술 지표가 자동으로 업데이트됩니다.</span>
-                </p>
+            <div class='glass-card' style='border-top: 3px solid #00FF00; margin-top: 20px;'>
+                <h3 style='margin:0;'>[ TOTAL ] 총 자산 평가액: <span style='color:#00FF00;'>{(trades['wallets'][uid] + ticker_total_value):,.0f} KRW</span></h3>
+                <p style='margin:0; font-size:0.9rem; color:#888;'>예수금({trades['wallets'][uid]:,.0f}) + 주식평가({ticker_total_value:,.0f})</p>
             </div>
             """, unsafe_allow_html=True)
 
-            # --- [ DETAILED SCAN RESULTS ] ---
-            st.markdown("---")
-            st.markdown("### 📊 [ ANALYTICS ] Scanned Stocks Deep-Dive")
+    with tab_real:
+        st.subheader("🏦 한국투자증권(KIS) 실전 계좌 현황")
+        token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+        if not token:
+            st.error("❌ KIS API 인증 실패. API Key와 Secret을 확인하십시오.")
+        else:
+            real_total, real_cash, real_holdings = get_kis_balance(token)
+            over_total, over_holdings = get_kis_overseas_balance(token)
             
-            # 표시할 종목 선정 (실행 대상 + 고RS 종목)
-            detail_pool = st.session_state.execution_list + sorted([r for r in scanned_pool if r['status'] != 'ERROR'], key=lambda x: x.get('rs', 0), reverse=True)[:5]
-            seen = set()
-            unique_details = []
-            for r in detail_pool:
-                if r['ticker'] not in seen:
-                    unique_details.append(r)
-                    seen.add(r['ticker'])
+            col_acc1, col_acc2 = st.columns(2)
+            with col_acc1:
+                st.markdown(f"""
+                <div class='glass-card' style='border-left: 5px solid var(--neon-blue);'>
+                    <small style='color:#888;'>국내 자산 총액</small>
+                    <h2 style='color:var(--neon-blue); margin:0;'>{real_total:,.0f} <small>KRW</small></h2>
+                    <p style='margin:0; font-size:0.8rem; color:#666;'>예수금: {real_cash:,.0f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_acc2:
+                st.markdown(f"""
+                <div class='glass-card' style='border-left: 5px solid var(--neon-gold);'>
+                    <small style='color:#888;'>해외 자산 총액</small>
+                    <h2 style='color:var(--neon-gold); margin:0;'>{over_total:,.0f} <small>KRW</small></h2>
+                    <p style='margin:0; font-size:0.8rem; color:#666;'>미국 주식 평가액 포함</p>
+                </div>
+                """, unsafe_allow_html=True)
             
-            for res in unique_details[:8]:
-                with st.expander(f"📈 {res['name']} ({res['ticker']}) - RS: {res.get('rs', 0)} / ADR: {res.get('adr', 0)}%", expanded=False):
-                    d_col1, d_col2 = st.columns([2, 1])
-                    with d_col1:
-                        # [ SIMPLE TACTICAL CHART ] 핵심 지표만 남긴 미니멀 차트
-                        token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-                        is_kr = res['ticker'].endswith(".KS") or res['ticker'].endswith(".KQ")
-                        df = get_kis_ohlcv(res['ticker'], token) if is_kr else get_kis_overseas_ohlcv(res['ticker'], token)
-                        
-                        if not df.empty:
-                            df['SMA7'] = df['Close'].rolling(7).mean()
-                            df['SMA65'] = df['Close'].rolling(65).mean()
-                            fig = go.Figure()
-                            fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='P'))
-                            fig.add_trace(go.Scatter(x=df.index, y=df['SMA7'], line=dict(color='#00FFFF', width=1), name='7'))
-                            fig.add_trace(go.Scatter(x=df.index, y=df['SMA65'], line=dict(color='#FFD700', width=1.5), name='65'))
-                            fig.update_layout(template='plotly_dark', height=250, margin=dict(l=0,r=0,t=0,b=0), xaxis_rangeslider_visible=False, showlegend=False)
-                            st.plotly_chart(fig, use_container_width=True)
-                        else:
-                            st.caption("📡 KIS 차트 데이터 수신 중...")
-                    
-                    with d_col2:
-                        roe = get_ticker_roe(res['ticker'])
-                        vol_ratio = (res['volume'] / res['prev_volume'] * 100) if res.get('prev_volume', 0) > 0 else 0
-                        
-                        st.metric("ROE (연환산)", f"{roe:.1f}%")
-                        st.metric("RS Score (본데)", f"{res.get('rs', 0)}")
-                        st.metric("Vol Ratio (vs Yesterday)", f"{vol_ratio:.1f}%", delta=f"{vol_ratio-100:.1f}%" if vol_ratio > 0 else None)
-                        
-                        st.markdown(f"""
-                        <div style='background:rgba(0,255,255,0.05); padding:10px; border-radius:10px; border:1px solid #00FFFF33;'>
-                            <small style='color:#00FFFF;'>TACTICAL NOTE</small><br>
-                            <b style='font-size:0.9rem;'>{res.get('reason', 'N/A')}</b><br>
-                            <span style='font-size:0.7rem; color:#888;'>TI65: {res.get('ti65')} / Tight: {res.get('tight')}</span>
-                        </div>
-                        """, unsafe_allow_html=True)
+            st.divider()
+            st.subheader("📋 [ REAL HOLDINGS ] 실전 보유 종목")
+            
+            all_real_holdings = []
+            for h in real_holdings:
+                all_real_holdings.append({
+                    "티커": h.get('pdno', '-'),
+                    "종목명": h.get('prdt_name', '-'),
+                    "수량": int(h.get('hldg_qty', 0)),
+                    "평균단가": float(h.get('pchs_avg_pric', 0)),
+                    "현재가": float(h.get('prpr', 0)),
+                    "수익률": float(h.get('evlu_erng_rt', 0)),
+                    "평가금액": float(h.get('tot_evlu_amt', 0)),
+                    "지역": "국내"
+                })
+            for h in over_holdings:
+                all_real_holdings.append({
+                    "티커": h.get('ovrs_pdno', '-'),
+                    "종목명": h.get('ovrs_item_name', '-'),
+                    "수량": int(h.get('hldg_qty', 0)),
+                    "평균단가": float(h.get('pchs_avg_pric', 0)),
+                    "현재가": float(h.get('now_pric', 0)),
+                    "수익률": float(h.get('evlu_erng_rt', 0)),
+                    "평가금액": float(h.get('tot_evlu_pamt', 0)),
+                    "지역": "해외"
+                })
+            
+            if not all_real_holdings:
+                st.info("보유 중인 실전 종목이 없습니다.")
+            else:
+                df_real = pd.DataFrame(all_real_holdings)
+                def color_roi(val):
+                    color = '#00FF00' if val > 0 else '#FF4B4B' if val < 0 else 'white'
+                    return f'color: {color}; font-weight: bold;'
+                st.dataframe(df_real.style.applymap(color_roi, subset=["수익률"]), use_container_width=True, hide_index=True)
 
-            # --- [ LOOP CONTROL ] ---
-            time.sleep(30) 
-            if not st.session_state.scanning_active: break
-            st.rerun()
+        st.divider()
+        st.subheader("[ HISTORY ] 가상매매 종결 내역 (Sell History)")
+        user_history = [t for t in trades.get("history", []) if t["user"] == st.session_state.current_user]
+        if user_history:
+            h_df = pd.DataFrame(user_history)
+            h_df = h_df[["date", "date_sold", "ticker", "buy_price", "sell_price", "amount", "final_profit_krw"]]
+            h_df.columns = ["매수일시", "매도일시", "종목", "매수가", "매도가", "수량", "확정수익(원)"]
+            st.dataframe(h_df, use_container_width=True, hide_index=True)
+
+
 elif page.startswith("7-c."):
     st.title("🛰️ STOCKBEE PROCEDURAL ENGINE")
     st.markdown("""
