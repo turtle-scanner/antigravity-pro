@@ -348,12 +348,12 @@ def get_macro_indicators():
 
 # --- [ ENGINE ] KIS API & Core Trading Logic ---
 # [ SECURITY ] 사용자가 제공한 API 정보를 우선 적용하되, secrets 설정이 있다면 그것을 따릅니다.
-KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "PSwPjCXRoSuY1Uz59aDWYKpIPix7VgNB8QUX")
-KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "4WF33M5pnD3Y3qskLfWAlwo0eFxpYIK+TdIXNVW9r+wSLAAF/WVxtqDIvNBDNakV28aFM9ZO+v8069JwBlYDpS1lBvoFf7j9dgSsPwjiwclbvyJ7nMYl5m62wH7VInWWtXgl/8hDnmihzDidKEIss87UdT42JANMvOrCSEF18e5SilJKRIA=")
-# 계좌번호가 8자리일 경우 상품코드 '01'을 기본으로 붙여 10자리로 보정
-raw_acc = st.secrets.get("KIS_ACCOUNT_NO", "46289819")
+KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "")
+KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "")
+# 계좌번호 키 명칭 동기화 (KIS_ACCOUNT 또는 KIS_ACCOUNT_NO 대응)
+raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "46289819")).replace("-", "")
 KIS_ACCOUNT_NO = raw_acc + "01" if len(raw_acc) == 8 else raw_acc
-KIS_MOCK_TRADING = st.secrets.get("KIS_MOCK_TRADING", False) # 실전 계좌 연동을 위해 False 설정 권장
+KIS_MOCK_TRADING = st.secrets.get("KIS_MOCK_TRADING", False)
 
 @st.cache_data(ttl=3500)
 def get_kis_access_token(app_key, app_secret, mock=True):
@@ -678,17 +678,17 @@ def get_kis_overseas_ohlcv(ticker, token):
     except: return pd.DataFrame()
 
 def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
-    """프라딥 본데(Stockbee) 전략 정밀 분석 엔진 v6.0 (Global KIS Core)"""
+    """프라딥 본데(Stockbee) 전략 정밀 분석 엔진 v8.0 (Global Pure KIS Core)"""
     try:
         is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
-        # [ GLOBAL KIS DATA ENGINE ] 한/미 모두 KIS OpenAPI 우선 사용
-        if kis_token:
-            hist = get_kis_ohlcv(ticker, kis_token) if is_kr else get_kis_overseas_ohlcv(ticker, kis_token)
-        else:
-            # 토큰 없을 경우만 외부 소스 사용 (안전 장치)
-            hist = get_naver_ohlcv(ticker) if is_kr else (hist_df if hist_df is not None else yf.Ticker(ticker).history(period="1y"))
+        # [ PURE KIS DATA ENGINE ] 모든 자료는 한국투자증권 OpenAPI에서 100% 수집
+        token = kis_token if kis_token else get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+        hist = get_kis_ohlcv(ticker, token) if is_kr else get_kis_overseas_ohlcv(ticker, token)
+        
+        if hist.empty:
+            return {"status": "REJECT", "reason": "데이터 부족 (KIS OpenAPI 0봉)", "ticker": ticker, "name": ticker}
             
-        if len(hist) < 70: 
+        if len(hist) < 70:
             return {"status": "REJECT", "reason": f"데이터 부족 (필요:70봉, 현재:{len(hist)}봉)", "ticker": ticker, "name": ticker}
         
         # [ PREPARE DATA ]
@@ -3697,25 +3697,25 @@ elif page.startswith("7-c."):
             grid_col1, grid_col2, grid_col3 = st.columns(3)
             
             with grid_col1:
-                st.markdown("<div style='background:rgba(255,75,75,0.1); padding:10px; border-radius:10px; border-top:3px solid #FF4B4B;'><h4 style='margin:0; color:#FF4B4B;'>⚡ EP (폭발)</h4></div>", unsafe_allow_html=True)
+                st.markdown("<div style='background:rgba(255,75,75,0.1); padding:10px; border-radius:10px; border-top:3px solid #FF4B4B;'><h4 style='margin:0; color:#FF4B4B;'>⚡ EP (폭발) TOP 5</h4></div>", unsafe_allow_html=True)
                 # 엄격한 EP 필터링 (is_ep 플래그 전용)
-                ep_candidates = sorted([r for r in scanned_pool if r.get('is_ep')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+                ep_candidates = sorted([r for r in st.session_state.get('scanned_pool', []) if r.get('is_ep')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
                 for idx, res in enumerate(ep_candidates, 1):
-                    st.markdown(f"**{idx}.** 🚀 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FF4B4B; float:right;'>{res.get('day_pct', 0):+.1f}%</span>", unsafe_allow_html=True)
+                    st.markdown(f"**{idx}.** 🚀 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FF4B4B; float:right;'>{res.get('day_pct', 0):+.2f}%</span>", unsafe_allow_html=True)
                 if not ep_candidates: st.caption("전술적 폭발 대기 중...")
             
             with grid_col2:
-                st.markdown("<div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #FFD700;'><h4 style='margin:0; color:#FFD700;'>⏳ DR (지연반응)</h4></div>", unsafe_allow_html=True)
+                st.markdown("<div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #FFD700;'><h4 style='margin:0; color:#FFD700;'>⏳ DR (지연반응) TOP 5</h4></div>", unsafe_allow_html=True)
                 # 엄격한 DR 필터링 (is_dr 플래그 전용)
-                dr_candidates = sorted([r for r in scanned_pool if r.get('is_dr')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+                dr_candidates = sorted([r for r in st.session_state.get('scanned_pool', []) if r.get('is_dr')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
                 for idx, res in enumerate(dr_candidates, 1):
                     st.markdown(f"**{idx}.** ⏳ **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FFD700; float:right;'>RS: {res.get('rs', 0)}</span>", unsafe_allow_html=True)
                 if not dr_candidates: st.caption("촉매제 반응 분석 중...")
 
             with grid_col3:
-                st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축)</h4></div>", unsafe_allow_html=True)
+                st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축) TOP 5</h4></div>", unsafe_allow_html=True)
                 # 엄격한 TIGHT 필터링 (is_tight 플래그 전용)
-                tight_candidates = sorted([r for r in scanned_pool if r.get('is_tight')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+                tight_candidates = sorted([r for r in st.session_state.get('scanned_pool', []) if r.get('is_tight')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
                 for idx, res in enumerate(tight_candidates, 1):
                     st.markdown(f"**{idx}.** 🎯 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#00FF00; float:right;'>T: {res.get('tight', 0):.2f}%</span>", unsafe_allow_html=True)
                 if not tight_candidates: st.caption("에너지 응축 패턴 정밀 스캔...")
@@ -3765,13 +3765,30 @@ elif page.startswith("7-c."):
                     seen.add(r['ticker'])
             
             for res in unique_details[:8]:
-                with st.expander(f"📈 {res['name']} ({res['ticker']}) - RS: {res.get('rs', 0)} / ADR: {res.get('adr', 0)}%", expanded=False):
-                    d_col1, d_col2 = st.columns([2, 1])
                     with d_col1:
-                        symbol = res['ticker'].split('.')[0]
-                        exchange = "KRX" if res['ticker'].endswith(".KS") or res['ticker'].endswith(".KQ") else "NASDAQ"
-                        tv_url = f"https://s.tradingview.com/widgetembed/?frameElementId=tradingview_76d4d&symbol={exchange}%3A{symbol}&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=%5B%5D&theme=dark&style=1&timezone=Asia%2FSeoul"
-                        st.components.v1.iframe(tv_url, height=350)
+                        # [ DUAL CHART SYSTEM ] KIS OpenAPI + TradingView
+                        token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+                        is_kr = res['ticker'].endswith(".KS") or res['ticker'].endswith(".KQ")
+                        df = get_kis_ohlcv(res['ticker'], token) if is_kr else get_kis_overseas_ohlcv(res['ticker'], token)
+                        
+                        tabs = st.tabs(["📊 전술 차트 (KIS)", "📈 분석 위젯 (TV)"])
+                        with tabs[0]:
+                            if not df.empty:
+                                df['SMA7'] = df['Close'].rolling(7).mean()
+                                df['SMA65'] = df['Close'].rolling(65).mean()
+                                fig = go.Figure()
+                                fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='시세'))
+                                fig.add_trace(go.Scatter(x=df.index, y=df['SMA7'], line=dict(color='#00FFFF', width=1), name='SMA7'))
+                                fig.add_trace(go.Scatter(x=df.index, y=df['SMA65'], line=dict(color='#FFD700', width=1.5), name='SMA65'))
+                                fig.update_layout(template='plotly_dark', height=300, margin=dict(l=0,r=0,t=0,b=0), xaxis_rangeslider_visible=False)
+                                st.plotly_chart(fig, use_container_width=True)
+                            else: st.warning("KIS OpenAPI 데이터를 불러오는 중입니다...")
+                        
+                        with tabs[1]:
+                            symbol = res['ticker'].split('.')[0]
+                            exchange = "KRX" if is_kr else "NASDAQ"
+                            tv_url = f"https://s.tradingview.com/widgetembed/?frameElementId=tradingview_76d4d&symbol={exchange}%3A{symbol}&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=%5B%5D&theme=dark&style=1&timezone=Asia%2FSeoul"
+                            st.components.v1.iframe(tv_url, height=300)
                     
                     with d_col2:
                         roe = get_ticker_roe(res['ticker'])
@@ -3870,53 +3887,49 @@ elif page.startswith("7-c."):
                 st.rerun()
 
     if st.session_state.engine_active:
-        with st.status("📡 [ PHASE SCAN ] 절차적 전술 스캐닝 가동 중...", expanded=True) as status:
-            targets = list(set(get_bonde_top_50() + get_nasdaq_200() + get_kospi_top_200() + get_kosdaq_100()))
-            random.shuffle(targets)
+        with st.status("📡 [ HYPER SCAN ] 병렬 전술 스캐닝 가동 중...", expanded=True) as status:
+            universe = list(set(get_bonde_top_50() + get_nasdaq_200() + get_kospi_top_200() + get_kosdaq_100()))
+            random.shuffle(universe)
             
+            # [ OPTIMIZATION ] 병렬 분석 엔진 (최대 5개 스레드)
+            from concurrent.futures import ThreadPoolExecutor
+            
+            def fast_analyze(ticker):
+                return analyze_stockbee_setup(ticker, kis_token=token)
+
             # [ PHASE 1: EP EXPLOSION ]
-            status.update(label="⚡ PHASE 1: EP (폭발) 정밀 스캔 중...")
-            ep_pool = []
-            for t in targets[:40]: # 각 단계별 40종목 집중 분석
-                is_kr = t.endswith(".KS") or t.endswith(".KQ")
-                analysis = analyze_stockbee_setup(t, kis_token=token)
-                if analysis["status"] != "ERROR":
-                    ep_pool.append(analysis)
-                    if analysis.get("is_ep"):
-                        st.success(f"⚡ EP 포착: {analysis['name']}({t}) - 즉시 교전 개시!")
-                        if st.session_state.get("live_toggle_v6_pro"):
-                            execute_kis_market_order(t, 1, is_buy=True)
+            status.update(label="⚡ PHASE 1: EP (폭발) 병렬 분석 중...")
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                ep_pool = list(executor.map(fast_analyze, universe[:40]))
+            
             st.session_state.ep_results = sorted([r for r in ep_pool if r.get('is_ep')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+            for res in st.session_state.ep_results:
+                if st.session_state.get("live_toggle_v6_pro"):
+                    execute_kis_market_order(res['ticker'], 1, is_buy=True)
 
             # [ PHASE 2: DR DELAYED REACTION ]
-            status.update(label="⏳ PHASE 2: DR (지연반응) 촉매제 분석 중...")
-            dr_pool = []
-            for t in targets[40:80]:
-                analysis = analyze_stockbee_setup(t, kis_token=token)
-                if analysis["status"] != "ERROR":
-                    dr_pool.append(analysis)
-                    if analysis.get("is_dr"):
-                        st.info(f"⏳ DR 포착: {analysis['name']}({t}) - 전술적 진입!")
-                        if st.session_state.get("live_toggle_v6_pro"):
-                            execute_kis_market_order(t, 1, is_buy=True)
+            status.update(label="⏳ PHASE 2: DR (지연반응) 병렬 분석 중...")
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                dr_pool = list(executor.map(fast_analyze, universe[40:80]))
+                
             st.session_state.dr_results = sorted([r for r in dr_pool if r.get('is_dr')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+            for res in st.session_state.dr_results:
+                if st.session_state.get("live_toggle_v6_pro"):
+                    execute_kis_market_order(res['ticker'], 1, is_buy=True)
 
             # [ PHASE 3: TIGHT CONTRACTION ]
-            status.update(label="🔥 PHASE 3: TIGHT (응축) 패턴 스캔 중...")
-            tight_pool = []
-            for t in targets[80:120]:
-                analysis = analyze_stockbee_setup(t, kis_token=token)
-                if analysis["status"] != "ERROR":
-                    tight_pool.append(analysis)
-                    if analysis.get("is_tight"):
-                        st.warning(f"🎯 TIGHT 포착: {analysis['name']}({t}) - 선취매 집행!")
-                        if st.session_state.get("live_toggle_v6_pro"):
-                            execute_kis_market_order(t, 1, is_buy=True)
-            st.session_state.tight_results = sorted([r for r in tight_pool if r.get('is_tight')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+            status.update(label="🔥 PHASE 3: TIGHT (응축) 병렬 분석 중...")
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                tight_pool = list(executor.map(fast_analyze, universe[80:120]))
 
-            status.update(label="✅ [ COMPLETE ] 전술 사이클 완료. 30초 후 재가동...", state="complete")
-            st.session_state.scanning_results = ep_pool + dr_pool + tight_pool
-            time.sleep(30)
+            st.session_state.tight_results = sorted([r for r in tight_pool if r.get('is_tight')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+            for res in st.session_state.tight_results:
+                if st.session_state.get("live_toggle_v6_pro"):
+                    execute_kis_market_order(res['ticker'], 1, is_buy=True)
+
+            status.update(label="✅ [ COMPLETE ] 초고속 사이클 완료.", state="complete")
+            st.session_state.scanned_pool = ep_pool + dr_pool + tight_pool
+            time.sleep(10) # 속도 최적화로 대기 시간 단축
             st.rerun()
     else:
         st.info("⚠️ 엔진이 정지된 상태입니다. '엔진 수동 재가동' 버튼을 누르면 실시간 포착이 시작됩니다.")
