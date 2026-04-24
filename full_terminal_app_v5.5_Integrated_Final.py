@@ -169,6 +169,13 @@ LOSS_FILE = get_db_path("loss_reviews.csv")
 COMMENTS_FILE = get_db_path("shared_comments.csv")
 MASTER_GAS_URL = st.secrets.get("MASTER_GAS_URL", "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec")
 
+def gsheet_sync_bg(sheet_name, cols, row_data):
+    """비동기 구글 시트 데이터 전송 (UI 프리징 방지)"""
+    def task():
+        try: requests.post(MASTER_GAS_URL, json={"sheetName": sheet_name, "columns": cols, "row": row_data}, timeout=5)
+        except: pass
+    threading.Thread(target=task, daemon=True).start()
+
 
 
 
@@ -260,6 +267,35 @@ def get_bulk_market_data(tickers, period="60d"):
         data = yf.download(list(set(tickers)), period=period, progress=False)
         return data if not data.empty else pd.DataFrame()
     except: return pd.DataFrame()
+
+@st.cache_data(ttl=300)
+def fetch_macro_ticker_tape():
+    """애니메이션 티커용 데이터 수집"""
+    watch = {"S&P500": "^GSPC", "NASDAQ": "^IXIC", "BTC": "BTC-USD", "GOLD": "GC=F", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
+    data = get_bulk_market_data(list(watch.values()), "5d")
+    items = []
+    if not data.empty and 'Close' in data:
+        for name, sym in watch.items():
+            if sym in data['Close'].columns:
+                h = data['Close'][sym].dropna()
+                if len(h) >= 2:
+                    curr, prev = h.iloc[-1], h.iloc[-2]
+                    pct = (curr / prev - 1) * 100
+                    color = "#FF4B4B" if pct >= 0 else "#0088FF"
+                    items.append(f"<span class='ticker-item'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
+    return " ".join(items)
+
+@st.cache_data(ttl=3600)
+def get_bonde_top_50():
+    """본데 주도주 Top 50 리스트 (구글 시트 연동)"""
+    try:
+        url = "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=780517835"
+        resp = safe_get(url)
+        if resp:
+            df = pd.read_csv(io.StringIO(resp.text))
+            return df.iloc[:, 0].dropna().tolist()
+    except: pass
+    return ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN"]
 
 def get_ticker_data_from_bulk(bulk_df, ticker):
     """일괄 다운로드 데이터에서 특정 종목만 추출"""
@@ -652,44 +688,32 @@ def get_realtime_ai_ranking():
         })
     return sorted(results, key=lambda x: float(x["roi"].replace('%','')), reverse=True)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def load_users():
-    # 1. 먼저 로컬 파일 확인 (안전한 로드 사용)
+    """사용자 데이터 로드 (로컬 우선)"""
     users = safe_load_json(USER_DB_FILE, {})
-    
-    # 2. 구글 시트에서 최신 정보 가져와서 동기화 (비동기 시도)
-    if USERS_SHEET_URL:
-        # 로그인 페이지거나 관리자 페이지 등 인원이 꼭 필요한 경우에만 빡빡하게 확인
-        try:
-            # 5초 타임아웃 적용 (get_db_path 대신 직접 시도하는 지점은 이미 있음)
-            response = safe_get(USERS_SHEET_URL, timeout=4)
-            if response:
-                import io
-                df_u = pd.read_csv(io.StringIO(response.text))
-                new_users_found = False
-                for _, row in df_u.iterrows():
-                    try:
-                        u_id = str(row.get('아이디', row.get('ID', ''))).strip()
-                        if not u_id or u_id == 'nan' or u_id == '': continue
-                        
-                        new_users_found = True
-                        users[u_id] = {
-                            "password": str(row.get('비밀번호', u_id)),
-                            "status": str(row.get('상태', 'approved')),
-                            "grade": str(row.get('등급', '회원')),
-                            "info": {
-                                "region": row.get('지역', '-'),
-                                "age": row.get('연령대', row.get('연령', '-')),
-                                "gender": row.get('성별', '-'),
-                                "motivation": row.get('매매동기', row.get('매매 동기', '-')),
-                                "exp": row.get('경력', '-'),
-                                "joined_at": row.get('가입일', row.get('합류일', '-'))
-                            }
-                        }
-                    except: continue
-                if new_users_found:
-                    with open(USER_DB_FILE, "w", encoding="utf-8") as f: json.dump(users, f, ensure_ascii=False, indent=4)
-        except: pass # 실패 시 로컬 데이터만 사용
+    # 백그라운드에서 시트 동기화 트리거 (옵션)
+    return users
+
+def sync_users_from_sheet():
+    """비동기 사용자 데이터 동기화"""
+    if not USERS_SHEET_URL: return
+    try:
+        resp = safe_get(USERS_SHEET_URL, timeout=5)
+        if resp:
+            df_u = pd.read_csv(io.StringIO(resp.text))
+            users = safe_load_json(USER_DB_FILE, {})
+            for _, row in df_u.iterrows():
+                u_id = str(row.get('아이디', row.get('ID', ''))).strip()
+                if not u_id or u_id == 'nan': continue
+                users[u_id] = {
+                    "password": str(row.get('비밀번호', u_id)),
+                    "status": str(row.get('상태', 'approved')),
+                    "grade": str(row.get('등급', '회원')),
+                    "info": {"joined_at": row.get('가입일', '-')}
+                }
+            safe_save_json(users, USER_DB_FILE)
+    except: pass
 
     # 기본 방장 계정 보장
     if "cntfed" not in users:
