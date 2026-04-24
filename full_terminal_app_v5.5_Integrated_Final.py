@@ -438,7 +438,10 @@ KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", NEW_SECRET).strip()
 
 raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "4628981901")).replace("-", "")
 KIS_ACCOUNT_NO = raw_acc if len(raw_acc) == 10 else (raw_acc + "01")
-KIS_MOCK_TRADING = st.session_state.get("kis_mock_mode", st.secrets.get("KIS_MOCK_TRADING", False)) # 실전 우선으로 변경
+def get_kis_mock_status():
+    return st.session_state.get("kis_mock_mode", st.secrets.get("KIS_MOCK_TRADING", False))
+
+KIS_MOCK_TRADING = get_kis_mock_status()
 
 # [ NEW ] 텔레그램 설정
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
@@ -453,23 +456,28 @@ def send_telegram_msg(msg):
         requests.get(url, params=params, timeout=15)
     except: pass
 
-@st.cache_data(ttl=3500)
+@st.cache_data(ttl=3500, show_spinner=False)
 def get_kis_access_token(app_key, app_secret, mock=True):
-    """한국투자증권 API 접근 토큰 발급"""
+    """한국투자증권 API 접근 토큰 발급 (캐싱 적용)"""
     base_url = "https://openapivts.koreainvestment.com:29443" if mock else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/oauth2/tokenP"
     headers = {"content-type": "application/json"}
-    body = {
-        "grant_type": "client_credentials",
-        "appkey": app_key,
-        "appsecret": app_secret
-    }
+    body = {"grant_type": "client_credentials", "appkey": app_key, "appsecret": app_secret}
+    
     try:
         res = requests.post(url, headers=headers, json=body, timeout=15)
+        res_data = res.json()
         if res.status_code == 200:
-            return res.json().get("access_token")
+            token = res_data.get("access_token")
+            if token: return token
+        
+        # 에러 발생 시 캐시하지 않고 즉시 에러 보고
+        err_msg = res_data.get('msg1', res_data.get('error_description', 'Unknown Error'))
+        st.error(f"🔑 [KIS AUTH ERROR] {err_msg} (Target: {'Mock' if mock else 'Real'})")
     except Exception as e:
-        print(f"DEBUG: KIS Token Error: {e}")
+        st.error(f"📡 [NETWORK ERROR] KIS 서버 연결 실패: {str(e)}")
+    
+    # 실패 시 None을 반환하되, 다음 호출 때 재시도할 수 있도록 캐시 스킵 유도 (실제로는 None도 캐시되므로 주의)
     return None
 
 def get_kis_balance(token, mock=None):
@@ -511,49 +519,56 @@ def get_kis_balance(token, mock=None):
     return 0, 0, []
 
 def get_kis_overseas_balance(token, mock=None):
-    """해외 주식 잔고 현황 조회 (실제 연동 + 전수 계좌 스캔)"""
+    """해외 주식 잔고 현황 조회 (통합 평가 + 거래소별 잔고 + 전수 스캔)"""
     if not token or not KIS_ACCOUNT_NO: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
     use_mock = mock if mock is not None else KIS_MOCK_TRADING
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     
-    # [ IMPROVE ] 01번부터 06번 계좌까지 전수 조사하여 잔고가 있는 계좌 포착
     suffixes = [KIS_ACCOUNT_NO[8:], "01", "02", "03", "04", "05", "06"]
     best_data = {"krw": 0, "usd_total": 0, "usd_cash": 0}
     best_holdings = []
     
-    for suffix in list(dict.fromkeys(suffixes)): # 중복 제거
-        url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
-        headers = {
+    for suffix in list(dict.fromkeys(suffixes)):
+        # 전략 1: TTTS3061R (해외주식 통합평가 - 가장 정확함)
+        url_61 = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+        headers_61 = {
             "Content-Type": "application/json", "authorization": f"Bearer {token}",
             "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
-            "tr_id": "VTTS3012R" if use_mock else "TTTS3012R", "custtype": "P"
+            "tr_id": "VTTS3061R" if use_mock else "TTTS3061R", "custtype": "P"
         }
-        params = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": "", "WCRC_FRCR_DVS_CD": "02", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""}
+        params_61 = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""}
         
         try:
-            res = requests.get(url, headers=headers, params=params, timeout=10)
+            res = requests.get(url_61, headers=headers_61, params=params_61, timeout=10)
             if res.status_code == 200:
-                data = res.json()
-                output2 = data.get('output2', {})
-                total_krw = float(output2.get('tot_evlu_pamt', 0))
-                total_usd = float(output2.get('frcr_evlu_amt2', 0))
-                cash_usd = float(output2.get('frcr_dnca_amt', 0))
-                
-                # 예수금이 0이라면 전용 API (CTRP6504R) 시도
-                if cash_usd == 0:
-                    headers_cash = headers.copy()
-                    headers_cash["tr_id"] = "VTRP6504R" if use_mock else "CTRP6504R"
-                    res_c = requests.get(url, headers=headers_cash, params=params, timeout=10)
-                    if res_c.status_code == 200:
-                        cash_usd = float(res_c.json().get('output', {}).get('frcr_dnca_amt', 0))
-                
-                current_total = total_usd + cash_usd
-                if current_total > best_data["usd_total"]:
-                    best_data = {"krw": total_krw, "usd_total": current_total, "usd_cash": cash_usd}
-                    best_holdings = data.get('output1', [])
-                    if current_total > 0: break # 잔고 있는 계좌 찾으면 중단
-        except: continue
-        
+                d = res.json()
+                o2 = d.get('output2', {})
+                if o2:
+                    total_usd = float(o2.get('frcr_evlu_amt2', 0)) # 외화평가금액2
+                    cash_usd = float(o2.get('frcr_dnca_amt') or o2.get('frcr_dncl_amt_2') or 0)   # 외화예수금액
+                    total_krw = float(o2.get('tot_evlu_pamt') or o2.get('tot_asst_amt') or 0)
+                    if total_usd + cash_usd > 0:
+                        return {"krw": total_krw, "usd_total": total_usd + cash_usd, "usd_cash": cash_usd}, d.get('output1', [])
+        except: pass
+
+        # 전략 2: TTTS3012R (해외주식 잔고 - 거래소 지정 필요)
+        headers_12 = headers_61.copy()
+        headers_12["tr_id"] = "VTTS3012R" if use_mock else "TTTS3012R"
+        for excd in ["NASD", "NYSE"]:
+            params_12 = params_61.copy()
+            params_12.update({"OVRS_EXCG_CD": excd, "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""})
+            try:
+                res = requests.get(url_61, headers=headers_12, params=params_12, timeout=10)
+                if res.status_code == 200:
+                    d = res.json()
+                    o2 = d.get('output2', {})
+                    if o2:
+                        total_usd = float(o2.get('frcr_evlu_amt2', 0))
+                        cash_usd = float(o2.get('frcr_dnca_amt', 0))
+                        if total_usd + cash_usd > 0:
+                            return {"krw": float(o2.get('tot_evlu_pamt', 0)), "usd_total": total_usd + cash_usd, "usd_cash": cash_usd}, d.get('output1', [])
+            except: continue
+
     return best_data, best_holdings
 
 # --- [ KIS: REAL-TIME RISK MONITORING (PRO EDITION) ] ---
@@ -1338,7 +1353,8 @@ with st.sidebar:
     st.sidebar.markdown("### 🏦 ACCOUNT CONTROL")
     is_live = st.sidebar.toggle("🚀 실전 매매 모드 (LIVE)", value=st.session_state.get("is_live_mode", not KIS_MOCK_TRADING), key="is_live_mode")
     st.session_state.kis_mock_mode = not is_live
-    st.sidebar.caption(f"📡 현재 연결 키: {KIS_APP_KEY[:5]}*** (대상: {'실전' if is_live else '모의'})")
+    st.sidebar.caption(f"📡 현재 연결 키: {KIS_APP_KEY[:5]}***")
+    st.sidebar.caption(f"🏦 계좌번호: {KIS_ACCOUNT_NO[:8]}-** (대상: {'실전' if is_live else '모의'})")
 
     # [ SIDEBAR BALANCE INFO ]
     if st.session_state.get("current_user"):
@@ -3971,7 +3987,7 @@ elif page.startswith("7-c."):
     token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
     if token:
         with st.spinner("실시간 실전 포지션 동기화 중..."):
-            _, kr_holdings = get_kis_balance(token)
+            _, _, kr_holdings = get_kis_balance(token)
             _, us_holdings = get_kis_overseas_balance(token)
             
             all_holdings = []
@@ -4626,6 +4642,13 @@ elif page.startswith("7-f."):
                             res_ov = requests.get(url_ov, headers=headers_ov, params=params_ov, timeout=15)
                             st.json(res_ov.json())
                             
+                            # 통합 평가 API 추가 테스트
+                            headers_ov["tr_id"] = "VTTS3061R" if KIS_MOCK_TRADING else "TTTS3061R"
+                            params_ov_61 = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""}
+                            res_ov_61 = requests.get(url_ov, headers=headers_ov, params=params_ov_61, timeout=15)
+                            st.write(f"통합 평가 응답 ({suffix}):")
+                            st.json(res_ov_61.json())
+
                             # 예수금 전용 API 추가 테스트
                             headers_ov["tr_id"] = "VTRP6504R" if KIS_MOCK_TRADING else "CTRP6504R"
                             res_ov_c = requests.get(url_ov, headers=headers_ov, params=params_ov, timeout=15)
