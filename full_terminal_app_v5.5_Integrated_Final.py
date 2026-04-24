@@ -431,45 +431,78 @@ def get_kis_overseas_balance(token):
     return 0, []
 
 # --- [ KIS: REAL-TIME RISK MONITORING (PRO EDITION) ] ---
+def get_kis_current_price(ticker, token):
+    """KIS OpenAPI를 통한 실시간 현재가 획득"""
+    if not token: return 0
+    try:
+        is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
+        symbol = ticker.split('.')[0]
+        base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+        
+        if is_kr:
+            url = f"{base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
+            headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "FHKST01010100"}
+            params = {"FID_COND_SCR_DIV_CODE": "11111", "FID_INPUT_ISCD": symbol}
+            resp = requests.get(url, headers=headers, params=params, timeout=5)
+            return float(resp.json().get('output', {}).get('stck_prpr', 0))
+        else:
+            url = f"{base_url}/uapi/overseas-stock/v1/quotations/price"
+            headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "HHDFS76200200"}
+            # 거래소 코드 NAS/NYS/AMS 자동 시도
+            for excd in ["NAS", "NYS", "AMS"]:
+                params = {"AUTH": "", "EXCD": excd, "SYMB": ticker}
+                resp = requests.get(url, headers=headers, params=params, timeout=5)
+                price = float(resp.json().get('output', {}).get('last', 0))
+                if price > 0: return price
+        return 0
+    except: return 0
+
 def execute_kis_auto_cut(token):
-    """
-    [ SUPREME RISK ENGINE ] 최적화 버전 (배치 다운로드 적용)
-    """
+    """[ SUPREME RISK ENGINE ] 익절(+21%), 손절(-3%), 파워무브(고점-3%) 통합 집행"""
     try:
         _, kr_holdings = get_kis_balance(token)
         _, us_holdings = get_kis_overseas_balance(token)
-        watch_targets = []
-        for h in kr_holdings: watch_targets.append({"ticker": h.get('pdno'), "qty": int(h.get('hldg_qty', 0)), "buy_p": float(h.get('pchs_avg_pric', 0))})
-        for u in us_holdings: watch_targets.append({"ticker": u.get('ovrs_pdno'), "qty": int(u.get('hldg_qty', 0)), "buy_p": float(u.get('pchs_avg_pric', 0))})
         
-        if not watch_targets: return False
-        
-        # [ PERFORMANCE ] 감시 대상 종목 일괄 시세 다운로드
-        tickers = [item["ticker"] for item in watch_targets]
-        all_hists = yf.download(tickers, period="7d", progress=False)
-        
-        for item in watch_targets:
-            ticker, qty, buy_p = item["ticker"], item["qty"], item["buy_p"]
-            try:
-                hist = pd.DataFrame({
-                    "Close": all_hists["Close"][ticker],
-                    "High": all_hists["High"][ticker],
-                    "Low": all_hists["Low"][ticker]
-                }).dropna()
-            except: continue
+        for h in kr_holdings + us_holdings:
+            ticker = h.get('pdno') or h.get('ovrs_pdno')
+            qty = int(h.get('hldg_qty', 0))
+            buy_p = float(h.get('pchs_avg_pric', 0))
+            if qty <= 0: continue
+            
+            # 실시간 시세 및 최근 히스토리(3일) 확인
+            token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+            is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
+            hist = get_kis_ohlcv(ticker, token) if is_kr else get_kis_overseas_ohlcv(ticker, token)
             
             if hist.empty: continue
-            curr_p, max_p = hist['Close'].iloc[-1], hist['High'].max()
-            stop_price = buy_p * 0.97
+            curr_p = hist['Close'].iloc[-1]
+            high_3d = hist['High'].iloc[-3:].max() if len(hist) >= 3 else hist['High'].max()
+            roi = (curr_p / buy_p - 1) * 100
             
-            if (max_p / buy_p - 1) >= 0.20:
-                stop_price = max_p * 0.97
+            # [ RULE 1: POWER MOVE ] 3일 내 20% 이상 상승 시 트레일링 스톱 (-3% from High)
+            is_power_move = (high_3d / buy_p - 1) >= 0.20
             
-            if curr_p <= stop_price:
-                st.toast(f"🚨 [ STOP ] {ticker} 이탈!", icon="💥")
-                if execute_kis_market_order(ticker, qty, is_buy=False):
-                    return True
-    except: pass
+            if is_power_move:
+                stop_price = high_3d * 0.97
+                if curr_p <= stop_price:
+                    log_msg = f"🔥 [ POWER MOVE EXIT ] {ticker} 고점 대비 -3% 이탈로 수익 보존 매도!"
+                    st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": log_msg, "type": "SUCCESS"})
+                    if execute_kis_market_order(ticker, qty, is_buy=False): return True
+            
+            # [ RULE 2: TARGET PROFIT ] 일반 익절 +21%
+            elif roi >= 21.0:
+                log_msg = f"💰 [ TAKE PROFIT ] {ticker} 목표 수익률 +21% 달성! 이익 실현."
+                st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": log_msg, "type": "SUCCESS"})
+                if execute_kis_market_order(ticker, qty, is_buy=False): return True
+                
+            # [ RULE 3: STOP LOSS ] 기계적 손절 -3%
+            elif roi <= -3.0:
+                log_msg = f"💣 [ STOP LOSS ] {ticker} 손실율 -3% 도달. 즉시 탈출."
+                st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": log_msg, "type": "ERROR"})
+                if execute_kis_market_order(ticker, qty, is_buy=False): return True
+                
+    except Exception as e:
+        pass
     return False
 
 def play_tactical_sound(sound_type="buy"):
@@ -575,85 +608,73 @@ def analyze_stockbee_setup(ticker, hist_df=None):
     - Delayed Reaction EP
     - 4% Momentum Burst
     """
-def get_naver_ohlcv(ticker, count=100):
-    """네이버 증권 API를 통한 한국 주식 데이터 수집 (지연 없는 실시간급 데이터)"""
-def get_kis_ohlcv(ticker, token, count=100):
-    """한국투자증권 OpenAPI를 통한 실시간 일봉 데이터 수집 (안정성 최우선)"""
+def get_kis_ohlcv(ticker, token):
+    """한국투자증권 OpenAPI 국내 주식 일봉 (0봉 에러 완전 해결 버전)"""
     if not token: return pd.DataFrame()
     try:
         symbol = ticker.split('.')[0]
         base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
         url = f"{base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
         headers = {
-            "Content-Type": "application/json",
-            "authorization": f"Bearer {token}",
-            "appkey": KIS_APP_KEY,
-            "appsecret": KIS_APP_SECRET,
-            "tr_id": "FHKST03010100"
+            "Content-Type": "application/json", "authorization": f"Bearer {token}",
+            "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
+            "tr_id": "FHKST03010100", "custtype": "P"
         }
         params = {
-            "FID_COND_SCR_DIV_CODE": "16641",
-            "FID_INPUT_ISCD": symbol,
-            "FID_INPUT_DATE_1": (datetime.now() - pd.Timedelta(days=365)).strftime("%Y%m%d"),
+            "FID_COND_SCR_DIV_CODE": "16641", "FID_INPUT_ISCD": symbol,
+            "FID_INPUT_DATE_1": (datetime.now() - pd.Timedelta(days=500)).strftime("%Y%m%d"),
             "FID_INPUT_DATE_2": datetime.now().strftime("%Y%m%d"),
-            "FID_PERIOD_DIV_CODE": "D",
-            "FID_ORG_ADJ_PRC": "0"
+            "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "0"
         }
-        resp = requests.get(url, headers=headers, params=params, timeout=5)
+        resp = requests.get(url, headers=headers, params=params, timeout=7)
         if resp.status_code != 200: return pd.DataFrame()
         
-        raw_data = resp.json().get('output2', [])
-        if not raw_data: return pd.DataFrame()
+        res_json = resp.json()
+        output = res_json.get('output2', [])
+        if not output: return pd.DataFrame()
         
         data = []
-        for row in reversed(raw_data): # 최신순으로 오므로 뒤집어서 과거부터 정렬
-            if not row.get('stck_bsop_date'): continue
+        for r in reversed(output): # 과거 데이터부터 정렬
+            if not r.get('stck_bsop_date'): continue
             data.append({
-                'Date': datetime.strptime(row['stck_bsop_date'], '%Y%m%d'),
-                'Open': float(row['stck_oprc']),
-                'High': float(row['stck_hgpr']),
-                'Low': float(row['stck_lwpr']),
-                'Close': float(row['stck_clpr']),
-                'Volume': float(row['acml_vol'])
+                'Date': datetime.strptime(r['stck_bsop_date'], '%Y%m%d'),
+                'Open': float(r['stck_oprc']), 'High': float(r['stck_hgpr']),
+                'Low': float(r['stck_lwpr']), 'Close': float(r['stck_clpr']),
+                'Volume': float(r['acml_vol'])
             })
-        df = pd.DataFrame(data).set_index('Date')
+        df = pd.DataFrame(data).set_index('Date').sort_index()
         return df
     except: return pd.DataFrame()
 
 def get_kis_overseas_ohlcv(ticker, token):
-    """한국투자증권 OpenAPI를 통한 해외(미국) 주식 실시간 일봉 수집"""
+    """한국투자증권 OpenAPI 해외 주식 일봉 (거래소 자동 판별 및 데이터 복구)"""
     if not token: return pd.DataFrame()
     try:
-        # 미국 시장 구분 (나스닥 기본, 필요시 뉴욕/아멕스 확장)
-        excd = "NAS" # 기본 나스닥
-        url = f"https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
-        url += "/uapi/overseas-stock/v1/quotations/dailyprice"
+        base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+        url = f"{base_url}/uapi/overseas-stock/v1/quotations/dailyprice"
         headers = {
-            "Content-Type": "application/json",
-            "authorization": f"Bearer {token}",
+            "Content-Type": "application/json", "authorization": f"Bearer {token}",
             "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
-            "tr_id": "HHDFS76240000"
+            "tr_id": "HHDFS76240000", "custtype": "P"
         }
-        params = {"AUTH": "", "EXCD": excd, "SYMB": ticker, "GUBN": "0", "BYMD": "", "MODP": "1"}
-        resp = requests.get(url, headers=headers, params=params, timeout=5)
-        if resp.status_code != 200:
-            # 실패 시 NYSE로 재시도
-            params["EXCD"] = "NYS"
+        # 나스닥(NAS) -> 뉴욕(NYS) -> 아멕스(AMS) 순차 시도
+        for excd in ["NAS", "NYS", "AMS"]:
+            params = {"AUTH": "", "EXCD": excd, "SYMB": ticker, "GUBN": "0", "BYMD": "", "MODP": "1"}
             resp = requests.get(url, headers=headers, params=params, timeout=5)
-            if resp.status_code != 200: return pd.DataFrame()
-
-        raw = resp.json().get('output2', [])
-        if not raw: return pd.DataFrame()
-        
-        data = []
-        for r in reversed(raw):
-            data.append({
-                'Date': datetime.strptime(r['xy_date'], '%Y%m%d'),
-                'Open': float(r['open']), 'High': float(r['high']),
-                'Low': float(r['low']), 'Close': float(r['clos']),
-                'Volume': float(r['tvol'])
-            })
-        return pd.DataFrame(data).set_index('Date')
+            if resp.status_code == 200:
+                output = resp.json().get('output2', [])
+                if output:
+                    data = []
+                    for r in reversed(output):
+                        if not r.get('xy_date'): continue
+                        data.append({
+                            'Date': datetime.strptime(r['xy_date'], '%Y%m%d'),
+                            'Open': float(r['open']), 'High': float(r['high']),
+                            'Low': float(r['low']), 'Close': float(r['clos']),
+                            'Volume': float(r['tvol'])
+                        })
+                    return pd.DataFrame(data).set_index('Date').sort_index()
+        return pd.DataFrame()
     except: return pd.DataFrame()
 
 def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
@@ -3849,42 +3870,52 @@ elif page.startswith("7-c."):
                 st.rerun()
 
     if st.session_state.engine_active:
-        with st.status("📡 실시간 본데(Stockbee) 절차적 스캐닝 중...", expanded=True) as status:
-            # [ UNIVERSE ] 본데 50 + 나스닥 200 + 코스피 200 + 코스닥 100 통합 확장
+        with st.status("📡 [ PHASE SCAN ] 절차적 전술 스캐닝 가동 중...", expanded=True) as status:
             targets = list(set(get_bonde_top_50() + get_nasdaq_200() + get_kospi_top_200() + get_kosdaq_100()))
             random.shuffle(targets)
             
-            new_results = []
-            batch_size = 20
-            # 최대 80개 종목 순환 스캔 (성능과 범위의 균형)
-            for i in range(0, min(len(targets), 80), batch_size):
-                batch_targets = targets[i:i+batch_size]
-                all_hist = get_bulk_market_data(batch_targets, period="75d")
-                
-                for t in batch_targets:
-                    st.write(f">> {t} KIS 실시간 분석 중...")
-                    is_kr = t.endswith(".KS") or t.endswith(".KQ")
-                    t_hist = get_ticker_data_from_bulk(all_hist, t)
-                    
-                    # KIS 토큰을 분석 엔진에 전달하여 증권사 데이터 우선 수집
-                    analysis = analyze_stockbee_setup(t, hist_df=t_hist, kis_token=token)
-                    if analysis["status"] == "SUCCESS":
-                        name = TICKER_NAME_MAP.get(t, t)
-                        st.success(f"✅ {name}({t}) 포착! 근거: {analysis['reason']}")
-                        setup_data = analysis
-                        setup_data["name"] = name
-                        new_results.append(setup_data)
-                        
+            # [ PHASE 1: EP EXPLOSION ]
+            status.update(label="⚡ PHASE 1: EP (폭발) 정밀 스캔 중...")
+            ep_pool = []
+            for t in targets[:40]: # 각 단계별 40종목 집중 분석
+                is_kr = t.endswith(".KS") or t.endswith(".KQ")
+                analysis = analyze_stockbee_setup(t, kis_token=token)
+                if analysis["status"] != "ERROR":
+                    ep_pool.append(analysis)
+                    if analysis.get("is_ep"):
+                        st.success(f"⚡ EP 포착: {analysis['name']}({t}) - 즉시 교전 개시!")
                         if st.session_state.get("live_toggle_v6_pro"):
-                            already_held = any(h.get('pdno') == t.split('.')[0] or h.get('ovrs_pdno') == t for h in real_holdings + over_holdings)
-                            if not already_held:
-                                st.toast(f"🚀 [ TARGET ACQUIRED ] {name} 포착! 즉시 실전 매수 집행 중...", icon="⚡")
-                                invest_amt = 1000000 
-                                qty = max(1, int(invest_amt / analysis['close'])) if is_kr else 5
-                                execute_kis_market_order(t, qty, is_buy=True)
+                            execute_kis_market_order(t, 1, is_buy=True)
+            st.session_state.ep_results = sorted([r for r in ep_pool if r.get('is_ep')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
 
-            status.update(label="[ SUCCESS ] 실시간 스캔 완료. 30초 후 재스캔...", state="complete")
-            st.session_state.scanning_results = new_results
+            # [ PHASE 2: DR DELAYED REACTION ]
+            status.update(label="⏳ PHASE 2: DR (지연반응) 촉매제 분석 중...")
+            dr_pool = []
+            for t in targets[40:80]:
+                analysis = analyze_stockbee_setup(t, kis_token=token)
+                if analysis["status"] != "ERROR":
+                    dr_pool.append(analysis)
+                    if analysis.get("is_dr"):
+                        st.info(f"⏳ DR 포착: {analysis['name']}({t}) - 전술적 진입!")
+                        if st.session_state.get("live_toggle_v6_pro"):
+                            execute_kis_market_order(t, 1, is_buy=True)
+            st.session_state.dr_results = sorted([r for r in dr_pool if r.get('is_dr')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+
+            # [ PHASE 3: TIGHT CONTRACTION ]
+            status.update(label="🔥 PHASE 3: TIGHT (응축) 패턴 스캔 중...")
+            tight_pool = []
+            for t in targets[80:120]:
+                analysis = analyze_stockbee_setup(t, kis_token=token)
+                if analysis["status"] != "ERROR":
+                    tight_pool.append(analysis)
+                    if analysis.get("is_tight"):
+                        st.warning(f"🎯 TIGHT 포착: {analysis['name']}({t}) - 선취매 집행!")
+                        if st.session_state.get("live_toggle_v6_pro"):
+                            execute_kis_market_order(t, 1, is_buy=True)
+            st.session_state.tight_results = sorted([r for r in tight_pool if r.get('is_tight')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+
+            status.update(label="✅ [ COMPLETE ] 전술 사이클 완료. 30초 후 재가동...", state="complete")
+            st.session_state.scanning_results = ep_pool + dr_pool + tight_pool
             time.sleep(30)
             st.rerun()
     else:
