@@ -629,9 +629,9 @@ def analyze_stockbee_setup(ticker, hist_df=None):
     - Delayed Reaction EP
     - 4% Momentum Burst
     """
-@st.cache_data(ttl=600) # 10분간 데이터 캐싱으로 속도 혁명
+@st.cache_data(ttl=300, show_spinner=False) # 5분 캐시, 스피너 비활성
 def get_kis_ohlcv(ticker, token):
-    """한국투자증권 OpenAPI 국내 주식 일봉 (고속 캐싱 버전)"""
+    """한국투자증권 OpenAPI 국내 주식 일봉 (120일 최적화 버전)"""
     if not token: return pd.DataFrame()
     try:
         symbol = ticker.split('.')[0]
@@ -642,16 +642,18 @@ def get_kis_ohlcv(ticker, token):
             "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
             "tr_id": "FHKST03010100", "custtype": "P"
         }
+        # 본데 전략(SMA65)에 필요한 최소 120일로 기간 축소하여 성공률 극대화
         params = {
             "FID_COND_SCR_DIV_CODE": "16641", "FID_INPUT_ISCD": symbol,
-            "FID_INPUT_DATE_1": (datetime.now() - pd.Timedelta(days=300)).strftime("%Y%m%d"),
+            "FID_INPUT_DATE_1": (datetime.now() - pd.Timedelta(days=120)).strftime("%Y%m%d"),
             "FID_INPUT_DATE_2": datetime.now().strftime("%Y%m%d"),
             "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "0"
         }
-        resp = requests.get(url, headers=headers, params=params, timeout=5)
+        resp = requests.get(url, headers=headers, params=params, timeout=10)
         if resp.status_code != 200: return pd.DataFrame()
         
-        output = resp.json().get('output2', [])
+        res_json = resp.json()
+        output = res_json.get('output2', [])
         if not output: return pd.DataFrame()
         
         data = []
@@ -663,12 +665,15 @@ def get_kis_ohlcv(ticker, token):
                 'Low': float(r['stck_lwpr']), 'Close': float(r['stck_clpr']),
                 'Volume': float(r['acml_vol'])
             })
-        return pd.DataFrame(data).set_index('Date').sort_index()
+        df = pd.DataFrame(data).set_index('Date').sort_index()
+        # 데이터가 너무 적으면 캐싱하지 않음 (재시도 유도)
+        if len(df) < 5: return pd.DataFrame()
+        return df
     except: return pd.DataFrame()
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300, show_spinner=False)
 def get_kis_overseas_ohlcv(ticker, token):
-    """한국투자증권 OpenAPI 해외 주식 일봉 (고속 캐싱 버전)"""
+    """한국투자증권 OpenAPI 해외 주식 일봉 (120일 최적화 버전)"""
     if not token: return pd.DataFrame()
     try:
         base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
@@ -680,7 +685,7 @@ def get_kis_overseas_ohlcv(ticker, token):
         }
         for excd in ["NAS", "NYS", "AMS"]:
             params = {"AUTH": "", "EXCD": excd, "SYMB": ticker, "GUBN": "0", "BYMD": "", "MODP": "1"}
-            resp = requests.get(url, headers=headers, params=params, timeout=5)
+            resp = requests.get(url, headers=headers, params=params, timeout=10)
             if resp.status_code == 200:
                 output = resp.json().get('output2', [])
                 if output:
@@ -693,7 +698,8 @@ def get_kis_overseas_ohlcv(ticker, token):
                             'Low': float(r['low']), 'Close': float(r['clos']),
                             'Volume': float(r['tvol'])
                         })
-                    return pd.DataFrame(data).set_index('Date').sort_index()
+                    df = pd.DataFrame(data).set_index('Date').sort_index()
+                    if len(df) >= 5: return df
         return pd.DataFrame()
     except: return pd.DataFrame()
 
