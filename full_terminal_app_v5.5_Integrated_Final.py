@@ -577,28 +577,42 @@ def analyze_stockbee_setup(ticker, hist_df=None):
     """
 def get_naver_ohlcv(ticker, count=100):
     """네이버 증권 API를 통한 한국 주식 데이터 수집 (지연 없는 실시간급 데이터)"""
+def get_naver_ohlcv(ticker, count=200):
+    """네이버 증권 API를 통한 한국 주식 데이터 수집 (안정성 강화 버전)"""
     try:
         symbol = ticker.split('.')[0]
         url = f"https://fchart.naver.com/sise.nhn?symbol={symbol}&timeType=day&count={count}&startTime=20240101"
         resp = requests.get(url, timeout=5)
-        if resp.status_code != 200: return pd.DataFrame()
+        if resp.status_code != 200 or not resp.text: return pd.DataFrame()
         
         import xml.etree.ElementTree as ET
-        root = ET.fromstring(resp.text)
+        try:
+            root = ET.fromstring(resp.text)
+        except: return pd.DataFrame() # XML 형식이 아닐 경우
+            
         items = root.findall('.//item')
+        if not items: return pd.DataFrame()
         
         data = []
         for item in items:
-            row = item.get('data').split('|')
-            data.append({
-                'Date': datetime.strptime(row[0], '%Y%m%d'),
-                'Open': float(row[1]), 'High': float(row[2]),
-                'Low': float(row[3]), 'Close': float(row[4]),
-                'Volume': float(row[5])
-            })
-        df = pd.DataFrame(data).set_index('Date')
+            raw_data = item.get('data')
+            if not raw_data: continue
+            row = raw_data.split('|')
+            if len(row) < 6: continue
+            try:
+                data.append({
+                    'Date': datetime.strptime(row[0], '%Y%m%d'),
+                    'Open': float(row[1]), 'High': float(row[2]),
+                    'Low': float(row[3]), 'Close': float(row[4]),
+                    'Volume': float(row[5])
+                })
+            except: continue
+        
+        if not data: return pd.DataFrame()
+        df = pd.DataFrame(data).drop_duplicates(subset=['Date']).set_index('Date').sort_index()
         return df
-    except: return pd.DataFrame()
+    except Exception as e:
+        return pd.DataFrame()
 
 def analyze_stockbee_setup(ticker, hist_df=None):
     """프라딥 본데(Stockbee) 전략 정밀 분석 엔진 v4.0 (Global Hybrid Data Engine)"""
@@ -606,11 +620,12 @@ def analyze_stockbee_setup(ticker, hist_df=None):
         is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
         # [ DATA SOURCING ] 한국 주식은 네이버, 해외 주식은 yfinance 사용 (신뢰도 극대화)
         if is_kr:
-            hist = get_naver_ohlcv(ticker, count=150)
+            hist = get_naver_ohlcv(ticker, count=200)
         else:
             hist = hist_df if hist_df is not None else yf.Ticker(ticker).history(period="1y")
             
-        if len(hist) < 70: return {"status": "REJECT", "reason": "데이터 부족", "ticker": ticker, "name": ticker}
+        if len(hist) < 70: 
+            return {"status": "REJECT", "reason": f"데이터 부족 (필요:70봉, 현재:{len(hist)}봉)", "ticker": ticker, "name": ticker}
         
         # [ PREPARE DATA ]
         df = hist.copy()
