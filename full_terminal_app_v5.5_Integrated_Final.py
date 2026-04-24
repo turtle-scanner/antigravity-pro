@@ -468,10 +468,7 @@ def get_kis_access_token(app_key, app_secret, mock=True):
         res = requests.post(url, headers=headers, json=body, timeout=15)
         if res.status_code == 200:
             return res.json().get("access_token")
-        else:
-            st.error(f"❌ KIS 인증 실패 ({res.status_code}): {res.text}")
     except Exception as e:
-        st.error(f"⚠️ KIS 인증 에러: {str(e)}")
         print(f"DEBUG: KIS Token Error: {e}")
     return None
 
@@ -4617,11 +4614,11 @@ elif page.startswith("7-f."):
                     
                     with col_d2:
                         st.markdown("**[해외 잔고/예수금 원본]**")
-                        # 01번과 02번 계좌 모두 테스트
-                        for suffix in ["01", "02"]:
-                            st.write(f"--- 테스트 중: {KIS_ACCOUNT_NO[:8]}-{suffix} ---")
+                        # 01번부터 06번 계좌까지 전수 조사
+                        for suffix in ["01", "02", "03", "04", "05", "06"]:
+                            st.write(f"--- [ SCANNING ] : {KIS_ACCOUNT_NO[:8]}-{suffix} ---")
                             url_ov = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
-                            headers_ov = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTS3012R" if KIS_MOCK_TRADING else "TTTS3012R"}
+                            headers_ov = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTS3012R" if KIS_MOCK_TRADING else "TTTS3012R", "custtype": "P"}
                             params_ov = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": "", "WCRC_FRCR_DVS_CD": "02", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""}
                             res_ov = requests.get(url_ov, headers=headers_ov, params=params_ov, timeout=15)
                             st.json(res_ov.json())
