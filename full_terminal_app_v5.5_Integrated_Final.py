@@ -527,7 +527,8 @@ def get_kis_overseas_balance(token):
             holdings = data.get('output1', [])
             return total_eval, holdings
         else:
-            st.error(f"❌ 해외 잔고 조회 실패: {res.status_code}")
+            if res.status_code != 500: # 500 에러는 일시적 서버 오류로 간주하고 무시
+                st.error(f"❌ 해외 잔고 조회 실패: {res.status_code}")
     except Exception as e:
         st.error(f"⚠️ 해외 통신 오류: {str(e)}")
     return 0, []
@@ -613,8 +614,17 @@ def execute_kis_auto_cut(token):
                 if execute_kis_market_order(ticker, qty, is_buy=False):
                     send_telegram_msg(f"💣 [STOP LOSS] {ticker} 기계적 손절 집행. ({roi:.1f}%)")
                     return True
-    except: pass
+    except Exception as e:
+        print(f"DEBUG: Auto Cut Error: {e}")
     return False
+
+def fast_analyze_stock(ticker, token):
+    """스캐닝 가속을 위한 독립 분석 함수"""
+    try:
+        # analyze_stockbee_setup은 글로벌 스코프에 있으므로 직접 호출
+        return analyze_stockbee_setup(ticker, kis_token=token)
+    except:
+        return {"status": "ERROR", "ticker": ticker, "reason": "Analysis Function Error"}
 
 def play_tactical_sound(sound_type="buy"):
     """전술 상황에 따른 오디오 알림 (매수: 북소리 / 매도: 종소리)"""
@@ -3753,17 +3763,26 @@ elif page.startswith("7-c."):
             if is_truce:
                 status.update(label=f"🛡️ [ TACTICAL TRUCE ] 시장 건강도 악화({breadth:.1f}%). 매수 중단 및 방어 모드.")
             
+            # [ UNIVERSE ] 스캔 대상 종목 선정
+            universe = sorted(list(set(get_bonde_top_50() + get_kospi_top_200())))
+            
             # [ FINAL OPTIMIZATION ] 10스레드 하이퍼 터보 스캔
             from concurrent.futures import ThreadPoolExecutor
-            def fast_analyze(ticker):
-                try: return analyze_stockbee_setup(ticker, kis_token=token)
-                except: return {"status": "ERROR", "ticker": ticker}
+            from functools import partial
+            
+            # 클로저 대신 외부 함수와 partial 사용 (NameError 및 직렬화 이슈 방지)
+            analyze_func = partial(fast_analyze_stock, token=token)
 
             # [ 3-PHASE TURBO SCAN ]
             with ThreadPoolExecutor(max_workers=10) as executor:
-                ep_pool = list(executor.map(fast_analyze, universe[:40]))
-                dr_pool = list(executor.map(fast_analyze, universe[40:80]))
-                tight_pool = list(executor.map(fast_analyze, universe[80:120]))
+                # executor.map 대신 리스트 컴프리헨션과 submit 사용 (안정성 향상)
+                futures_ep = [executor.submit(analyze_func, t) for t in universe[:40]]
+                futures_dr = [executor.submit(analyze_func, t) for t in universe[40:80]]
+                futures_tight = [executor.submit(analyze_func, t) for t in universe[80:120]]
+                
+                ep_pool = [f.result() for f in futures_ep]
+                dr_pool = [f.result() for f in futures_dr]
+                tight_pool = [f.result() for f in futures_tight]
 
             st.session_state.ep_results = sorted([r for r in ep_pool if r.get('is_ep')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
             st.session_state.dr_results = sorted([r for r in dr_pool if r.get('is_dr')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
