@@ -527,16 +527,20 @@ def get_kis_overseas_balance(token, mock=None):
         res = requests.get(url, headers=headers, params=params, timeout=5)
         if res.status_code == 200:
             data = res.json()
-            # 해외 주식 평가 금액 (원화 환산 기준)
-            total_eval = float(data.get('output2', {}).get('tot_evlu_pamt', 0))
+            output2 = data.get('output2', {})
+            # 원화 환산 총액 및 달러 총액/예수금 추출
+            total_krw = float(output2.get('tot_evlu_pamt', 0))
+            total_usd = float(output2.get('ovrs_tot_evlu_amt', 0))
+            cash_usd = float(output2.get('frcr_dnca_amt', 0))
+            
             holdings = data.get('output1', [])
-            return total_eval, holdings
+            return {"krw": total_krw, "usd_total": total_usd, "usd_cash": cash_usd}, holdings
         else:
             if res.status_code != 500: # 500 에러는 일시적 서버 오류로 간주하고 무시
                 st.error(f"❌ 해외 잔고 조회 실패: {res.status_code}")
     except Exception as e:
         st.error(f"⚠️ 해외 통신 오류: {str(e)}")
-    return 0, []
+    return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
 
 # --- [ KIS: REAL-TIME RISK MONITORING (PRO EDITION) ] ---
 def get_kis_current_price(ticker, token):
@@ -590,7 +594,7 @@ def execute_kis_auto_cut(token):
     """[ SUPREME RISK ENGINE ] 익절(+21%), 손절(-3%), 파워무브(고점-3%) 통합 집행"""
     try:
         _, kr_holdings = get_kis_balance(token)
-        _, us_holdings = get_kis_overseas_balance(token)
+        over_data, us_holdings = get_kis_overseas_balance(token)
         
         for h in kr_holdings + us_holdings:
             ticker = h.get('pdno') or h.get('ovrs_pdno')
@@ -1327,13 +1331,23 @@ with st.sidebar:
             current_mock = not is_live
             token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, current_mock)
             r_total, r_cash, _ = get_kis_balance(token, mock=current_mock)
-            o_total, _ = get_kis_overseas_balance(token, mock=current_mock)
-            full_b = r_total + o_total
+            over_data, _ = get_kis_overseas_balance(token, mock=current_mock)
+            
+            o_total_krw = over_data.get("krw", 0)
+            o_total_usd = over_data.get("usd_total", 0)
+            o_cash_usd = over_data.get("usd_cash", 0)
+            
+            full_b = r_total + o_total_krw
+            
             st.sidebar.markdown(f"""
                 <div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:5px; border:1px solid #FFD70033;'>
                     <p style='margin:0; font-size:0.7rem; color:#AAA;'>COMMANDER EQUITY ({'LIVE' if is_live else 'MOCK'})</p>
                     <b style='color:#FFD700; font-size:1.1rem;'>{full_b:,.0f} KRW</b><br>
-                    <small style='color:#666;'>KR: {r_total:,.0f} / US: {o_total:,.0f}</small>
+                    <div style='margin-top:5px; border-top:1px solid rgba(255,255,255,0.05); padding-top:5px;'>
+                        <small style='color:#CCC;'>KR: {r_total:,.0f} 원</small><br>
+                        <small style='color:var(--neon-blue);'>US: ${o_total_usd:,.2f}</small> 
+                        <small style='color:#666;'>(Cash: ${o_cash_usd:,.2f})</small>
+                    </div>
                 </div>
             """, unsafe_allow_html=True)
         except:
@@ -3732,7 +3746,8 @@ elif page.startswith("7-c."):
                     st.toast("🏹 기계적 손절(LOD Cut)이 사령부에 의해 집행되었습니다.")
     
     real_total, real_cash, real_holdings = get_kis_balance(token)
-    over_total, over_holdings = get_kis_overseas_balance(token)
+    over_data, over_holdings = get_kis_overseas_balance(token)
+    over_total = over_data.get("krw", 0)
     full_balance = real_total + over_total
 
     # --- [ ENGINE CONTROL ] ---
