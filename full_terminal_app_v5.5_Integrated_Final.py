@@ -429,19 +429,16 @@ def get_macro_data():
         return 1400.0, 4.3
 
 # --- [ ENGINE ] KIS API & Core Trading Logic ---
-# [ SECURITY ] 클라우드 대시보드의 예전 설정을 무시하고 최신 키를 우선 적용
-NEW_KEY = "PSwPjCXRoSuY1Uz59aDWYKpIPix7VgNB8QUX"
-NEW_SECRET = "4WF33M5pnD3Y3qskLfWAlwo0eFxpYIK+TdIXNVW9r+wSLAAF/WVxtqDIvNBDNakV28aFM9ZO+v8069JwBlYDpS1lBvoFf7j9dgSsPwjiwclbvyJ7nMYl5m62wH7VInWWtXgl/8hDnmihzDidKEIss87UdT42JANMvOrCSEF18e5SilJKRIA="
+# [ SECURITY ] 사령관님이 제공하신 실제 전술 키 주입
+NEW_KEY = "PSLep6Mc8hCjS6CHhpXnCXKEVVi3UoYbgOF5"
+NEW_SECRET = "cXF1CYSGZBWAl0ytFSIWsRunLQPuzthZKqxWX4GI562Rndn+tBBx7ObQ80R4T76Fb0mLld4mJ0Wz1DdDLZxOQ6lPhkm+1fW9m2+LsFuTHUF90HYy1HnYyEIW7rEL0wyxag0/s/Vt3udBdj5eS+zOR82wjpKg0dA9n4znVP9Hk5udnk0g/Kw="
 
-KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", NEW_KEY)
-if KIS_APP_KEY.startswith("PSLep"): KIS_APP_KEY = NEW_KEY # 옛날 키 방지
-
-KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", NEW_SECRET)
-if KIS_APP_SECRET.startswith("cXF1"): KIS_APP_SECRET = NEW_SECRET # 옛날 비밀번호 방지
+KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", NEW_KEY).strip()
+KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", NEW_SECRET).strip()
 
 raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "4628981901")).replace("-", "")
-KIS_ACCOUNT_NO = raw_acc + "01" if len(raw_acc) == 8 else raw_acc
-KIS_MOCK_TRADING = st.session_state.get("kis_mock_mode", st.secrets.get("KIS_MOCK_TRADING", True)) # 사이드바 설정 우선
+KIS_ACCOUNT_NO = raw_acc if len(raw_acc) == 10 else (raw_acc + "01")
+KIS_MOCK_TRADING = st.session_state.get("kis_mock_mode", st.secrets.get("KIS_MOCK_TRADING", False)) # 실전 우선으로 변경
 
 # [ NEW ] 텔레그램 설정
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
