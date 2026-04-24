@@ -517,20 +517,24 @@ def get_kis_overseas_balance(token, mock=None):
         "authorization": f"Bearer {token}",
         "appkey": KIS_APP_KEY,
         "appsecret": KIS_APP_SECRET,
-        "tr_id": "VTTW8434R" if use_mock else "TTTW8434R"
+        "tr_id": "VTTS3012R" if use_mock else "TTTS3012R"
     }
     params = {
-        "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
-        "WCRC_FRCR_DVS_CD": "01", "NATN_CD": "840", "TR_PACC_CD": "", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""
+        "CANO": KIS_ACCOUNT_NO[:8], 
+        "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
+        "NATN_CD": "840", # 미국 기준
+        "TR_PACC_CD": "", 
+        "CTX_AREA_FK200": "", 
+        "CTX_AREA_NK200": ""
     }
     try:
         res = requests.get(url, headers=headers, params=params, timeout=10)
         if res.status_code == 200:
             data = res.json()
             output2 = data.get('output2', {})
-            # 원화 환산 총액 및 달러 총액/예수금 추출
+            # TTTS3012R 응답 필드: 원화환산평가금액(tot_evlu_pamt), 외화평가금액합계(frcr_evlu_amt2), 외화예수금(frcr_dnca_amt)
             total_krw = float(output2.get('tot_evlu_pamt', 0))
-            total_usd = float(output2.get('ovrs_tot_evlu_amt', 0))
+            total_usd = float(output2.get('frcr_evlu_amt2', 0))
             cash_usd = float(output2.get('frcr_dnca_amt', 0))
             
             holdings = data.get('output1', [])
