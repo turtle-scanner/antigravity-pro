@@ -434,7 +434,7 @@ KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "PSLep6Mc8hCjS6CHhpXnCXKEVVi3UoYbgOF
 KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "cXF1CYSGZBWAl0ytFSIWsRunLQPuzthZKqxWX4GI562Rndn+tBBx7ObQ80R4T76Fb0mLld4mJ0Wz1DdDLZxOQ6lPhkm+1fW9m2+LsFuTHUF90HYy1HnYyEIW7rEL0wyxag0/s/Vt3udBdj5eS+zOR82wjpKg0dA9n4znVP9Hk5udnk0g/Kw=")
 raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "46289819")).replace("-", "")
 KIS_ACCOUNT_NO = raw_acc + "01" if len(raw_acc) == 8 else raw_acc
-KIS_MOCK_TRADING = st.session_state.get("kis_mock_mode", True) # 사이드바 설정 우선
+KIS_MOCK_TRADING = st.session_state.get("kis_mock_mode", st.secrets.get("KIS_MOCK_TRADING", True)) # 사이드바 설정 우선
 
 # [ NEW ] 텔레그램 설정
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
@@ -479,7 +479,8 @@ def get_kis_balance(token, mock=None):
         "authorization": f"Bearer {token}",
         "appkey": KIS_APP_KEY,
         "appsecret": KIS_APP_SECRET,
-        "tr_id": "VTTC8434R" if use_mock else "TTTC8434R"
+        "tr_id": "VTTC8434R" if use_mock else "TTTC8434R",
+        "custtype": "P"
     }
     params = {
         "CANO": KIS_ACCOUNT_NO[:8],
@@ -508,7 +509,7 @@ def get_kis_balance(token, mock=None):
 
 def get_kis_overseas_balance(token, mock=None):
     """해외 주식 잔고 현황 조회 (실제 연동)"""
-    if not token or not KIS_ACCOUNT_NO: return 0, []
+    if not token or not KIS_ACCOUNT_NO: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
     use_mock = mock if mock is not None else KIS_MOCK_TRADING
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
@@ -517,7 +518,8 @@ def get_kis_overseas_balance(token, mock=None):
         "authorization": f"Bearer {token}",
         "appkey": KIS_APP_KEY,
         "appsecret": KIS_APP_SECRET,
-        "tr_id": "VTTS3012R" if use_mock else "TTTS3012R"
+        "tr_id": "VTTS3012R" if use_mock else "TTTS3012R",
+        "custtype": "P"
     }
     params = {
         "CANO": KIS_ACCOUNT_NO[:8], 
@@ -3677,7 +3679,8 @@ elif page.startswith("7-b."):
             st.error("❌ KIS API 인증 실패. API Key와 Secret을 확인하십시오.")
         else:
             real_total, real_cash, real_holdings = get_kis_balance(token)
-            over_total, over_holdings = get_kis_overseas_balance(token)
+            over_data_main, over_holdings = get_kis_overseas_balance(token)
+            over_total = over_data_main.get("krw", 0)
             
             col_acc1, col_acc2 = st.columns(2)
             with col_acc1:
