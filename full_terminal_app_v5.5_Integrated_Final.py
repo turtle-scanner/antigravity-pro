@@ -430,8 +430,8 @@ def get_macro_data():
 
 # --- [ ENGINE ] KIS API & Core Trading Logic ---
 # [ SECURITY ] 사용자가 제공한 API 정보를 우선 적용하되, secrets 설정이 있다면 그것을 따릅니다.
-KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "PSwPjCXRoSuY1Uz59aDWYKpIPix7VgNB8QUX")
-KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "4WF33M5pnD3Y3qskLfWAlwo0eFxpYIK+TdIXNVW9r+wSLAAF/WVxtqDIvNBDNakV28aFM9ZO+v8069JwBlYDpS1lBvoFf7j9dgSsPwjiwclbvyJ7nMYl5m62wH7VInWWtXgl/8hDnmihzDidKEIss87UdT42JANMvOrCSEF18e5SilJKRIA=")
+KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "PSLep6Mc8hCjS6CHhpXnCXKEVVi3UoYbgOF5")
+KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "cXF1CYSGZBWAl0ytFSIWsRunLQPuzthZKqxWX4GI562Rndn+tBBx7ObQ80R4T76Fb0mLld4mJ0Wz1DdDLZxOQ6lPhkm+1fW9m2+LsFuTHUF90HYy1HnYyEIW7rEL0wyxag0/s/Vt3udBdj5eS+zOR82wjpKg0dA9n4znVP9Hk5udnk0g/Kw=")
 raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "46289819")).replace("-", "")
 KIS_ACCOUNT_NO = raw_acc + "01" if len(raw_acc) == 8 else raw_acc
 KIS_MOCK_TRADING = st.session_state.get("kis_mock_mode", True) # 사이드바 설정 우선
@@ -497,7 +497,10 @@ def get_kis_balance(token):
                 holdings = data.get('output1', [])
                 return cash + eval_amt, cash, holdings
         else:
-            st.error(f"❌ 국내 잔고 조회 실패: {res.status_code}")
+            if res.status_code == 500:
+                st.warning("⚠️ KIS 서버 내부 오류(500)가 발생했습니다. 실전/모의 매매 설정이 API Key와 일치하는지 확인해 주세요.")
+            else:
+                st.error(f"❌ 국내 잔고 조회 실패: {res.status_code}")
     except Exception as e:
         st.error(f"⚠️ 국내 통신 오류: {str(e)}")
     return 0, 0, []
