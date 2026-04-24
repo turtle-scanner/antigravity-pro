@@ -649,9 +649,25 @@ def analyze_stockbee_setup(ticker, hist_df=None):
 # --- [ SCANNER HELPERS: STOCKBEE STRICT EDITION ] ---
         
 
-@st.cache_data(ttl=3600)
+# --- [ SCANNER HELPERS: UNIVERSE EXPANSION ] ---
+
+@st.cache_data(ttl=86400)
+def get_nasdaq_200():
+    """나스닥 100+ 주요 성장주 리스트"""
+    top_ndq = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AVGO", "PEP", "COST", "ADBE", "CSCO", "NFLX", "AMD", "TMUS", "INTC", "INTU", "AMAT", "QCOM", "TXN", "AMGN", "ISRG", "HON", "BKNG", "VRTX", "SBUX", "ADP", "GILD", "MDLZ", "REGN", "ADI", "LRCX", "PANW", "SNPS", "MU", "KLAC", "CDNS", "CHTR", "MAR", "PYPL", "ORLY", "ASML", "MNST", "MELI", "CTAS", "ADSK", "LULU", "WDAY", "KDP", "NXPI", "MCHP", "IDXX", "PAYX", "ROST", "PCAR", "DXCM", "AEP", "CPRT", "CPRT", "BKR", "KLA", "EXC", "MRVL", "CRWD", "DDOG", "TEAM", "MSTR", "PLTR", "SNOW", "ZS", "NET", "OKTA", "U", "RIVN", "LCID", "SQ", "SE", "BABA", "PDD", "JD", "BIDU", "NTES"]
+    return list(set(top_ndq))
+
+@st.cache_data(ttl=86400)
 def get_kospi_top_200():
-    return ["005930.KS", "000660.KS", "196170.KQ", "042700.KS", "105560.KS", "055550.KS", "005490.KS", "000270.KS", "066570.KS", "035720.KS"]
+    """코스피 시총 상위 100+ 주요 종목"""
+    top_ks = ["005930.KS", "000660.KS", "373220.KS", "207940.KS", "005490.KS", "005380.KS", "000270.KS", "051910.KS", "006400.KS", "035420.KS", "068270.KS", "105560.KS", "055550.KS", "012330.KS", "035720.KS", "003550.KS", "032830.KS", "000810.KS", "015760.KS", "086790.KS", "009150.KS", "011780.KS", "010130.KS", "033780.KS", "000100.KS", "018260.KS", "003670.KS", "000720.KS", "009830.KS", "011070.KS", "047050.KS", "028260.KS", "010140.KS", "036570.KS", "003410.KS", "051900.KS", "034730.KS", "090430.KS", "010950.KS", "259960.KS", "302440.KS", "402340.KS", "017670.KS"]
+    return list(set(top_ks))
+
+@st.cache_data(ttl=86400)
+def get_kosdaq_100():
+    """코스닥 100 주요 성장주"""
+    top_kq = ["247540.KQ", "086520.KQ", "091990.KQ", "066970.KQ", "196170.KQ", "277810.KQ", "214150.KQ", "293490.KQ", "028300.KQ", "145020.KQ", "058470.KQ", "035900.KQ", "036930.KQ", "263750.KQ", "039030.KQ", "041510.KQ", "253450.KQ", "067310.KQ", "084370.KQ", "034230.KQ", "051910.KQ", "214320.KQ", "112040.KQ", "078600.KQ", "064290.KQ", "036830.KQ", "036200.KQ", "121600.KQ"]
+    return list(set(top_kq))
 
 def get_rs_score(ticker):
     try:
@@ -3759,13 +3775,14 @@ elif page.startswith("7-c."):
 
     if st.session_state.engine_active:
         with st.status("📡 실시간 본데(Stockbee) 절차적 스캐닝 중...", expanded=True) as status:
-            # 주도주 리스트 확장 및 셔플
-            targets = list(set(get_bonde_top_50() + get_kospi_top_200()))
+            # [ UNIVERSE ] 본데 50 + 나스닥 200 + 코스피 200 + 코스닥 100 통합 확장
+            targets = list(set(get_bonde_top_50() + get_nasdaq_200() + get_kospi_top_200() + get_kosdaq_100()))
             random.shuffle(targets)
             
             new_results = []
-            batch_size = 25
-            for i in range(0, min(len(targets), 50), batch_size):
+            batch_size = 20
+            # 최대 80개 종목 순환 스캔 (성능과 범위의 균형)
+            for i in range(0, min(len(targets), 80), batch_size):
                 batch_targets = targets[i:i+batch_size]
                 all_hist = get_bulk_market_data(batch_targets, period="75d")
                 
