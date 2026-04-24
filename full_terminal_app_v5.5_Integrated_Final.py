@@ -551,103 +551,89 @@ def analyze_stockbee_setup(ticker, hist_df=None):
     - Delayed Reaction EP
     - 4% Momentum Burst
     """
+def get_naver_ohlcv(ticker, count=100):
+    """네이버 증권 API를 통한 한국 주식 데이터 수집 (지연 없는 실시간급 데이터)"""
+    try:
+        symbol = ticker.split('.')[0]
+        url = f"https://fchart.naver.com/sise.nhn?symbol={symbol}&timeType=day&count={count}&startTime=20240101"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code != 200: return pd.DataFrame()
+        
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(resp.text)
+        items = root.findall('.//item')
+        
+        data = []
+        for item in items:
+            row = item.get('data').split('|')
+            data.append({
+                'Date': datetime.strptime(row[0], '%Y%m%d'),
+                'Open': float(row[1]), 'High': float(row[2]),
+                'Low': float(row[3]), 'Close': float(row[4]),
+                'Volume': float(row[5])
+            })
+        df = pd.DataFrame(data).set_index('Date')
+        return df
+    except: return pd.DataFrame()
+
+def analyze_stockbee_setup(ticker, hist_df=None):
+    """프라딥 본데(Stockbee) 전략 정밀 분석 엔진 v4.0 (Global Hybrid Data Engine)"""
     try:
         is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
-        hist = hist_df if hist_df is not None else yf.Ticker(ticker).history(period="1y")
-        if len(hist) < 30: return {"status": "REJECT", "stage": "INIT", "reason": "데이터 부족"}
+        # [ DATA SOURCING ] 한국 주식은 네이버, 해외 주식은 yfinance 사용 (신뢰도 극대화)
+        if is_kr:
+            hist = get_naver_ohlcv(ticker, count=150)
+        else:
+            hist = hist_df if hist_df is not None else yf.Ticker(ticker).history(period="1y")
+            
+        if len(hist) < 70: return {"status": "REJECT", "reason": "데이터 부족", "ticker": ticker, "name": ticker}
         
-        # [ PREPARE DATA ] 기초 데이터 계산
+        # [ PREPARE DATA ]
         df = hist.copy()
-        df['C1'] = df['Close'].shift(1)
-        df['C2'] = df['Close'].shift(2)
-        df['V1'] = df['Volume'].shift(1)
+        df['C1'], df['C2'], df['V1'] = df['Close'].shift(1), df['Close'].shift(2), df['Volume'].shift(1)
+        df['Pct'] = (df['Close'] / (df['C1'] + 1e-9) - 1) * 100
+        df['SMA7'], df['SMA65'] = df['Close'].rolling(7).mean(), df['Close'].rolling(65).mean()
+        df['TI65'] = df['SMA7'] / (df['SMA65'] + 1e-9)
+        df['Range_Pos'] = (df['Close'] - df['Low']) / (df['High'] - df['Low'] + 1e-9)
+        df['ADR20'] = ((df['High'] / (df['Low'] + 1e-9) - 1) * 100).rolling(20).mean()
         
-        df['Close_Pct_Change'] = (df['Close'] / df['C1'] - 1) * 100
-        df['Open_Pct_Gap'] = (df['Open'] / df['C1'] - 1) * 100
-        
-        # 1. ADR (Average Daily Range) - 최근 20일 평균 변동폭 (%)
-        # 본데는 ADR 4~5% 이상의 활발한 종목을 선호함
-        df['Day_Range'] = (df['High'] / df['Low'] - 1) * 100
-        adr_20 = round(df['Day_Range'].rolling(20).mean().iloc[-1], 2)
-        
-        # 2. VCP Tightness (3일 변동성 수렴도)
-        df['Tightness'] = (df['High'] - df['Low']).rolling(3).mean() / df['Close'] * 100
-        tight_score = round(df['Tightness'].iloc[-1], 2)
-        
-        # 3. Market Regime Check (시장 환경 필터)
-        # 지수가 10일 이평선 위에 있는지 확인하여 하락장 매매 방지
-        market_ticker = "^IXIC" if not is_kr else "^KS11"
-        try:
-            m_hist = yf.download(market_ticker, period="20d", progress=False)
-            m_close = m_hist['Close'].iloc[-1]
-            m_sma10 = m_hist['Close'].rolling(10).mean().iloc[-1]
-            market_regime = "BULL" if m_close > m_sma10 else "BEAR"
-        except: market_regime = "BULL" # 데이터 오류 시 보수적으로 통과
-        
-        # 최근 20일 이내 9M EP 이벤트
-        df['Is_9M_Event'] = (df['Volume'] >= 9000000) & (df['Close_Pct_Change'] >= 4.0)
-        df['Recent_9M_Event'] = df['Is_9M_Event'].shift(1).rolling(window=20, min_periods=1).max()
-        
-        # 현재 값 추출
         row = df.iloc[-1]
-        c, o, v = row['Close'], row['Open'], row['Volume']
+        c, o, v, pct, ti65, adr20, range_pos = row['Close'], row['Open'], row['Volume'], row['Pct'], row['TI65'], row['ADR20'], row['Range_Pos']
         p_c, p_c2, p_v = row['C1'], row['C2'], row['V1']
-        day_pct, gap_pct = row['Close_Pct_Change'], row['Open_Pct_Gap']
-        recent_9m = row['Recent_9M_Event']
-        
+
+        is_ep = is_dr = is_tight = False
         setups = []
-        
-        # [ REFINEMENT ] ADR 필터링 (너무 느린 종목 제외)
-        if adr_20 < 3.0: 
-            return {"status": "REJECT", "stage": "ADR_FILTER", "reason": f"낮은 변동성 (ADR: {adr_20}%)"}
 
-        # 1. 9 Million EP
-        min_p = 3000 if is_kr else 3.0
-        if v >= 9000000 and (day_pct >= 4.0 or gap_pct >= 4.0) and c >= min_p:
-            setups.append("9 Million EP")
-            
-        # 2. Story-based EP
-        story_list = get_bonde_top_50()
-        if ticker in story_list:
-            if v >= 2000000 and gap_pct >= 4.0:
-                setups.append("Story-based EP")
-                
-        # 3. Delayed Reaction EP
-        cond_r2g = (o < p_c) and (c > p_c) and (c > o)
-        cond_sec_brk = (day_pct >= 4.0) and (v > p_v)
-        if recent_9m == 1.0 and (cond_r2g or cond_sec_brk):
-            setups.append("Delayed Reaction EP")
-            
-        # 4. 4% Momentum Burst (Tightness 강화)
-        # 전일 2% 이내 응축 + 마켓 레짐이 BULL일 때 더 신뢰도 높음
-        cond_tight_yesterday = abs(p_c / p_c2 - 1) * 100 <= 2.5
-        if day_pct >= 4.0 and v >= 100000 and v > p_v and cond_tight_yesterday:
-            setups.append("4% Momentum Burst")
+        # ⚡ EP (폭발)
+        if pct >= 4.0 and v > p_v and v >= 100000 and (p_c/p_c2) <= 1.02 and range_pos >= 0.7:
+            is_ep = True; setups.append("EP (폭발)")
 
-        # RS Score 및 TI65 (상시 계산)
-        rs = round(((c / df['Close'].iloc[-126]) * 0.7 + (c / df['Close'].iloc[-63]) * 0.3) * 100, 1) if len(df) >= 126 else 50
-        sma65 = df['Close'].rolling(65).mean().iloc[-1] if len(df) >= 65 else c
-        v_ratio = (v / p_v) if p_v > 0 else 1.0
-        
-        # 종합 품질 점수 (Bonde Quality Factor)
-        quality_score = round((rs * 0.4) + (adr_20 * 10 * 0.3) + (v_ratio * 10 * 0.3), 1)
+        # ⏳ DR (지연반응)
+        df['Mega'] = (df['Volume'] >= 9000000) & (df['Pct'] >= 4.0)
+        recent_mega = df['Mega'].shift(1).rolling(25).max().iloc[-1] == 1.0
+        if recent_mega and ((o < p_c and c > p_c) or ((p_c/p_c2) <= 1.02 and v > p_v and pct >= 4.0)):
+            is_dr = True; setups.append("DR (지연반응)")
 
-        result_base = {
-            "ticker": ticker, "close": c, "rs": rs, "day_pct": round(day_pct, 2),
-            "adr": adr_20, "tight": tight_score, "volume": v, "v_ratio": v_ratio,
-            "ti65": round(c / sma65, 3), "quality": quality_score, "name": TICKER_NAME_MAP.get(ticker, ticker)
-        }
+        # 🗜️ TIGHT (응축)
+        ttt = df['Pct'].rolling(3).apply(lambda x: all(abs(x) <= 1.0)).iloc[-1] == 1.0
+        if df['Volume'].rolling(3).min().iloc[-1] >= 300000 and ti65 >= 1.05 and ttt:
+            is_tight = True; setups.append("TIGHT (응축)")
 
-        if not setups:
-            return {**result_base, "status": "PASS", "stage": "SCAN", "reason": "조건 미충족"}
-
-        if market_regime == "BEAR":
-            return {**result_base, "status": "REJECT", "stage": "MARKET_FILTER", "reason": "시장 하락장(지수 SMA10 하향)"}
+        # RS 및 품질
+        rs = round(((c/df['Close'].iloc[-126])*0.7 + (c/df['Close'].iloc[-63])*0.3)*100, 1) if len(df) >= 126 else 50
+        v_ratio = v / (p_v + 1e-9)
+        quality = round((rs*0.4) + (adr20*3) + (v_ratio*3), 1)
+        name = TICKER_NAME_MAP.get(ticker, ticker)
 
         return {
-            **result_base, "status": "SUCCESS", "stage": "EXECUTION", 
-            "reason": f"🚀 {setups[0]} 포착!", "setups": setups, "lod": round(df['Low'].iloc[-1], 2)
+            "ticker": ticker, "name": name, "close": c, "rs": rs, "day_pct": round(pct, 2), 
+            "adr": round(adr20, 2), "quality": quality, "tight": round(abs(pct), 2),
+            "is_ep": is_ep, "is_dr": is_dr, "is_tight": is_tight, "status": "SUCCESS" if setups else "PASS",
+            "reason": f"🚀 {setups[0]} 포착!" if setups else "조건 미충족", "setups": setups,
+            "volume": v, "prev_volume": p_v, "ti65": round(ti65, 3)
         }
+    except Exception as e:
+        return {"status": "ERROR", "reason": str(e), "ticker": ticker, "name": ticker}
 
     except Exception as e:
         return {"status": "ERROR", "stage": "ERROR", "reason": str(e)}
@@ -3609,25 +3595,33 @@ elif page.startswith("7-c."):
             
             with grid_col1:
                 st.markdown("<div style='background:rgba(255,75,75,0.1); padding:10px; border-radius:10px; border-top:3px solid #FF4B4B;'><h4 style='margin:0; color:#FF4B4B;'>⚡ EP (폭발)</h4></div>", unsafe_allow_html=True)
-                # 품질 점수(Quality)와 당일 변동성 기준 정렬 (최상위 주도주)
-                ep_candidates = sorted(scanned_pool, key=lambda x: (x.get('quality', 0), x.get('day_pct', 0)), reverse=True)[:5]
+                # EP 전용 종목 선별 (is_ep 플래그 우선)
+                ep_candidates = sorted([r for r in scanned_pool if r.get('is_ep')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+                if not ep_candidates: # 포착된 EP가 없으면 잠재적 후보군 노출
+                    ep_candidates = sorted(scanned_pool, key=lambda x: x.get('day_pct', 0), reverse=True)[:5]
                 for idx, res in enumerate(ep_candidates, 1):
-                    color = "#FF4B4B" if res.get('status') == 'SUCCESS' else "#888"
+                    color = "#FF4B4B" if res.get('is_ep') else "#888"
                     st.markdown(f"**{idx}.** 🚀 **{res['name']}** <small>({res['ticker']})</small> <span style='color:{color}; float:right;'>{res.get('day_pct', 0):+.1f}%</span>", unsafe_allow_html=True)
             
             with grid_col2:
                 st.markdown("<div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #FFD700;'><h4 style='margin:0; color:#FFD700;'>⏳ DR (지연반응)</h4></div>", unsafe_allow_html=True)
-                # RS 점수와 품질 점수 기준 상위 후보군 노출
-                dr_candidates = sorted(scanned_pool, key=lambda x: (x.get('rs', 0), x.get('quality', 0)), reverse=True)[:5]
+                # DR 전용 종목 선별 (is_dr 플래그 우선)
+                dr_candidates = sorted([r for r in scanned_pool if r.get('is_dr')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+                if not dr_candidates:
+                    dr_candidates = sorted(scanned_pool, key=lambda x: x.get('rs', 0), reverse=True)[:5]
                 for idx, res in enumerate(dr_candidates, 1):
-                    st.markdown(f"**{idx}.** ⏳ **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FFD700; float:right;'>RS: {res.get('rs', 0)}</span>", unsafe_allow_html=True)
+                    color = "#FFD700" if res.get('is_dr') else "#888"
+                    st.markdown(f"**{idx}.** ⏳ **{res['name']}** <small>({res['ticker']})</small> <span style='color:{color}; float:right;'>RS: {res.get('rs', 0)}</span>", unsafe_allow_html=True)
 
             with grid_col3:
                 st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축)</h4></div>", unsafe_allow_html=True)
-                # Tightness(낮을수록 좋음)와 품질 점수 기준 정렬
-                tight_candidates = sorted(scanned_pool, key=lambda x: (x.get('tight', 100), -x.get('quality', 0)))[:5]
+                # TIGHT 전용 종목 선별 (is_tight 플래그 우선)
+                tight_candidates = sorted([r for r in scanned_pool if r.get('is_tight')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
+                if not tight_candidates:
+                    tight_candidates = sorted(scanned_pool, key=lambda x: x.get('tight', 100))[:5]
                 for idx, res in enumerate(tight_candidates, 1):
-                    st.markdown(f"**{idx}.** 🎯 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#00FF00; float:right;'>T: {res.get('tight', 0):.2f}%</span>", unsafe_allow_html=True)
+                    color = "#00FF00" if res.get('is_tight') else "#888"
+                    st.markdown(f"**{idx}.** 🎯 **{res['name']}** <small>({res['ticker']})</small> <span style='color:{color}; float:right;'>T: {res.get('tight', 0):.2f}%</span>", unsafe_allow_html=True)
 
             # --- [ XAI: TACTICAL REASONING ] 왜 사고, 왜 안 샀는가? ---
             st.markdown("---")
@@ -3673,8 +3667,8 @@ elif page.startswith("7-c."):
                     unique_details.append(r)
                     seen.add(r['ticker'])
             
-            for res in unique_details[:6]:
-                with st.expander(f"📈 {res['name']} ({res['ticker']}) - RS: {res.get('rs')} / ADR: {res.get('adr')}%", expanded=False):
+            for res in unique_details[:8]:
+                with st.expander(f"📈 {res['name']} ({res['ticker']}) - RS: {res.get('rs', 0)} / ADR: {res.get('adr', 0)}%", expanded=False):
                     d_col1, d_col2 = st.columns([2, 1])
                     with d_col1:
                         symbol = res['ticker'].split('.')[0]
