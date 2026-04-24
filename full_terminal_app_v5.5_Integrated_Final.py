@@ -253,11 +253,11 @@ def resolve_ticker(query):
 
 # --- [ ENGINE ] Unified Market Data Center ---
 @st.cache_data(ttl=300)
-def get_bulk_market_data(tickers):
-    """모든 컴포넌트가 공유하는 전역 마켓 데이터 엔진 (API 호출 90% 절감)"""
+def get_bulk_market_data(tickers, period="60d"):
+    """전역 마켓 데이터 엔진 (API 호출 최적화)"""
     if not tickers: return pd.DataFrame()
     try:
-        data = yf.download(list(set(tickers)), period="60d", progress=False)
+        data = yf.download(list(set(tickers)), period=period, progress=False)
         return data if not data.empty else pd.DataFrame()
     except: return pd.DataFrame()
 
@@ -271,8 +271,8 @@ def get_ticker_data_from_bulk(bulk_df, ticker):
 @st.cache_data(ttl=900)
 def get_market_sentiment_v2():
     try:
-        data = yf.download(["^VIX", "^IXIC"], period="20d", progress=False)['Close']
-        vix = float(data["^VIX"].dropna().iloc[-1]) if "^VIX" in data.columns else 20.0
+        data = get_bulk_market_data(["^VIX", "^IXIC"], "20d")
+        vix = float(data['Close']["^VIX"].dropna().iloc[-1]) if "^VIX" in data['Close'].columns else 20.0
         score = max(5, min(95, 100 - (vix * 2.2)))
         label = "GREED" if score > 65 else ("FEAR" if score < 35 else "NEUTRAL")
         return int(score), vix, label
@@ -280,7 +280,7 @@ def get_market_sentiment_v2():
 
 def get_macro_indicators():
     try:
-        data = yf.download(["USDKRW=X", "^TNX"], period="5d", progress=False)['Close']
+        data = get_bulk_market_data(["USDKRW=X", "^TNX"], "5d")['Close']
         rate = data["USDKRW=X"].dropna().iloc[-1]
         yield10y = data["^TNX"].dropna().iloc[-1]
         return f"[ USD/KRW ]: {rate:,.1f}원 | [ US 10Y ]: {yield10y:.2f}%"
@@ -1006,252 +1006,77 @@ if not st.session_state["password_correct"]:
                     st.error(f"[ ERROR ] {score}/15점. 사령부의 철학을 더 공부하고 와주시기 바랍니다. (13점 이상 합격)")
                     with st.expander("[ REVIEW ] 15관문 자격 시험 정답 및 해설 보기", expanded=True):
                         st.markdown("""
-                        - **Q1-2:** 양봉(빨강)은 상승, 음봉(파란)은 하락입니다.
-                        - **Q3-4:** 거래량은 관심의 지표이며, 캔들 차트는 시세의 흐름을 보여줍니다.
-                        - **Q5-6:** 무릎에 사서 어깨에 파는 겸손한 원칙과 이동평균선의 방향을 추종하십시오.
-                        - **Q7-8:** 골든크로스는 황금빛 매수 신호, 데드크로스는 죽음의 매도 신호입니다.
-                        - **Q9-10:** 저점과 고점을 파악하고 인플레이션으로 인한 시장의 우상향을 믿으십시오.
-                        - **Q11:** MAGNA의 G는 **Gap Up**입니다. 강력한 기관 수급의 증거입니다.
-                        - **Q12:** 수익은 오직 **2단계 (Mark-up)** 에서만 창출됩니다.
-                        - **Q13:**    # --- [ AUDIO ] Optimized BGM Player ---
-    bgm_map = {"full": "full", "hope": "hope", "happy": "happy", "YouRaise": "YouRaise", "petty": "petty"}
-    sel_bgm = st.selectbox("Radio Select", ["MUTE"] + list(bgm_map.keys()), label_visibility="collapsed")
-    vol = st.slider("[ VOL ] Volume", 0.0, 1.0, 0.4, step=0.1)
-    
-    if sel_bgm != "MUTE" and sel_bgm in assets["audio"]:
-        b64 = assets["audio"][sel_bgm]
-        st.components.v1.html(f"""<audio autoplay loop><source src='data:audio/mp3;base64,{b64}' type='audio/mp3'></audio><script>document.querySelector('audio').volume={vol};</script>""", height=0)
-nt_v2()
-    s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
-    st.markdown(f"""
-    <div class='glass-card' style='padding: 15px; border-top: 3px solid {s_color};'>
-        <p style='color: #888; font-size: 0.7rem; margin-bottom: 5px; font-family: "Orbitron";'>[ FEAR & GREED ]</p>
-        <div style='display: flex; align-items: center; justify-content: space-between;'>
-            <span style='color: {s_color}; font-weight: 800; font-size: 1.4rem; font-family: "Orbitron";'>{sentiment_score}</span>
-            <span style='font-size: 0.7rem; color: #666; letter-spacing:1px;'>{ 'GREED' if sentiment_score > 65 else ('FEAR' if sentiment_score < 35 else 'NEUTRAL') }</span>
-        </div>
-        <div style='width: 100%; height: 6px; background: #000; border-radius: 3px; margin-top: 10px; border: 1px solid #222;'>
-            <div style='width: {sentiment_score}%; height: 100%; background: {s_color}; border-radius: 3px; box-shadow: 0 0 10px {s_color};'></div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+                        - **Q13:** RSI **30 이하**는 매도세가 소멸되는 과매도 구간입니다.
+                        - **Q14:** 부분 익절 후에는 손절선을 **본절(Break-even)**로 올려 무위험 상태를 만드십시오.
+                        - **Q15:** **3일 연속** 상승한 종목은 절대 추격 매수하지 않는 것이 사령부의 철칙입니다.
+                        """)
+    st.stop()
 
-    # [ PRO ] 글로벌 마켓 세션 클락 (Sidebar Clock System)
-    now_utc = datetime.utcnow()
-    sessions = {
-        "SEOUL": {"tz": pytz.timezone('Asia/Seoul'), "open": 9, "close": 15.5},
-        "NEW YORK": {"tz": pytz.timezone('America/New_York'), "open": 9.5, "close": 16},
-        "LONDON": {"tz": pytz.timezone('Europe/London'), "open": 8, "close": 16.5}
-    }
-    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#888; margin-top:20px;'>[ WORLD MARKET SESSIONS ]</p>", unsafe_allow_html=True)
-    for city, info in sessions.items():
-        city_now = datetime.now(info['tz'])
-        h_dec = city_now.hour + city_now.minute / 60
-        is_open = info['open'] <= h_dec < info['close']
-        s_color = "#00FF00" if is_open else "#FF4B4B"
-        st.markdown(f"""
-        <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 8px; border-left: 3px solid {s_color};'>
-            <span style='font-size: 0.75rem; color: #BBB;'>{city}</span>
-            <div style='text-align: right;'>
-                <b style='font-size: 0.85rem; color: #FFF;'>{city_now.strftime('%H:%M')}</b>
-                <span style='font-size: 0.6rem; color: {s_color}; margin-left: 5px;'>● {"OPEN" if is_open else "CLOSED"}</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+# --- [ CONFIG ] Menu & Trades ---
+ZONE_CONFIG = {
+    "[ HQ ] 1. 본부 사령부": ["1-a. [ ADMIN ] 관리자 승인 센터", "1-b. [ HR ] HQ 인적 자원 사령부", "1-c. [ SECURE ] 계정 보안 및 관리(18.)", "1-d. [ EXIT ] 탈퇴/휴식 신청"],
+    "[ MARKET ] 2. 시장 상황실": ["2-a. [ TREND ] 마켓 트렌드 요약", "2-b. [ MAP ] 실시간 히트맵", "2-c. [ SENTIMENT ] 시장 심리 게이지", "2-d. [ ABOUT ] 제작 동기"],
+    "[ TARGET ] 3. 주도주 추격대": ["3-a. [ SCAN ] 주도주 타점 스캐너", "3-b. [ RANK ] 주도주 랭킹 TOP 50", "3-c. [ WATCH ] 본데 감시 리스트", "3-d. [ INDUSTRY ] 산업동향(TOP 10)", "3-e. [ RS ] RS 강도(TOP 10)"],
+    "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방"],
+    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ SETUP ] 사령부 교전 수칙", "7-b. [ MONITOR ] 실시간 시장 관제", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-g. [ COMBAT ] 실시간 교전 관제소", "7-i. [ CONFIG ] 사령부 시스템 설정"]
+}
 
-    # [NEW] 실시간 작전 대원 상태 (AI 6인방)
-    st.markdown("<p style='margin-top:20px; font-weight:bold; font-size:0.8rem; color:#888;'>[ LIVE ] AI OPERATIVES STATUS</p>", unsafe_allow_html=True)
-    ai_team_sidebar = [
-        {"name": "[ AI ] minsu", "mission": "KOSPI"}, 
-        {"name": "[ AI ] Olive", "mission": "KOSDAQ"}, 
-        {"name": "[ AI ] Pure", "mission": "NASDAQ"}, 
-        {"name": "[ AI ] Harmony", "mission": "Analyzing"}, 
-        {"name": "[ AI ] Mint Soft", "mission": "Analyzing"}, 
-        {"name": "[ AI ] Calm Blue12", "mission": "Analyzing"}
-    ]
-    for ai_s in ai_team_sidebar:
-        st.markdown(f"""
-        <div style='display: flex; justify-content: space-between; padding: 4px 10px; background: rgba(0,255,255,0.03); border-radius: 5px; margin-bottom: 4px; border-left: 2px solid #00FFFF;'>
-            <span style='font-size: 0.75rem; color: #BBB;'>{ai_s['name']}</span>
-            <span style='color: #00FF00; font-size: 0.6rem;'>● {ai_s['mission']}</span>
-        </div>
-        """, unsafe_allow_html=True)
+def load_trades():
+    return safe_load_json(TRADES_DB, {"mock": [], "auto": [], "history": [], "wallets": {}})
 
-    # [NEW] 실시간 AI 요원 총자산 수익률 랭킹 (Dynamic System)
-    with st.expander("🏆 AI OPERATIVE RANKING (REAL-TIME)", expanded=True):
-        ranking_data = get_realtime_ai_ranking()
-        
-        if not ranking_data:
-            st.info("📡 시세 데이터를 동기화 중입니다...")
-        else:
-            # 메달 설정 (TOP 3)
-            medals = {0: ("🥇 GOLD", "#FFD700"), 1: ("🥈 SILVER", "#C0C0C0"), 2: ("🥉 BRONZE", "#CD7F32")}
-            
-            for idx, r_item in enumerate(ranking_data):
-                m_info = medals.get(idx, (f"{idx+1}th", "#555"))
-                m_text, m_color = m_info
-                
-                roi_val = float(r_item['roi'].replace('%', ''))
-                roi_color = "#00FF00" if roi_val > 0 else ("#FF4B4B" if roi_val < 0 else "#888")
-                
-                # [ ACTION ] 한국 주식명 매칭 및 가격 포맷팅
-                disp_ticker = TICKER_NAME_MAP.get(r_item['pick'], r_item['pick'])
-                is_kr = ".KS" in r_item['pick'] or ".KQ" in r_item['pick']
-                
-                in_p = f"{int(r_item['entry']):,} 원" if is_kr else f"${r_item['entry']:,.1f}"
-                out_p = f"{int(r_item['exit_p']):,} 원" if is_kr else f"${r_item['exit_p']:,.1f}"
-                
-                st.markdown(f"""
-                <div style='margin-bottom: 12px; padding: 12px; background: rgba(255,255,255,0.02); border-radius: 10px; border: 1px solid {m_color}33; border-left: 4px solid {m_color}; transition: all 0.3s ease;'>
-                    <div style='display: flex; justify-content: space-between; align-items: center;'>
-                        <b style='color: {m_color}; font-size: 0.8rem; font-family: "Orbitron";'>{m_text}</b>
-                        <span style='color: #666; font-size: 0.65rem;'>{r_item['pts']:,} pts</span>
-                    </div>
-                    <div style='margin-top: 4px; display: flex; justify-content: space-between;'>
-                        <b style='color: #FFF; font-size: 0.9rem;'>{r_item['name']}</b>
-                        <span style='color: #00FF00; font-size: 0.8rem; font-weight: 800; font-family: "Orbitron";'>{r_item['balance']:,} 원</span>
-                    </div>
-                    <div style='margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.7rem;'>
-                        <span style='color: #444;'>대상: <b style='color: #BBB;'>{disp_ticker}</b></span>
-                        <span style='color: #444;'>승률: <b style='color: #00AAAA;'>{r_item['win']}%</b></span>
-                        <span style='color: #444;'>진입: <b style='color: #999;'>{in_p}</b></span>
-                        <span style='color: #444;'>현재: <b style='color: #999;'>{out_p}</b></span>
-                        <span style='color: #444;'>수익: <b style='color: {roi_color}; font-weight:800; font-size: 0.75rem;'>{r_item['roi']}</b></span>
-                        <span style='color: #444;'>갱신: <b style='color: #666;'>{r_item['exit']}</b></span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+def save_trades(trades):
+    safe_save_json(trades, TRADES_DB)
 
-
-
-    # --- [ AUDIO ] 고도화된 전술 BGM 제어판 ---
-    st.divider()
-    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#888;'>[ AUDIO ] TACTICAL BGM PLAYER</p>", unsafe_allow_html=True)
-    bgm_options = {
-        "[ MUTE ] Silence": None, 
-        "[ MIX ] Random Mix": "shuffle",
-        "[ BGM ] Full Force": "full.mp3",
-        "[ BGM ] Inspiration": "YouRaise.mp3", 
-        "[ BGM ] Morning Joy": "happy.mp3", 
-        "[ BGM ] Hopeful": "hope.mp3", 
-        "[ BGM ] Elegant": "petty.mp3", 
-        "[ BGM ] Soul (Ajussi)": "나의아저씨.mp3"
-    }
-    sel_bgm_v9 = st.selectbox("Radio Select", list(bgm_options.keys()), label_visibility="collapsed")
-    vol_v9 = st.slider("[ VOL ] Volume", 0.0, 1.0, 0.4, step=0.05)
-    
-    target_bgm_v9 = bgm_options[sel_bgm_v9]
-    
-    # 랜덤 믹스 처리
-    if target_bgm_v9 == "shuffle":
-        if "shuffled_bgm" not in st.session_state:
-            valid_files = [f for f in list(bgm_options.values()) if f and f != "shuffle" and os.path.exists(f)]
-            st.session_state.shuffled_bgm = random.choice(valid_files) if valid_files else None
-        target_bgm_v9 = st.session_state.shuffled_bgm
-    else:
-        # 일반 선택 시 셔플 상태 초기화
-        if "shuffled_bgm" in st.session_state:
-            del st.session_state.shuffled_bgm
-
-    if target_bgm_v9 and os.path.exists(target_bgm_v9):
-        # [ AUDIO ] 오디오 성능 최적화: 캐시에 저장된 base64 사용 (매번 인코딩 방지)
-        @st.cache_data(show_spinner=False, ttl=3600)
-        def get_base64_audio(file_path):
-            try:
-                with open(file_path, "rb") as f: 
-                    return base64.b64encode(f.read()).decode()
-            except: return ""
-        
-        b64 = get_base64_audio(target_bgm_v9)
-        if b64:
-            # onended 이벤트를 활용하여 랜덤 믹스 시 다음 곡으로 넘어가게 설정 (Streamlit 한계상 재실행 필요)
-            st.components.v1.html(f"""
-                <audio id='aud' autoplay loop>
-                    <source src='data:audio/mp3;base64,{b64}' type='audio/mp3'>
-                </audio>
-                <script>
-                    var audio = document.getElementById('aud');
-                    audio.volume = {vol_v9};
-                </script>
-            """, height=0)
-
-    # --- [ GLOBAL ] 실시간 AI 요원 매매 상황 중계 (전역 팝업 알림) ---
-    if st.session_state.get("password_correct") and random.random() < 0.05:
-        names = ["minsu", "Olive", "Pure", "Harmony"]
-        tickers = ["NVDA", "TSLA", "005930.KS", "247540.KQ", "PLTR", "AAPL", "MSTR"]
-        op = random.choice(names)
-        ti = random.choice(tickers)
-        d_name = TICKER_NAME_MAP.get(ti, ti)
-        st.session_state.show_flash = True
-        # [ ACTION ] AI 돌파 매수 알림음 (사운드 연동)
-        st.markdown("""
-        <audio autoplay>
-            <source src="https://www.soundjay.com/buttons/beep-07a.mp3" type="audio/mpeg">
-        </audio>
-        """, unsafe_allow_html=True)
-        st.toast(f"📡 [ AI LIVE ] [ AI ] {op} 요원이 {d_name} 종목 실시간 돌파 매수 지점 포착 및 집행!", icon="⚔️")
-
-# --- 유저 등급 판독 ---
-users = load_users()
-curr_user_data = users.get(st.session_state.current_user, {})
-curr_grade = curr_user_data.get("grade", "회원")
-is_admin = (curr_grade in ["관리자", "방장"])
-
-# --- 🔴 2단계 구성 (ZONE_CONFIG 참조) ---
-if 'page' not in st.session_state:
-    st.session_state.page = "6-a. [ CHECK ] 출석체크(오늘한줄)"
-
-zones = {k: list(v) for k, v in ZONE_CONFIG.items()} # 원본 구조 복사
-
-# 보급 및 보안 권한에 따른 메뉴 필터링 (1-a, 1-b 관리자 전용 제한)
-if not is_admin:
-    for admin_page in ["1-a. [ ADMIN ] 관리자 승인 센터", "1-b. [ HR ] HQ 인적 자원 사령부"]:
-        if admin_page in zones["[ HQ ] 1. 본부 사령부"]:
-            zones["[ HQ ] 1. 본부 사령부"].remove(admin_page)
-
-# 🤖 자동매매 사령부는 모든 승인된 대원(준회원 이상)이 접근 가능
-if curr_grade not in ["방장", "관리자", "정회원", "준회원"]:
-    if "[ AUTO ] 7. 자동매매 사령부" in zones:
-        del zones["[ AUTO ] 7. 자동매매 사령부"]
-
+# --- [ SIDEBAR ] Mission Control Center ---
 with st.sidebar:
-    st.markdown("<p style='color: #FFD700; font-size: 0.9rem; font-weight: 700; margin-top: 10px; margin-bottom: 20px; letter-spacing: 1px;'>[ MISSION CONTROL ]</p>", unsafe_allow_html=True)
+    if assets["logo"]:
+        st.markdown(f'<img src="data:image/png;base64,{assets["logo"]}" style="width:100%; border-radius:12px; margin-bottom:20px;">', unsafe_allow_html=True)
     
-    for zone_name, missions in zones.items():
-        is_active_zone = st.session_state.page in missions
-        with st.expander(zone_name, expanded=is_active_zone):
+    st.markdown("<div style='text-align: center;'><p class='neon-text' style='font-size:1.6rem; margin-bottom:0;'>DRAGONFLY</p><small style='color:#555; letter-spacing:4px;'>TACTICAL TERMINAL v9.9</small></div>", unsafe_allow_html=True)
+    
+    # Market Sentiment
+    score, vix, label = get_market_sentiment_v2()
+    s_color = "#FF4B4B" if score < 40 else ("#FFD700" if score < 65 else "#00FF00")
+    st.markdown(f"""<div class='glass-card' style='padding:15px; border-top:3px solid {s_color};'>
+        <p style='color:#888; font-size:0.7rem; margin-bottom:5px; font-family:Orbitron;'>[ FEAR & GREED ]</p>
+        <div style='display:flex; justify-content:space-between; align-items:center;'>
+            <h3 style='margin:0; color:{s_color};'>{score}</h3>
+            <small style='color:#666;'>{label}</small>
+        </div>
+        <div style='width:100%; height:4px; background:#000; border-radius:2px; margin-top:10px;'><div style='width:{score}%; height:100%; background:{s_color};'></div></div>
+    </div>""", unsafe_allow_html=True)
+
+    # BGM Player
+    st.markdown("<p style='font-size:0.7rem; color:#888; margin-bottom:5px;'>[ AUDIO ] TACTICAL BGM</p>", unsafe_allow_html=True)
+    sel_bgm = st.selectbox("BGM", ["MUTE"] + list(assets["audio"].keys()), label_visibility="collapsed")
+    vol = st.slider("VOL", 0.0, 1.0, 0.4, 0.1)
+    if sel_bgm != "MUTE" and sel_bgm in assets["audio"]:
+        st.components.v1.html(f"<audio autoplay loop id='bgm'><source src='data:audio/mp3;base64,{assets['audio'][sel_bgm]}' type='audio/mp3'></audio><script>document.getElementById('bgm').volume={vol};</script>", height=0)
+
+    # Navigation
+    st.markdown("<p style='color:#FFD700; font-size:0.8rem; font-weight:700; margin-top:20px; margin-bottom:10px;'>[ MISSION CONTROL ]</p>", unsafe_allow_html=True)
+    users = load_users()
+    curr_grade = users.get(st.session_state.current_user, {}).get("grade", "회원")
+    is_admin = curr_grade in ["관리자", "방장"]
+    
+    for zone, missions in ZONE_CONFIG.items():
+        if "ADMIN" in str(missions) and not is_admin: continue
+        if "AUTO" in zone and curr_grade not in ["방장", "관리자", "정회원", "준회원"]: continue
+        with st.expander(zone, expanded=(st.session_state.get("page") in missions)):
             for m in missions:
                 if st.button(m, key=f"nav_{m}", use_container_width=True):
                     st.session_state.page = m
                     st.rerun()
 
-# --- 🌍 [GLOBAL RECONNAISSANCE] 공통 시각 및 상태 설정 ---
+# --- [ LAYOUT ] Global State ---
+page = st.session_state.get("page", "6-a. [ CHECK ] 출석체크(오늘한줄)")
 now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
 
-# 최종 선택된 미션을 page 변수에 할당하여 본문 렌더링
-page = st.session_state.get("page", "6-a. [ CHECK ] 출석체크(오늘한줄)")
-
-# (상단으로 이동됨)
-
-# --- 🐉 글로벌 매크로 애니메이션 티커 테이프 ---
-@st.cache_data(ttl=300)
-def fetch_macro_ticker_tape():
-    watch = {"S&P500": "^GSPC", "NASDAQ": "^IXIC", "BTC": "BTC-USD", "GOLD": "GC=F", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
-    data = get_bulk_market_data(list(watch.values()))
-    items = []
-    for name, sym in watch.items():
-        hist = get_ticker_data_from_bulk(data, sym)
-        if len(hist) >= 2:
-            curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
-            pct = (curr / prev - 1) * 100
-            color = "#FF4B4B" if pct >= 0 else "#0088FF"
-            items.append(f"<span class='ticker-item'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
-    return " ".join(items)
-
+# --- [ TICKER ] Global Macro Tape ---
 ticker_html = fetch_macro_ticker_tape()
 st.markdown(f"""
-    <div class='ticker-wrap' style='background: rgba(0,255,0,0.03); border-top: 1px solid #FFD70033; border-bottom: 2px solid #FFD70066;'>
-        <div style='display: inline-block; white-space: nowrap; animation: marquee-new 40s linear infinite; font-family: "Outfit", sans-serif; font-size: 0.95rem; font-weight: 600;'>
+    <div class='ticker-wrap'>
+        <div class='ticker-content'>
             {ticker_html} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {ticker_html} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {ticker_html}
         </div>
     </div>
@@ -1318,30 +1143,18 @@ now_us = datetime.now(pytz.timezone('America/New_York'))
 
 @st.cache_data(ttl=600)
 def get_top_indices():
-    # [ PRO ] 고가/저가 정보를 포함한 정밀 데이터 페칭
     res = {"DOW": [0.0, 0.0, 0.0, 0.0], "S&P500": [0.0, 0.0, 0.0, 0.0], "NASDAQ": [0.0, 0.0, 0.0, 0.0], "KOSPI": [0.0, 0.0, 0.0, 0.0], "KOSDAQ": [0.0, 0.0, 0.0, 0.0]}
     symbols = {"DOW": "^DJI", "S&P500": "^GSPC", "NASDAQ": "^IXIC", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
     try:
-        data = yf.download(list(symbols.values()), period="5d", progress=False)
-        close_data = data['Close']
-        high_data = data['High']
-        low_data = data['Low']
-        
-        for name, ticker in symbols.items():
-            try:
-                c_series = close_data[ticker].dropna()
-                if len(c_series) >= 2:
-                    curr = c_series.iloc[-1]
-                    prev = c_series.iloc[-2]
-                    pct = ((curr / prev) - 1) * 100
-                    h_val = float(high_data[ticker].dropna().iloc[-1])
-                    l_val = float(low_data[ticker].dropna().iloc[-1])
-                    res[name] = [float(curr), float(pct), h_val, l_val]
-            except: continue
+        data = get_bulk_market_data(list(symbols.values()), "5d")
+        for k, sym in symbols.items():
+            if sym in data['Close'].columns:
+                h = data.xs(sym, axis=1, level=1).dropna() if isinstance(data.columns, pd.MultiIndex) else data.dropna()
+                if not h.empty:
+                    c, pc = h['Close'].iloc[-1], h['Close'].iloc[-2] if len(h)>1 else h['Close'].iloc[-1]
+                    res[k] = [float(c), (float(c)/float(pc)-1)*100, float(h['High'].max()), float(h['Low'].min())]
     except: pass
     return res
-
-idx_info = get_top_indices()
 
 # --- [ CONTROL ] 사령부 통합 지수 관제 센터 (Stable v6.1) ---
 idx_info = get_top_indices()
