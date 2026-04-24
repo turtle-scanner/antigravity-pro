@@ -432,7 +432,7 @@ def get_macro_data():
 # [ SECURITY ] 사용자가 제공한 API 정보를 우선 적용하되, secrets 설정이 있다면 그것을 따릅니다.
 KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "PSLep6Mc8hCjS6CHhpXnCXKEVVi3UoYbgOF5")
 KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "cXF1CYSGZBWAl0ytFSIWsRunLQPuzthZKqxWX4GI562Rndn+tBBx7ObQ80R4T76Fb0mLld4mJ0Wz1DdDLZxOQ6lPhkm+1fW9m2+LsFuTHUF90HYy1HnYyEIW7rEL0wyxag0/s/Vt3udBdj5eS+zOR82wjpKg0dA9n4znVP9Hk5udnk0g/Kw=")
-raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "46289819")).replace("-", "")
+raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "4628981901")).replace("-", "")
 KIS_ACCOUNT_NO = raw_acc + "01" if len(raw_acc) == 8 else raw_acc
 KIS_MOCK_TRADING = st.session_state.get("kis_mock_mode", st.secrets.get("KIS_MOCK_TRADING", True)) # 사이드바 설정 우선
 
