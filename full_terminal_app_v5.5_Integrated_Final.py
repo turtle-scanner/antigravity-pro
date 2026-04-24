@@ -998,13 +998,12 @@ def get_realtime_ai_ranking():
 
 @st.cache_data(ttl=600)
 def load_users():
-    """?용???이??로드 (로컬 ?선)"""
+    """사용자 데이터 로드 (로컬 우선)"""
     users = safe_load_json(USER_DB_FILE, {})
-    # 백그?운?에???트 ?기???리?(?션)
     return users
 
 def sync_users_from_sheet():
-    """비동??용???이???기??""
+    """비동기 사용자 데이터 동기화"""
     if not USERS_SHEET_URL: return
     try:
         resp = safe_get(USERS_SHEET_URL, timeout=15)
@@ -1012,22 +1011,24 @@ def sync_users_from_sheet():
             df_u = pd.read_csv(io.StringIO(resp.text))
             users = safe_load_json(USER_DB_FILE, {})
             for _, row in df_u.iterrows():
-                u_id = str(row.get('?이??, row.get('ID', ''))).strip()
+                u_id = str(row.get('아이디', row.get('ID', ''))).strip()
                 if not u_id or u_id == 'nan': continue
                 users[u_id] = {
-                    "password": str(row.get('비?번호', u_id)),
-                    "status": str(row.get('?태', 'approved')),
-                    "grade": str(row.get('?급', '?원')),
-                    "info": {"joined_at": row.get('가?일', '-')}
+                    "password": str(row.get('비밀번호', u_id)),
+                    "status": str(row.get('상태', 'approved')),
+                    "grade": str(row.get('등급', '회원')),
+                    "info": {"joined_at": row.get('가입일', '-')}
                 }
             safe_save_json(users, USER_DB_FILE)
     except:    pass
 
     # 기본 방장 계정 보장
+    users = load_users()
     if "cntfed" not in users:
         users["cntfed"] = {"password": "cntfed", "status": "approved", "grade": "방장"}
+        safe_save_json(users, USER_DB_FILE)
     
-    # [ SYSTEM ] ?문가??권한? ?스?적?로 ?? 보장 (지?짐 방?)
+    # [ SYSTEM ] 전문가용 권한을 테스트적으로 상시 보장 (지휘지침 반영)
     users["cntfed"]["grade"] = "방장"
     users["cntfed"]["status"] = "approved"
     
@@ -1276,25 +1277,6 @@ if not st.session_state["password_correct"]:
                 st.info("Part 2: 본데???술 철학 (10문항)")
                 q11 = st.radio("Q11. 본데 ?략???심 ?워?는?", ["모멘???파", "가??자", "배당??자", "?????자"], index=None)
                 q12 = st.radio("Q12. TI65 지?? ???는 것??", ["65??가?모멘? 강도", "65??거래???균", "65???상 ????금", "6.5% ?익?], index=None)
-                q13 = st.radio("Q13. 본데??'4% Momentum Burst'???수 조건??", ["거래???반 4% ?상 ?승", "4???속 ?락", "4% 배당 지?, "?전 10??매수"], index=None)
-                q14 = st.radio("Q14. Episodic Pivot(EP)??발생 ?인??", ["강력????멘?의 변??, "개??의 집단 매수", "?순??가?조정", "기???물량 ?하"], index=None)
-                q15 = st.radio("Q15. 본데가 말하??가???전??매수 ?점??", ["박스??파 초기", "?폭 과? ?점", "고점 ?성 ??조정", "?장 ?일"], index=None)
-                q16 = st.radio("Q16. 3???속 ?승??종목???? ?는 ?유??", ["추격 매수 ?험(Laggard)", "???? 것이??문", "?이 ?어??, "규정 ?문"], index=None)
-                q17 = st.radio("Q17. 주식 ?장??4?계 ?매매?야 ?는 ?계??", ["2?계 (Mark-up)", "1?계 (Accumulation)", "3?계 (Distribution)", "4?계 (Capitulation)"], index=None)
-                q18 = st.radio("Q18. Gap Up(??승)??중요???유??", ["강력??기? ?급??증거", "가격이 비싸??, "?기 좋아??, "?금 ?문"], index=None)
-                q19 = st.radio("Q19. 본데 ?략?서 매도??1?위 기???", ["매수가(LOD) ?탈", "10% ?익", "목표가 ?달", "지루할 ??], index=None)
-                q20 = st.radio("Q20. ROE가 마이?스??기업??배제?는 ?유??", ["??멘??결함 ?부??, "?금??많아??, "?름?????뻐??, "?행??지?서"], index=None)
-
-                st.info("Part 3: 고등 ?략 ??리 (10문항)")
-                q21 = st.radio("Q21. ?레?링 ?탑???", ["?익???라 ?절?을 ?림", "?절???기??, "매도 ??, "천천??멈춤"], index=None)
-                q22 = st.radio("Q22. ?장 ?리(Fear & Greed)가 공포(Fear)????????", ["보수???용/기회 ?착", "?량 ?매", "무조?매수", "?식"], index=None)
-                q23 = st.radio("Q23. 주식 매매?서 가???????", ["?기 ?신??감정", "?국??, "?력", "??"], index=None)
-                q24 = st.radio("Q24. 분할 매수???점??", ["?단가 조절 ?리스??분산", "?익 극???, "빠른 매매", "?수??감"], index=None)
-                q25 = st.radio("Q25. RSI 지?? 30 ?하???의 ????", ["과매??구간(반등 가?성)", "과매??구간", "?상 가?, "매도 ?기"], index=None)
-                q26 = st.radio("Q26. ?술???내??", ["??이 ???까지 기다?, "물린 ??버?", "무한 ??, "매매 ?기"], index=None)
-                q27 = st.radio("Q27. 주도주??", ["?장???승???끄???심?, "가????주식", "가??비싼 주식", "거래 ???], index=None)
-                q28 = st.radio("Q28. VCP(변?성 축적 ?턴)?????", ["?파? 강력???세", "가??락", "?장 ??", "거래 중단"], index=None)
-                q29 = st.radio("Q29. ?령부??최종 목표??", ["기계???차???한 ?익", "?확천금", "?박", "?명???], index=None)
                 q30 = st.radio("Q30. ?신? 기계처럼 ?절 ?칙??지??것인가?", ["?? 반드??지?니??, "?니?? ?황 봐서??, "모르겠습?다", "지?기 ?습?다"], index=None)
 
             if st.button("[ SUBMIT ] ?격 ?험 ?출 ?가???청"):
@@ -1317,21 +1299,21 @@ if not st.session_state["password_correct"]:
                         }
                         save_users(users)
                         
-                        # ??즉시 구? ?트 백업 ?송 (백그?운???환)
-                        gsheet_sync_bg("?원명단", 
-                            ["?이??, "비?번호", "?태", "?급", "지??, "?령?", "?별", "경력", "가?일", "매매?기"],
-                            [new_id, new_pw, "approved", "?원", reg_region, reg_age, reg_gender, reg_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), reg_moti]
+                        # 즉시 구글 시트 백업 전송 (백그라운드 전환)
+                        gsheet_sync_bg("회원명단", 
+                            ["아이디", "비밀번호", "상태", "등급", "지역", "연령", "성별", "경력", "가입일", "매매동기"],
+                            [new_id, new_pw, "approved", "회원", reg_region, reg_age, reg_gender, reg_exp, datetime.now().strftime("%Y-%m-%d %H:%M"), reg_moti]
                         )
                         
-                        st.success(f"[ SUCCESS ] {score}/15?? ???니?? ?령부??지?? 계승???격??증명?셨?니?? 로그?을 진행??주십?오.")
+                        st.success(f"[ SUCCESS ] {score}/15점 달성! 사령부의 지휘권을 계승할 자격을 증명하셨습니다. 로그인을 진행해 주십시오.")
                         st.balloons()
                 else:
-                    st.error(f"[ ERROR ] {score}/15?? ?령부??철학????공??고 ?주시?바랍?다. (13???상 ?격)")
-                    with st.expander("[ REVIEW ] 15관??격 ?험 ?답 ??설 보기", expanded=True):
+                    st.error(f"[ ERROR ] {score}/15점. 사령부의 철학을 더 공부하고 와 주시기 바랍니다. (13점 이상 합격)")
+                    with st.expander("[ REVIEW ] 15관문 합격 시험 오답 해설 보기", expanded=True):
                         st.markdown("""
-                        - **Q13:** RSI **30 ?하**??매도?? ?멸?는 과매??구간?니??
-                        - **Q14:** 부??절 ?에???절?을 **본절(Break-even)**??려 무위???태?만드????
-                        - **Q15:** **3???속** ?승??종목? ?? 추격 매수?? ?는 것이 ?령부??철칙?니??
+                        - **Q13:** RSI **30 이하**의 매도는 파멸이며, 과매도 구간입니다.
+                        - **Q14:** 부분 익절 후에는 손절가를 **본절(Break-even)**로 올려 무위험 상태를 만듭니다.
+                        - **Q15:** **3일 연속** 상승한 종목은 절대 추격 매수하지 않는 것이 사령부의 철칙입니다.
                         """)
     st.stop()
 
