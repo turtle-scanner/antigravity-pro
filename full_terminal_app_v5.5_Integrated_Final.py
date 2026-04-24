@@ -464,7 +464,10 @@ def get_kis_access_token(app_key, app_secret, mock=True):
         res = requests.post(url, headers=headers, json=body, timeout=15)
         if res.status_code == 200:
             return res.json().get("access_token")
+        else:
+            st.error(f"❌ KIS 인증 실패 ({res.status_code}): {res.text}")
     except Exception as e:
+        st.error(f"⚠️ KIS 인증 에러: {str(e)}")
         print(f"DEBUG: KIS Token Error: {e}")
     return None
 
