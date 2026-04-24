@@ -522,8 +522,9 @@ def get_kis_overseas_balance(token, mock=None):
     params = {
         "CANO": KIS_ACCOUNT_NO[:8], 
         "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
-        "NATN_CD": "840", # 미국 기준
+        "NATN_CD": "840", 
         "TR_PACC_CD": "", 
+        "WCRC_FRCR_DVS_CD": "02", # 외화(USD) 기준
         "CTX_AREA_FK200": "", 
         "CTX_AREA_NK200": ""
     }
@@ -4564,6 +4565,32 @@ elif page.startswith("7-f."):
         st.title("⚙️ SYSTEM CONFIG")
         st.markdown("<div class='glass-card'>사령부의 교전 수칙 및 스캐닝 엔진의 정밀도를 설정합니다.</div>", unsafe_allow_html=True)
         
+        # [ NEW ] KIS API 디버거
+        with st.expander("🔍 KIS API 실시간 연결 디버거 (DEBUG)", expanded=True):
+            st.info("현재 설정된 API Key와 계좌번호로 직접 통신 결과를 확인합니다. '달러 잔고'가 나오지 않을 때 유용합니다.")
+            if st.button("📡 계좌 잔고 데이터 원본 호출 테스트", use_container_width=True):
+                token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+                if not token:
+                    st.error("❌ 토큰 발급 실패: API Key와 Secret을 확인해 주세요.")
+                else:
+                    col_d1, col_d2 = st.columns(2)
+                    with col_d1:
+                        st.markdown("**[국내 잔고 원본]**")
+                        base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+                        url = f"{base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
+                        headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTC8434R" if KIS_MOCK_TRADING else "TTTC8434R"}
+                        params = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:], "AFHR_FLG": "N", "OVAL_DLY_TR_FECONT_YN": "N", "PRCS_DLY_VW_FNC_G": "0", "CANL_DLY_VW_FNC_G": "0", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""}
+                        res = requests.get(url, headers=headers, params=params, timeout=15)
+                        st.json(res.json())
+                    
+                    with col_d2:
+                        st.markdown("**[해외 잔고 원본]**")
+                        url_ov = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+                        headers_ov = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTS3012R" if KIS_MOCK_TRADING else "TTTS3012R"}
+                        params_ov = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:], "NATN_CD": "840", "TR_PACC_CD": "", "WCRC_FRCR_DVS_CD": "02", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""}
+                        res_ov = requests.get(url_ov, headers=headers_ov, params=params_ov, timeout=15)
+                        st.json(res_ov.json())
+
         st.subheader("🛡️ 리스크 관리 수칙")
         st.slider("기계적 손절 임계치 (%)", 2.0, 10.0, 5.0, key="cfg_stop_loss")
         st.write(f"현재 설정: 진입가 대비 -5% 도달 시 즉시 탈출 (LOD 자동 감시 병행)")
