@@ -243,8 +243,32 @@ TICKER_NAME_MAP = {
     "005490.KS": "POSCO홀딩스", "000270.KS": "기아", "066570.KS": "LG전자", "035720.KS": "카카오", "035420.KS": "NAVER",
     "005380.KS": "현대차", "000810.KS": "삼성화재", "NFLX": "넷플릭스", "MSTR": "마이크로스트래티지", "COIN": "코인베이스", 
     "MARA": "마라톤디지털", "PANW": "팔로알토", "SNOW": "스노우플레이크", "STX": "씨게이트", "WDC": "웨스턴디지털",
-    "247540.KQ": "에코프로비엠", "277810.KQ": "에코프로", "091990.KQ": "셀트리온헬스케어", "293490.KQ": "카카오게임즈", "086520.KQ": "에코프로"
+    "247540.KQ": "에코프로비엠", "277810.KQ": "에코프로", "091990.KQ": "셀트리온헬스케어", "293490.KQ": "카카오게임즈", "086520.KQ": "에코프로",
+    "000100.KS": "유한양행", "000720.KS": "현대건설", "012330.KS": "현대모비스", "035720.KS": "카카오", "003410.KS": "쌍용C&E"
 }
+
+def get_stock_name(ticker):
+    """티커를 한글 종목명으로 변환 (네이버 실시간 API 연동 및 캐시)"""
+    if ticker in TICKER_NAME_MAP: return TICKER_NAME_MAP[ticker]
+    if "name_cache" not in st.session_state: st.session_state.name_cache = {}
+    if ticker in st.session_state.name_cache: return st.session_state.name_cache[ticker]
+    
+    try:
+        # 한국 주식의 경우 네이버 API로 이름 가져오기
+        if ticker.endswith(".KS") or ticker.endswith(".KQ"):
+            symbol = ticker.split('.')[0]
+            url = f"https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:{symbol}"
+            resp = requests.get(url, timeout=2).json()
+            name = resp['result']['areas'][0]['datas'][0]['nm']
+            st.session_state.name_cache[ticker] = name
+            return name
+        # 해외 주식은 yfinance 사용
+        t = yf.Ticker(ticker)
+        name = t.info.get('shortName', ticker)
+        st.session_state.name_cache[ticker] = name
+        return name
+    except:
+        return ticker
 
 REVERSE_TICKER_MAP = {v: k for k, v in TICKER_NAME_MAP.items()}
 
@@ -623,7 +647,7 @@ def analyze_stockbee_setup(ticker, hist_df=None):
         rs = round(((c/df['Close'].iloc[-126])*0.7 + (c/df['Close'].iloc[-63])*0.3)*100, 1) if len(df) >= 126 else 50
         v_ratio = v / (p_v + 1e-9)
         quality = round((rs*0.4) + (adr20*3) + (v_ratio*3), 1)
-        name = TICKER_NAME_MAP.get(ticker, ticker)
+        name = get_stock_name(ticker)
 
         return {
             "ticker": ticker, "name": name, "close": c, "rs": rs, "day_pct": round(pct, 2), 
@@ -3595,33 +3619,27 @@ elif page.startswith("7-c."):
             
             with grid_col1:
                 st.markdown("<div style='background:rgba(255,75,75,0.1); padding:10px; border-radius:10px; border-top:3px solid #FF4B4B;'><h4 style='margin:0; color:#FF4B4B;'>⚡ EP (폭발)</h4></div>", unsafe_allow_html=True)
-                # EP 전용 종목 선별 (is_ep 플래그 우선)
+                # 엄격한 EP 필터링 (is_ep 플래그 전용)
                 ep_candidates = sorted([r for r in scanned_pool if r.get('is_ep')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
-                if not ep_candidates: # 포착된 EP가 없으면 잠재적 후보군 노출
-                    ep_candidates = sorted(scanned_pool, key=lambda x: x.get('day_pct', 0), reverse=True)[:5]
                 for idx, res in enumerate(ep_candidates, 1):
-                    color = "#FF4B4B" if res.get('is_ep') else "#888"
-                    st.markdown(f"**{idx}.** 🚀 **{res['name']}** <small>({res['ticker']})</small> <span style='color:{color}; float:right;'>{res.get('day_pct', 0):+.1f}%</span>", unsafe_allow_html=True)
+                    st.markdown(f"**{idx}.** 🚀 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FF4B4B; float:right;'>{res.get('day_pct', 0):+.1f}%</span>", unsafe_allow_html=True)
+                if not ep_candidates: st.caption("전술적 폭발 대기 중...")
             
             with grid_col2:
                 st.markdown("<div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #FFD700;'><h4 style='margin:0; color:#FFD700;'>⏳ DR (지연반응)</h4></div>", unsafe_allow_html=True)
-                # DR 전용 종목 선별 (is_dr 플래그 우선)
+                # 엄격한 DR 필터링 (is_dr 플래그 전용)
                 dr_candidates = sorted([r for r in scanned_pool if r.get('is_dr')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
-                if not dr_candidates:
-                    dr_candidates = sorted(scanned_pool, key=lambda x: x.get('rs', 0), reverse=True)[:5]
                 for idx, res in enumerate(dr_candidates, 1):
-                    color = "#FFD700" if res.get('is_dr') else "#888"
-                    st.markdown(f"**{idx}.** ⏳ **{res['name']}** <small>({res['ticker']})</small> <span style='color:{color}; float:right;'>RS: {res.get('rs', 0)}</span>", unsafe_allow_html=True)
+                    st.markdown(f"**{idx}.** ⏳ **{res['name']}** <small>({res['ticker']})</small> <span style='color:#FFD700; float:right;'>RS: {res.get('rs', 0)}</span>", unsafe_allow_html=True)
+                if not dr_candidates: st.caption("촉매제 반응 분석 중...")
 
             with grid_col3:
                 st.markdown("<div style='background:rgba(0,255,0,0.1); padding:10px; border-radius:10px; border-top:3px solid #00FF00;'><h4 style='margin:0; color:#00FF00;'>🔥 TIGHT (응축)</h4></div>", unsafe_allow_html=True)
-                # TIGHT 전용 종목 선별 (is_tight 플래그 우선)
+                # 엄격한 TIGHT 필터링 (is_tight 플래그 전용)
                 tight_candidates = sorted([r for r in scanned_pool if r.get('is_tight')], key=lambda x: x.get('quality', 0), reverse=True)[:5]
-                if not tight_candidates:
-                    tight_candidates = sorted(scanned_pool, key=lambda x: x.get('tight', 100))[:5]
                 for idx, res in enumerate(tight_candidates, 1):
-                    color = "#00FF00" if res.get('is_tight') else "#888"
-                    st.markdown(f"**{idx}.** 🎯 **{res['name']}** <small>({res['ticker']})</small> <span style='color:{color}; float:right;'>T: {res.get('tight', 0):.2f}%</span>", unsafe_allow_html=True)
+                    st.markdown(f"**{idx}.** 🎯 **{res['name']}** <small>({res['ticker']})</small> <span style='color:#00FF00; float:right;'>T: {res.get('tight', 0):.2f}%</span>", unsafe_allow_html=True)
+                if not tight_candidates: st.caption("에너지 응축 패턴 정밀 스캔...")
 
             # --- [ XAI: TACTICAL REASONING ] 왜 사고, 왜 안 샀는가? ---
             st.markdown("---")
@@ -3639,7 +3657,7 @@ elif page.startswith("7-c."):
                 st.markdown("<h4 style='color:#FF4B4B;'>❌ WHY NOT? (보류/탈락 사유)</h4>", unsafe_allow_html=True)
                 reject_pool = [r for r in scanned_pool if r["status"] in ["REJECT", "PASS"] and r.get("reason")][:5]
                 for res in reject_pool:
-                    st.error(f"🚩 **{res['name']}**: {res['reason']}")
+                    st.error(f"🚩 **{res['name']}** <small>({res['ticker']})</small>: {res['reason']}")
 
             # --- [ AI TERMINAL ANALYSIS ] 실시간 터미널 화면 분석 ---
             st.markdown(f"""
