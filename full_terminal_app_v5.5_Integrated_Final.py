@@ -429,9 +429,16 @@ def get_macro_data():
         return 1400.0, 4.3
 
 # --- [ ENGINE ] KIS API & Core Trading Logic ---
-# [ SECURITY ] 사용자가 제공한 API 정보를 우선 적용하되, secrets 설정이 있다면 그것을 따릅니다.
-KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "PSwPjCXRoSuY1Uz59aDWYKpIPix7VgNB8QUX")
-KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "4WF33M5pnD3Y3qskLfWAlwo0eFxpYIK+TdIXNVW9r+wSLAAF/WVxtqDIvNBDNakV28aFM9ZO+v8069JwBlYDpS1lBvoFf7j9dgSsPwjiwclbvyJ7nMYl5m62wH7VInWWtXgl/8hDnmihzDidKEIss87UdT42JANMvOrCSEF18e5SilJKRIA=")
+# [ SECURITY ] 클라우드 대시보드의 예전 설정을 무시하고 최신 키를 우선 적용
+NEW_KEY = "PSwPjCXRoSuY1Uz59aDWYKpIPix7VgNB8QUX"
+NEW_SECRET = "4WF33M5pnD3Y3qskLfWAlwo0eFxpYIK+TdIXNVW9r+wSLAAF/WVxtqDIvNBDNakV28aFM9ZO+v8069JwBlYDpS1lBvoFf7j9dgSsPwjiwclbvyJ7nMYl5m62wH7VInWWtXgl/8hDnmihzDidKEIss87UdT42JANMvOrCSEF18e5SilJKRIA="
+
+KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", NEW_KEY)
+if KIS_APP_KEY.startswith("PSLep"): KIS_APP_KEY = NEW_KEY # 옛날 키 방지
+
+KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", NEW_SECRET)
+if KIS_APP_SECRET.startswith("cXF1"): KIS_APP_SECRET = NEW_SECRET # 옛날 비밀번호 방지
+
 raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "4628981901")).replace("-", "")
 KIS_ACCOUNT_NO = raw_acc + "01" if len(raw_acc) == 8 else raw_acc
 KIS_MOCK_TRADING = st.session_state.get("kis_mock_mode", st.secrets.get("KIS_MOCK_TRADING", True)) # 사이드바 설정 우선
@@ -1345,6 +1352,7 @@ with st.sidebar:
     st.sidebar.markdown("### 🏦 ACCOUNT CONTROL")
     is_live = st.sidebar.toggle("🚀 실전 매매 모드 (LIVE)", value=st.session_state.get("is_live_mode", False), key="is_live_mode")
     st.session_state.kis_mock_mode = not is_live
+    st.sidebar.caption(f"📡 현재 연결 키: {KIS_APP_KEY[:5]}*** (대상: {'실전' if is_live else '모의'})")
 
     # [ SIDEBAR BALANCE INFO ]
     if st.session_state.get("current_user"):
