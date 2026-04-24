@@ -537,8 +537,19 @@ def get_kis_overseas_balance(token, mock=None):
                 total_krw = float(output2.get('tot_evlu_pamt', 0))
                 total_usd = float(output2.get('frcr_evlu_amt2', 0))
                 cash_usd = float(output2.get('frcr_dnca_amt', 0))
+                
+                # [ BACKUP ] 만약 예수금이 0이라면 전용 예수금 조회 API 추가 시도 (CTRP6504R)
+                if cash_usd == 0:
+                    headers_cash = headers.copy()
+                    headers_cash["tr_id"] = "VTRP6504R" if use_mock else "CTRP6504R"
+                    params_cash = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:], "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""}
+                    res_c = requests.get(url, headers=headers_cash, params=params_cash, timeout=15)
+                    if res_c.status_code == 200:
+                        c_data = res_c.json().get('output', {})
+                        cash_usd = float(c_data.get('frcr_dnca_amt', 0))
+                
                 holdings = data.get('output1', [])
-                return {"krw": total_krw, "usd_total": total_usd, "usd_cash": cash_usd}, holdings
+                return {"krw": total_krw, "usd_total": total_usd + cash_usd, "usd_cash": cash_usd}, holdings
             else:
                 if attempt == 1 and res.status_code != 500:
                     st.error(f"❌ 해외 잔고 조회 실패: {res.status_code}")
@@ -4584,12 +4595,21 @@ elif page.startswith("7-f."):
                         st.json(res.json())
                     
                     with col_d2:
-                        st.markdown("**[해외 잔고 원본]**")
-                        url_ov = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
-                        headers_ov = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTS3012R" if KIS_MOCK_TRADING else "TTTS3012R"}
-                        params_ov = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:], "NATN_CD": "840", "TR_PACC_CD": "", "WCRC_FRCR_DVS_CD": "02", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""}
-                        res_ov = requests.get(url_ov, headers=headers_ov, params=params_ov, timeout=15)
-                        st.json(res_ov.json())
+                        st.markdown("**[해외 잔고/예수금 원본]**")
+                        # 01번과 02번 계좌 모두 테스트
+                        for suffix in ["01", "02"]:
+                            st.write(f"--- 테스트 중: {KIS_ACCOUNT_NO[:8]}-{suffix} ---")
+                            url_ov = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+                            headers_ov = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTS3012R" if KIS_MOCK_TRADING else "TTTS3012R"}
+                            params_ov = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": "", "WCRC_FRCR_DVS_CD": "02", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""}
+                            res_ov = requests.get(url_ov, headers=headers_ov, params=params_ov, timeout=15)
+                            st.json(res_ov.json())
+                            
+                            # 예수금 전용 API 추가 테스트
+                            headers_ov["tr_id"] = "VTRP6504R" if KIS_MOCK_TRADING else "CTRP6504R"
+                            res_ov_c = requests.get(url_ov, headers=headers_ov, params=params_ov, timeout=15)
+                            st.write(f"예수금 전용 응답 ({suffix}):")
+                            st.json(res_ov_c.json())
 
         st.subheader("🛡️ 리스크 관리 수칙")
         st.slider("기계적 손절 임계치 (%)", 2.0, 10.0, 5.0, key="cfg_stop_loss")
