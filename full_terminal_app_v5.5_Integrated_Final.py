@@ -486,13 +486,13 @@ def get_kis_balance(token, mock=None):
         "tr_id": "VTTC8434R" if use_mock else "TTTC8434R",
         "custtype": "P"
     }
-    params = {
-        "CANO": KIS_ACCOUNT_NO[:8],
-        "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
-        "AFHR_FLG": "N", "OVAL_DLY_TR_FECONT_YN": "N", "PRCS_DLY_VW_FNC_G": "0",
-        "CANL_DLY_VW_FNC_G": "0", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""
-    }
-    for attempt in range(2):
+    suffixes = [KIS_ACCOUNT_NO[8:], "01", "02", "03", "04", "05", "06"]
+    for suffix in list(dict.fromkeys(suffixes)):
+        params = {
+            "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix,
+            "AFHR_FLG": "N", "OVAL_DLY_TR_FECONT_YN": "N", "PRCS_DLY_VW_FNC_G": "0",
+            "CANL_DLY_VW_FNC_G": "0", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""
+        }
         try:
             res = requests.get(url, headers=headers, params=params, timeout=15)
             if res.status_code == 200:
@@ -503,40 +503,35 @@ def get_kis_balance(token, mock=None):
                     holdings = data.get('output1', [])
                     return cash + eval_amt, cash, holdings
             elif res.status_code == 500:
-                if attempt == 1: st.warning("⚠️ KIS 서버 내부 오류(500). 설정을 확인해 주세요.")
-            else:
-                if attempt == 1: st.error(f"❌ 국내 잔고 조회 실패: {res.status_code}")
-        except Exception as e:
-            if attempt == 1: st.error(f"⚠️ 국내 통신 오류 (재시도 실패): {str(e)}")
-        time.sleep(1)
+                err_data = res.json()
+                msg = err_data.get('msg1', 'Internal Server Error')
+                if "계좌" in msg or "권한" in msg: continue # 다음 접미사 시도
+                st.warning(f"⚠️ KIS 서버 응답(500): {msg}")
+        except: continue
     return 0, 0, []
 
 def get_kis_overseas_balance(token, mock=None):
-    """해외 주식 잔고 현황 조회 (실제 연동)"""
+    """해외 주식 잔고 현황 조회 (실제 연동 + 전수 계좌 스캔)"""
     if not token or not KIS_ACCOUNT_NO: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
     use_mock = mock if mock is not None else KIS_MOCK_TRADING
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
-    url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
-    headers = {
-        "Content-Type": "application/json",
-        "authorization": f"Bearer {token}",
-        "appkey": KIS_APP_KEY,
-        "appsecret": KIS_APP_SECRET,
-        "tr_id": "VTTS3012R" if use_mock else "TTTS3012R",
-        "custtype": "P"
-    }
-    params = {
-        "CANO": KIS_ACCOUNT_NO[:8], 
-        "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
-        "NATN_CD": "840", 
-        "TR_PACC_CD": "", 
-        "WCRC_FRCR_DVS_CD": "02", # 외화(USD) 기준
-        "CTX_AREA_FK200": "", 
-        "CTX_AREA_NK200": ""
-    }
-    for attempt in range(2):
+    
+    # [ IMPROVE ] 01번부터 06번 계좌까지 전수 조사하여 잔고가 있는 계좌 포착
+    suffixes = [KIS_ACCOUNT_NO[8:], "01", "02", "03", "04", "05", "06"]
+    best_data = {"krw": 0, "usd_total": 0, "usd_cash": 0}
+    best_holdings = []
+    
+    for suffix in list(dict.fromkeys(suffixes)): # 중복 제거
+        url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+        headers = {
+            "Content-Type": "application/json", "authorization": f"Bearer {token}",
+            "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
+            "tr_id": "VTTS3012R" if use_mock else "TTTS3012R", "custtype": "P"
+        }
+        params = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": "", "WCRC_FRCR_DVS_CD": "02", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""}
+        
         try:
-            res = requests.get(url, headers=headers, params=params, timeout=15)
+            res = requests.get(url, headers=headers, params=params, timeout=10)
             if res.status_code == 200:
                 data = res.json()
                 output2 = data.get('output2', {})
@@ -544,25 +539,22 @@ def get_kis_overseas_balance(token, mock=None):
                 total_usd = float(output2.get('frcr_evlu_amt2', 0))
                 cash_usd = float(output2.get('frcr_dnca_amt', 0))
                 
-                # [ BACKUP ] 만약 예수금이 0이라면 전용 예수금 조회 API 추가 시도 (CTRP6504R)
+                # 예수금이 0이라면 전용 API (CTRP6504R) 시도
                 if cash_usd == 0:
                     headers_cash = headers.copy()
                     headers_cash["tr_id"] = "VTRP6504R" if use_mock else "CTRP6504R"
-                    params_cash = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:], "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""}
-                    res_c = requests.get(url, headers=headers_cash, params=params_cash, timeout=15)
+                    res_c = requests.get(url, headers=headers_cash, params=params, timeout=10)
                     if res_c.status_code == 200:
-                        c_data = res_c.json().get('output', {})
-                        cash_usd = float(c_data.get('frcr_dnca_amt', 0))
+                        cash_usd = float(res_c.json().get('output', {}).get('frcr_dnca_amt', 0))
                 
-                holdings = data.get('output1', [])
-                return {"krw": total_krw, "usd_total": total_usd + cash_usd, "usd_cash": cash_usd}, holdings
-            else:
-                if attempt == 1 and res.status_code != 500:
-                    st.error(f"❌ 해외 잔고 조회 실패: {res.status_code}")
-        except Exception as e:
-            if attempt == 1: st.error(f"⚠️ 해외 통신 오류 (재시도 실패): {str(e)}")
-        time.sleep(1)
-    return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
+                current_total = total_usd + cash_usd
+                if current_total > best_data["usd_total"]:
+                    best_data = {"krw": total_krw, "usd_total": current_total, "usd_cash": cash_usd}
+                    best_holdings = data.get('output1', [])
+                    if current_total > 0: break # 잔고 있는 계좌 찾으면 중단
+        except: continue
+        
+    return best_data, best_holdings
 
 # --- [ KIS: REAL-TIME RISK MONITORING (PRO EDITION) ] ---
 def get_kis_current_price(ticker, token):
@@ -709,7 +701,7 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
         body = {
             "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
             "OVRS_EXCG_CD": exchange_code, "PDNO": ticker, "ORD_QTY": str(qty), 
-            "ORD_OVRS_P deliverance": "0", "ORD_DVSN": "00"
+            "ORD_OVRS_P": "0", "ORD_DVSN": "00"
         }
 
     headers = {
@@ -1344,7 +1336,7 @@ with st.sidebar:
 
     st.sidebar.divider()
     st.sidebar.markdown("### 🏦 ACCOUNT CONTROL")
-    is_live = st.sidebar.toggle("🚀 실전 매매 모드 (LIVE)", value=st.session_state.get("is_live_mode", False), key="is_live_mode")
+    is_live = st.sidebar.toggle("🚀 실전 매매 모드 (LIVE)", value=st.session_state.get("is_live_mode", not KIS_MOCK_TRADING), key="is_live_mode")
     st.session_state.kis_mock_mode = not is_live
     st.sidebar.caption(f"📡 현재 연결 키: {KIS_APP_KEY[:5]}*** (대상: {'실전' if is_live else '모의'})")
 
@@ -1380,8 +1372,16 @@ with st.sidebar:
                     </div>
                 </div>
             """, unsafe_allow_html=True)
+            if st.sidebar.button("🔄 잔고 동기화 (Refresh)", use_container_width=True):
+                get_kis_access_token.clear()
+                get_kis_balance.clear()
+                get_kis_overseas_balance.clear()
+                st.rerun()
         except:
             st.sidebar.caption("인증 세션 확인 중...")
+            if st.sidebar.button("🔑 토큰 재발급", use_container_width=True):
+                get_kis_access_token.clear()
+                st.rerun()
     st.sidebar.divider()
     
     for zone, missions in ZONE_CONFIG.items():
@@ -3964,80 +3964,83 @@ elif page.startswith("7-c."):
         else: st.info("엔진 가동을 눌러 실시간 주도주를 스캔하십시오.")
     
     st.divider()
-    st.subheader("📊 [ REAL-TIME PORTFOLIO ] 실시간 전술 포지션 현황")
-    trades = load_trades()
-    active_trades = trades.get("auto", []) + trades.get("mock", [])
+    st.divider()
+    st.subheader("📡 [ KIS LIVE PORTFOLIO ] 실전 전술 포지션 현황")
+    st.caption("사령부의 KIS API와 직접 연동된 실시간 실전 잔고 현황입니다.")
     
-    if active_trades:
-        unique_tickers = list(set([t['ticker'] for t in active_trades]))
-        try:
-            # 실시간 가격 일괄 조회
-            data_batch = cached_yf_download(tuple(unique_tickers), period="1d")['Close']
-            if isinstance(data_batch, pd.Series): data_batch = pd.DataFrame(data_batch).T
-        except: data_batch = pd.DataFrame()
-        
-        for t_info in active_trades:
-            tic = t_info['ticker']
-            t_name = TICKER_NAME_MAP.get(tic, tic)
-            buy_p = t_info['buy_price']
-            qty = t_info.get('amount', 0)
+    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+    if token:
+        with st.spinner("실시간 실전 포지션 동기화 중..."):
+            _, kr_holdings = get_kis_balance(token)
+            _, us_holdings = get_kis_overseas_balance(token)
             
-            # 실시간 데이터 계산
-            curr_p = float(data_batch[tic].iloc[-1]) if tic in data_batch.columns else buy_p
-            roi = ((curr_p / buy_p) - 1) * 100
-            diff_val = (curr_p - buy_p) * qty
-            is_kr = t_info.get("is_kr", True)
+            all_holdings = []
+            for h in kr_holdings:
+                all_holdings.append({
+                    "ticker": h.get('pdno'), "name": h.get('prdt_name'), "qty": int(h.get('hldg_qty', 0)),
+                    "buy_p": float(h.get('pchs_avg_pric', 0)), "curr_p": float(h.get('prpr', 0)),
+                    "roi": float(h.get('evlu_pfls_rt', 0)), "profit": float(h.get('evlu_pfls_amt', 0)),
+                    "is_kr": True
+                })
+            for h in us_holdings:
+                all_holdings.append({
+                    "ticker": h.get('ovrs_pdno'), "name": h.get('ovrs_item_name'), "qty": int(h.get('hldg_qty', 0)),
+                    "buy_p": float(h.get('pchs_avg_pric', 0)), "curr_p": float(h.get('last_prc', 0)),
+                    "roi": float(h.get('evlu_pfls_rt', 0)), "profit": float(h.get('frcr_evlu_pfls_amt', 0)),
+                    "is_kr": False
+                })
             
-            unit = "원" if is_kr else "$"
-            fmt_p = ":,.0f" if is_kr else ":,.2f"
-            profit_txt = f"{diff_val:+,.0f}원" if is_kr else f"${diff_val:+,.2f}"
-            
-            # --- 이미지와 동일한 프리미엄 레이아웃 렌더링 ---
-            with st.container():
-                st.markdown(f"""
-                <div style='background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 15px; margin-bottom: 10px;'>
-                    <div style='display: flex; justify-content: space-between; align-items: center;'>
-                        <div style='flex: 1;'>
-                            <b style='color: #00FF00; font-size: 1.1rem;'>{tic}</b>
-                            <span style='color: #888; font-size: 0.85rem; margin-left: 10px;'>{t_name}</span>
-                        </div>
-                        <div style='flex: 1; text-align: center; font-family: "Orbitron";'>
-                            <b style='font-size: 1rem;'>{qty}주</b>
-                        </div>
-                        <div style='flex: 1; text-align: center;'>
-                            <span style='color: #CCC;'>{unit}{curr_p:{fmt_p.split(':')[-1]}}</span>
-                        </div>
-                        <div style='flex: 2; text-align: right;'>
-                            <b style='color: {"#FF4B4B" if roi >= 0 else "#0088FF"}; font-size: 1.1rem;'>
-                                {profit_txt} ({roi:+.2f}%)
-                            </b>
-                        </div>
-                        <div style='flex: 1; text-align: right; margin-left: 20px;'>
+            if all_holdings:
+                for h in all_holdings:
+                    tic = h['ticker']
+                    t_name = h['name']
+                    qty = h['qty']
+                    curr_p = h['curr_p']
+                    roi = h['roi']
+                    profit = h['profit']
+                    is_kr = h['is_kr']
+                    
+                    unit = "원" if is_kr else "$"
+                    fmt_p = ":,.0f" if is_kr else ":,.2f"
+                    profit_txt = f"{profit:+,.0f}원" if is_kr else f"${profit:+,.2f}"
+                    
+                    st.markdown(f"""
+                    <div style='background: rgba(255,255,255,0.03); border: 1px solid rgba(0, 242, 255, 0.2); border-radius: 10px; padding: 15px; margin-bottom: 10px;'>
+                        <div style='display: flex; justify-content: space-between; align-items: center;'>
+                            <div style='flex: 1;'>
+                                <b style='color: #00F2FF; font-size: 1.1rem;'>{tic}</b>
+                                <span style='color: #888; font-size: 0.85rem; margin-left: 10px;'>{t_name}</span>
+                            </div>
+                            <div style='flex: 1; text-align: center; font-family: "Orbitron";'>
+                                <b style='font-size: 1rem;'>{qty}주</b>
+                            </div>
+                            <div style='flex: 1; text-align: center;'>
+                                <span style='color: #CCC;'>{unit}{curr_p:{fmt_p.split(':')[-1]}}</span>
+                            </div>
+                            <div style='flex: 2; text-align: right;'>
+                                <b style='color: {"#FF3131" if roi >= 0 else "#00F2FF"}; font-size: 1.1rem;'>
+                                    {profit_txt} ({roi:+.2f}%)
+                                </b>
+                            </div>
+                            <div style='flex: 1; text-align: right; margin-left: 20px;'>
+                            </div>
                         </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # 매도 버튼은 Streamlit 고유 버튼으로 배치 (기능 연동을 위해)
-                btn_col1, btn_col2 = st.columns([5, 1])
-                if btn_col2.button(f"[ SELL ] 매도", key=f"sell_7c_{tic}_{t_info['id']}", use_container_width=True):
-                    if st.session_state.get("live_toggle_v6_pro"):
-                        with st.spinner(f"{tic} 기계적 탈출 집행 중..."):
-                            success = execute_kis_market_order(tic, qty, is_buy=False)
-                            if success:
-                                st.success(f"{tic} 전량 매도 완료.")
-                                # 잔고 업데이트 로직 (간소화)
-                                active_trades.remove(t_info)
-                                trades["auto"] = [t for t in trades["auto"] if t['id'] != t_info['id']]
-                                save_trades(trades)
-                                st.rerun()
-                    else:
-                        st.info(f"🛡️ [SIMULATION] {tic} 가상 매도가 완료되었습니다.")
-                        trades["auto"] = [t for t in trades["auto"] if t['id'] != t_info['id']]
-                        save_trades(trades)
-                        st.rerun()
+                    """, unsafe_allow_html=True)
+                    
+                    btn_col1, btn_col2 = st.columns([5, 1])
+                    if btn_col2.button(f"[ SELL ] 매도", key=f"sell_live_{tic}_{qty}", use_container_width=True):
+                        st.warning(f"⚠️ {tic} {qty}주를 정말로 시장가 매도하시겠습니까?")
+                        if st.button("예, 지금 즉시 매도합니다.", key=f"confirm_sell_{tic}_{qty}"):
+                            with st.spinner(f"{tic} 실전 탈출 집행 중..."):
+                                success = execute_kis_market_order(tic, qty, is_buy=False)
+                                if success:
+                                    st.success(f"{tic} 실전 매도 완료.")
+                                    st.rerun()
+            else:
+                st.info("현재 KIS 계좌에 보유 중인 실전 포지션이 없습니다.")
     else:
-        st.info("현재 사령부 관제하에 있는 실전 포지션이 없습니다.")
+        st.error("KIS API 인증 실패. 사이드바에서 키 설정을 확인하십시오.")
 
 elif page.startswith("7-d."):
     st.header("[ REPORT ] 자동투자 성적표 (Performance Report)")
