@@ -434,7 +434,7 @@ KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "PSwPjCXRoSuY1Uz59aDWYKpIPix7VgNB8QU
 KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "4WF33M5pnD3Y3qskLfWAlwo0eFxpYIK+TdIXNVW9r+wSLAAF/WVxtqDIvNBDNakV28aFM9ZO+v8069JwBlYDpS1lBvoFf7j9dgSsPwjiwclbvyJ7nMYl5m62wH7VInWWtXgl/8hDnmihzDidKEIss87UdT42JANMvOrCSEF18e5SilJKRIA=")
 raw_acc = st.secrets.get("KIS_ACCOUNT", st.secrets.get("KIS_ACCOUNT_NO", "46289819")).replace("-", "")
 KIS_ACCOUNT_NO = raw_acc + "01" if len(raw_acc) == 8 else raw_acc
-KIS_MOCK_TRADING = st.secrets.get("KIS_MOCK_TRADING", False)
+KIS_MOCK_TRADING = st.session_state.get("kis_mock_mode", True) # 사이드바 설정 우선
 
 # [ NEW ] 텔레그램 설정
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
@@ -1310,6 +1310,29 @@ with st.sidebar:
     users = load_users()
     curr_grade = users.get(st.session_state.current_user, {}).get("grade", "회원")
     is_admin = curr_grade in ["관리자", "방장"]
+
+    st.sidebar.divider()
+    st.sidebar.markdown("### 🏦 ACCOUNT CONTROL")
+    is_live = st.sidebar.toggle("🚀 실전 매매 모드 (LIVE)", value=st.session_state.get("is_live_mode", False), key="is_live_mode")
+    st.session_state.kis_mock_mode = not is_live
+
+    # [ SIDEBAR BALANCE INFO ]
+    if st.session_state.get("current_user"):
+        try:
+            token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, not is_live)
+            r_total, r_cash, _ = get_kis_balance(token)
+            o_total, _ = get_kis_overseas_balance(token)
+            full_b = r_total + o_total
+            st.sidebar.markdown(f"""
+                <div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:5px; border:1px solid #FFD70033;'>
+                    <p style='margin:0; font-size:0.7rem; color:#AAA;'>COMMANDER EQUITY ({'LIVE' if is_live else 'MOCK'})</p>
+                    <b style='color:#FFD700; font-size:1.1rem;'>{full_b:,.0f} KRW</b><br>
+                    <small style='color:#666;'>KR: {r_total:,.0f} / US: {o_total:,.0f}</small>
+                </div>
+            """, unsafe_allow_html=True)
+        except:
+            st.sidebar.caption("계좌 정보를 불러오는 중...")
+    st.sidebar.divider()
     
     for zone, missions in ZONE_CONFIG.items():
         if "ADMIN" in str(missions) and not is_admin: continue
