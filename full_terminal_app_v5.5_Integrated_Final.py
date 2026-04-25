@@ -2225,41 +2225,79 @@ elif page.startswith("5-z."):
     with col2: scan_us = st.checkbox("🇺🇸 미국 (나스닥100)", value=True)
     with col3: rsi_threshold = st.slider("RSI 기준 (이하)", 20, 40, 30)
 
-    if st.button("🚀 전역 시장 과매도 종목 탐색 개시", use_container_width=True):
+    if st.button("🚀 전역 시장 과매도 종목 탐색 개시 (KR 우선)", use_container_width=True):
         with st.status("🕵️ 시장을 뒤져서 저평가된 씨앗들을 찾는 중...", expanded=True) as status:
             token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-            universe = []
-            if scan_kr: universe += get_kospi_top_200()[:50] + get_kosdaq_100()[:50]
-            if scan_us: universe += get_nasdaq_200()[:50]
             
-            st.write(f"📊 총 {len(universe)}개 핵심 종목 분석 중...")
+            # [ OPTIMIZE ] 시장별 순차 처리 및 병렬 분석
+            markets = []
+            if scan_kr: markets.append(("KR", get_kospi_top_200()[:60] + get_kosdaq_100()[:40]))
+            if scan_us: markets.append(("US", get_nasdaq_200()[:50]))
+            
             found_seeds = []
             
-            for ticker in universe:
-                is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
-                df = get_kis_ohlcv(ticker, token) if is_kr else get_kis_overseas_ohlcv(ticker, token)
+            for m_type, universe in markets:
+                st.write(f"📊 {m_type} 시장 {len(universe)}개 핵심 종목 전술 분석 중...")
                 
-                if not df.empty and len(df) >= 30:
-                    df = calculate_rsi(df)
-                    df = calculate_bollinger_bands(df)
-                    curr_p = df['Close'].iloc[-1]
-                    rsi_v = df['RSI'].iloc[-1]
-                    bb_l = df['BB_Lower'].iloc[-1]
-                    
-                    if rsi_v <= rsi_threshold or curr_p <= bb_l:
-                        found_seeds.append({"ticker": ticker, "name": get_stock_name(ticker), "rsi": rsi_v, "price": curr_p, "reason": "RSI 과매도" if rsi_v <= rsi_threshold else "BB 하단 터치"})
+                # 벌크 데이터 다운로드
+                bulk_df = get_bulk_market_data(universe, period="60d")
+                
+                def analyze_worker(ticker):
+                    hist = get_ticker_data_from_bulk(bulk_df, ticker)
+                    if not hist.empty and len(hist) >= 30:
+                        hist = calculate_rsi(hist)
+                        hist = calculate_bollinger_bands(hist)
+                        curr_p = hist['Close'].iloc[-1]
+                        rsi_v = hist['RSI'].iloc[-1]
+                        bb_l = hist['BB_Lower'].iloc[-1]
+                        
+                        if rsi_v <= rsi_threshold or curr_p <= bb_l:
+                            # 조건 부합 시 ROE 등 추가 정보 획득 (히트된 종목에 대해서만 수행하여 속도 최적화)
+                            roe_val = "N/A"
+                            try:
+                                info = yf.Ticker(ticker).info
+                                roe_val = f"{info.get('returnOnEquity', 0) * 100:.1f}%"
+                            except: pass
+                            
+                            reason = []
+                            if rsi_v <= rsi_threshold: reason.append(f"RSI 과매도({rsi_v:.1f})")
+                            if curr_p <= bb_l: reason.append("볼린저밴드 하단 이탈")
+                            
+                            return {
+                                "ticker": ticker, 
+                                "name": get_stock_name(ticker), 
+                                "rsi": rsi_v, 
+                                "price": curr_p, 
+                                "roe": roe_val,
+                                "reason": " & ".join(reason),
+                                "market": m_type
+                            }
+                    return None
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+                    results = list(executor.map(analyze_worker, universe))
+                    found_seeds += [r for r in results if r]
 
             if found_seeds:
-                status.update(label=f"✅ {len(found_seeds)}개의 씨앗 포착 완료!", state="complete")
+                status.update(label=f"✅ {len(found_seeds)}개의 우량 씨앗 포착 완료!", state="complete")
+                # 결과 출력 (국내 우선 정렬)
+                found_seeds.sort(key=lambda x: 0 if x['market'] == "KR" else 1)
+                
                 for s in found_seeds:
-                    with st.expander(f"🌱 {s['name']} ({s['ticker']}) | RSI: {s['rsi']:.1f}"):
-                        st.write(f"현재가: {s['price']} | 포착 사유: **{s['reason']}**")
-                        if st.button(f"{s['ticker']} 농장 등록", key=f"add_{s['ticker']}"):
-                            st.success(f"{s['name']} 종목이 나의 농장 관리소에 등록되었습니다.")
+                    market_icon = "🇰🇷" if s['market'] == "KR" else "🇺🇸"
+                    with st.expander(f"{market_icon} {s['name']} ({s['ticker']}) | RSI: {s['rsi']:.1f} | ROE: {s['roe']}"):
+                        st.markdown(f"""
+                        - **현재가**: {s['price']:,} ({"원" if s['market'] == "KR" else "$"})
+                        - **ROE (자기자본이익률)**: <span style='color:#FFD700;'>{s['roe']}</span>
+                        - **포착 사유**: {s['reason']}
+                        - **전술적 제언**: 주가가 과매도 구간에 진입하여 기술적 반등 가능성이 매우 높습니다. 분할 매수로 씨를 뿌리기에 적합한 시점입니다.
+                        """, unsafe_allow_html=True)
+                        if st.button(f"🚜 {s['ticker']} 농장 등록", key=f"add_{s['ticker']}"):
+                            st.success(f"{s['name']} 종목이 사령부 농장 관리소에 등록되었습니다.")
             else:
-                status.update(label="❌ 현재 조건에 부합하는 씨앗이 없습니다.", state="complete")
+                status.update(label="❌ 현재 전역 시장에 씨를 뿌릴 만한 과매도 종목이 없습니다.", state="complete")
 
-    st.info("💡 **전술 팁**: RSI 30 이하에서 씨를 뿌리면, 반등 시 매우 강력한 수익 곡선을 그릴 수 있습니다.")
+    st.info("💡 **전술 팁**: ROE가 높으면서 RSI가 낮은 종목은 '싸게 살 수 있는 우량주'일 확률이 매우 높습니다.")
 
 
 
