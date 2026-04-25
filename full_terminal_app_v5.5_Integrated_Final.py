@@ -404,6 +404,33 @@ if "page" not in st.session_state: st.session_state.page = "6-a. [ CHECK ] 출�
 if "cfg_min_pct" not in st.session_state: st.session_state.cfg_min_pct = 4.0
 if "cfg_max_prev_pct" not in st.session_state: st.session_state.cfg_max_prev_pct = 2.0
 if "cfg_min_range_pos" not in st.session_state: st.session_state.cfg_min_range_pos = 0.7
+if "antigravity_scan" not in st.session_state: st.session_state.antigravity_scan = {}
+
+# --- [ TECHNICAL INDICATORS ] ---
+def calculate_rsi(df, period=14):
+    """상대강도지수(RSI) 계산"""
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+    return df
+
+def calculate_bollinger_bands(df, period=20, std_dev=2):
+    """볼린저 밴드 계산"""
+    df['MA20'] = df['Close'].rolling(window=period).mean()
+    df['STD'] = df['Close'].rolling(window=period).std()
+    df['BB_Upper'] = df['MA20'] + (df['STD'] * std_dev)
+    df['BB_Lower'] = df['MA20'] - (df['STD'] * std_dev)
+    return df
+
+def calculate_cmo(df, period=20):
+    """찬드라 모멘텀 오실레이터(CMO) 계산"""
+    diff = df['Close'].diff()
+    up = diff.where(diff > 0, 0).rolling(window=period).sum()
+    down = diff.where(diff < 0, 0).abs().rolling(window=period).sum()
+    df['CMO'] = 100 * (up - down) / (up + down)
+    return df
 
 
 def get_ticker_data_from_bulk(bulk_df, ticker):
