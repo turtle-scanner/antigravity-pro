@@ -415,7 +415,9 @@ def get_market_sentiment_v2():
         return int(score), vix, label
     except: return 50, 20.0, "NEUTRAL"
 
+@st.cache_data(ttl=300)
 def get_macro_indicators():
+
     try:
         data = get_bulk_market_data(["USDKRW=X", "^TNX"], "5d")['Close']
         rate = data["USDKRW=X"].dropna().iloc[-1]
@@ -479,14 +481,10 @@ def get_kis_access_token(app_key, app_secret, mock=True):
     last_req = st.session_state.get("last_token_req_time", 0)
     elapsed = time.time() - last_req
     if elapsed < 60: 
-        placeholder = st.empty()
-        # [ LIVE COUNTDOWN ] 사령관님의 편의를 위해 실시간 타이머 가동
-        for remaining in range(int(60 - elapsed), -1, -1):
-            placeholder.warning(f"⚠️ KIS 보안 정책상 토큰은 1분에 1번만 요청 가능합니다. (보안 해제 대기: {remaining}초)")
-            if remaining > 0: time.sleep(1)
-        placeholder.empty()
-        # 시간이 안 되었으면 캐시된 토큰이라도 반환 시도
+        # [ UI OPTIMIZATION ] 타이머 루프를 제거하여 앱이 멈추는 현상 방지
+        st.caption(f"ℹ️ KIS 토큰 재발급 대기 중 ({int(60-elapsed)}초 남음)")
         return st.session_state.get("last_valid_token")
+
 
     base_url = "https://openapivts.koreainvestment.com:29443" if mock else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/oauth2/tokenP"
@@ -513,7 +511,9 @@ def get_kis_access_token(app_key, app_secret, mock=True):
     
     return st.session_state.get("last_valid_token")
 
+@st.cache_data(ttl=30, show_spinner=False)
 def get_kis_balance(token, mock=None):
+
     """국내 주식 잔고 및 수익 현황 조회 (실제 연동)"""
     if not token or not KIS_ACCOUNT_NO: return 0, 0, []
     use_mock = mock if mock is not None else KIS_MOCK_TRADING
@@ -553,7 +553,9 @@ def get_kis_balance(token, mock=None):
         except: continue
     return 0, 0, []
 
+@st.cache_data(ttl=30, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None):
+
     """해외 주식 잔고 현황 조회 (통합 계좌 + 거래소별 잔고 + 전수 스캔)"""
     if not token or not KIS_ACCOUNT_NO: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
     use_mock = mock if mock is not None else KIS_MOCK_TRADING
