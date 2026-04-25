@@ -1933,7 +1933,25 @@ elif page.startswith("3-c."):
 
 elif page.startswith("3-f."):
     st.markdown("<h1 style='text-align: center; color: #00FF00;'>🔥 나노바나나 레이더 (Ripened Target)</h1>", unsafe_allow_html=True)
-    st.markdown("<div class='glass-card' style='text-align: center;'>현재 사령부 감시망에너지가 축적되어 돌파가 임박한 '잘 익은' 종목들을 실시간 추적합니다.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='glass-card' style='text-align: center; margin-bottom: 20px;'>현재 사령부 감시망에너지가 축적되어 돌파가 임박한 '잘 익은' 종목들을 실시간 추적합니다.</div>", unsafe_allow_html=True)
+    
+    # --- [ TACTICAL GUIDE BOX ] ---
+    st.markdown("""
+    <div class='glass-card' style='border-left: 5px solid #FFD700; padding: 20px; margin-bottom: 25px;'>
+        <h3 style='color: #FFD700; margin-top: 0;'>🍌 나노바나나 99%의 의미 (전술적 해석)</h3>
+        <ul style='color: #EEE; font-size: 0.95rem; line-height: 1.6;'>
+            <li><b>에너지 축적 완료 (VCP):</b> 변동성이 극도로 줄어들어(Tightness), 아주 작은 매수세만 들어와도 주가가 위로 튀어 오를 수 있는 상태입니다.</li>
+            <li><b>전술적 우위 (RS):</b> 시장 지수보다 훨씬 강한 상대 강도를 유지하고 있어, 시장이 반등할 때 가장 먼저 치고 나갈 준비가 되었습니다.</li>
+            <li><b>거래량 메마름 (Dry-up):</b> 파는 사람이 더 이상 없는 '거래량 절벽' 구간을 통과했습니다.</li>
+        </ul>
+        <h4 style='color: #00FF00; margin-bottom: 10px;'>⚔️ 실제 대응 가이드</h4>
+        <ul style='color: #CCC; font-size: 0.9rem; line-height: 1.6;'>
+            <li><b>관심 종목 등록:</b> 99%인 종목들은 오늘이나 내일 당장 <b>'피벗 포인트(직전 고점)'</b>를 뚫고 올라갈 가능성이 매우 높습니다.</li>
+            <li><b>돌파 시 매수:</b> 99% 상태에서 주가가 거래량을 동반하며 당일 고점을 돌파하는 순간이 가장 확률 높은 매수 타점입니다.</li>
+            <li><b>자동매매 연동:</b> 자동매매 엔진(Section 7)을 가동 중이라면, 시스템이 이 99% 종목들을 실시간으로 감시하다가 돌파가 일어나는 나노 초 단위의 타이밍에 자동으로 주문을 집행하게 됩니다.</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
     
     if "antigravity_scan" in st.session_state:
         res = st.session_state.antigravity_scan
@@ -1949,15 +1967,20 @@ elif page.startswith("3-f."):
                 with cols[i % 3]:
                     color = "#00FF00" if ready_score >= 85 else "#FFD700"
                     st.markdown(f"""
-                    <div class='glass-card' style='border-top: 5px solid {color}; padding: 15px;'>
-                        <div style='display: flex; justify-content: space-between; align-items: center;'>
-                            <h3 style='margin: 0; font-size: 1.1rem;'>{get_stock_name(stock['ticker'])}</h3>
-                            <span style='color: {color}; font-weight: 800;'>{ready_score}%</span>
+                    <div class='glass-card' style='border-top: 5px solid {color}; padding: 15px; min-height: 210px; display: flex; flex-direction: column; justify-content: space-between;'>
+                        <div>
+                            <div style='display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;'>
+                                <h3 style='margin: 0; font-size: 1.05rem; line-height: 1.3; color: #FFF;'>{get_stock_name(stock['ticker'])}</h3>
+                                <span style='color: {color}; font-weight: 800; font-size: 1.1rem; white-space: nowrap;'>{ready_score}%</span>
+                            </div>
                         </div>
-                        <div class='banana-track'>
-                            <div class='banana-fill' style='width: {ready_score}%; background: {color}; color: {color};'></div>
+                        <div style='margin-top: auto;'>
+                            <div class='banana-track' style='margin-bottom: 12px;'>
+                                <div class='banana-fill' style='width: {ready_score}%; background: {color};'></div>
+                            </div>
+                            <p style='font-size: 0.75rem; color: #888; margin: 0;'>🍌 상태: {'잘 익음 (임박)' if ready_score >= 85 else '숙성 중'}</p>
+                            <p style='font-size: 0.7rem; color: #555; margin-top: 2px;'>({stock['ticker']})</p>
                         </div>
-                        <p style='font-size: 0.75rem; color: #888; margin-top: 8px;'>🍌 상태: {'잘 익음 (임박)' if ready_score >= 85 else '숙성 중'} ({stock['ticker']})</p>
                     </div>
                     """, unsafe_allow_html=True)
     else:
@@ -2006,7 +2029,25 @@ elif page.startswith("5-b."):
 
 elif page.startswith("5-c."):
     st.markdown("<h1 style='text-align: center; color: #00FF00;'>🔥 나노바나나 레이더</h1>", unsafe_allow_html=True)
-    st.markdown("<div class='glass-card' style='text-align: center;'>현재 사령부 감시망에너지가 축적되어 돌파가 임박한 '황금 바나나' 종목들을 실시간 추적합니다.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='glass-card' style='text-align: center; margin-bottom: 20px;'>현재 사령부 감시망에너지가 축적되어 돌파가 임박한 '황금 바나나' 종목들을 실시간 추적합니다.</div>", unsafe_allow_html=True)
+
+    # --- [ TACTICAL GUIDE BOX ] ---
+    st.markdown("""
+    <div class='glass-card' style='border-left: 5px solid #FFD700; padding: 20px; margin-bottom: 25px;'>
+        <h3 style='color: #FFD700; margin-top: 0;'>🍌 나노바나나 99%의 의미 (전술적 해석)</h3>
+        <ul style='color: #EEE; font-size: 0.95rem; line-height: 1.6;'>
+            <li><b>에너지 축적 완료 (VCP):</b> 변동성이 극도로 줄어들어(Tightness), 아주 작은 매수세만 들어와도 주가가 위로 튀어 오를 수 있는 상태입니다.</li>
+            <li><b>전술적 우위 (RS):</b> 시장 지수보다 훨씬 강한 상대 강도를 유지하고 있어, 시장이 반등할 때 가장 먼저 치고 나갈 준비가 되었습니다.</li>
+            <li><b>거래량 메마름 (Dry-up):</b> 파는 사람이 더 이상 없는 '거래량 절벽' 구간을 통과했습니다.</li>
+        </ul>
+        <h4 style='color: #00FF00; margin-bottom: 10px;'>⚔️ 실제 대응 가이드</h4>
+        <ul style='color: #CCC; font-size: 0.9rem; line-height: 1.6;'>
+            <li><b>관심 종목 등록:</b> 99%인 종목들은 오늘이나 내일 당장 <b>'피벗 포인트(직전 고점)'</b>를 뚫고 올라갈 가능성이 매우 높습니다.</li>
+            <li><b>돌파 시 매수:</b> 99% 상태에서 주가가 거래량을 동반하며 당일 고점을 돌파하는 순간이 가장 확률 높은 매수 타점입니다.</li>
+            <li><b>자동매매 연동:</b> 자동매매 엔진(Section 7)을 가동 중이라면, 시스템이 이 99% 종목들을 실시간으로 감시하다가 돌파가 일어나는 나노 초 단위의 타이밍에 자동으로 주문을 집행하게 됩니다.</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
     
     if "antigravity_scan" in st.session_state:
         res = st.session_state.antigravity_scan
@@ -2022,15 +2063,20 @@ elif page.startswith("5-c."):
                 with cols[i % 3]:
                     color = "#00FF00" if ready_score >= 90 else "#FFD700"
                     st.markdown(f"""
-                    <div class='glass-card' style='border-top: 5px solid {color}; padding: 15px;'>
-                        <div style='display: flex; justify-content: space-between; align-items: center;'>
-                            <h3 style='margin: 0; font-size: 1.1rem;'>{get_stock_name(stock['ticker'])}</h3>
-                            <span style='color: {color}; font-weight: 800;'>{ready_score}%</span>
+                    <div class='glass-card' style='border-top: 5px solid {color}; padding: 15px; min-height: 210px; display: flex; flex-direction: column; justify-content: space-between;'>
+                        <div>
+                            <div style='display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;'>
+                                <h3 style='margin: 0; font-size: 1.05rem; line-height: 1.3; color: #FFF;'>{get_stock_name(stock['ticker'])}</h3>
+                                <span style='color: {color}; font-weight: 800; font-size: 1.1rem; white-space: nowrap;'>{ready_score}%</span>
+                            </div>
                         </div>
-                        <div class='banana-track'>
-                            <div class='banana-fill' style='width: {ready_score}%; background: {color}; color: {color};'></div>
+                        <div style='margin-top: auto;'>
+                            <div class='banana-track' style='margin-bottom: 12px;'>
+                                <div class='banana-fill' style='width: {ready_score}%; background: {color};'></div>
+                            </div>
+                            <p style='font-size: 0.75rem; color: #888; margin: 0;'>🔬 분석: {stock.get('TIC', 'NANO')} 전략 포착</p>
+                            <p style='font-size: 0.7rem; color: #555; margin-top: 2px;'>({stock['ticker']})</p>
                         </div>
-                        <p style='font-size: 0.75rem; color: #888; margin-top: 8px;'>🔬 분석: {stock.get('TIC', 'NANO')} 전략 포착 완료</p>
                     </div>
                     """, unsafe_allow_html=True)
     else:
