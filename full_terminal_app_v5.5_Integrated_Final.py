@@ -1336,7 +1336,7 @@ ZONE_CONFIG = {
     "[ MARKET ] 2. 시장 상황실": ["2-a. [ TREND ] 마켓 트렌드 요약", "2-b. [ MAP ] 실시간 히트맵", "2-c. [ SENTIMENT ] 시장 심리 게이지", "2-d. [ ABOUT ] 제작 전기"],
     "[ TARGET ] 3. 주도주 추격기": ["3-a. [ SCAN ] 주도주 전술 스캐너", "3-b. [ RANK ] 주도주 리스트 TOP 50", "3-c. [ WATCH ] 본데 감시 리스트", "3-d. [ INDUSTRY ] 산업동향(TOP 10)", "3-e. [ RS ] RS 강도(TOP 10)", "3-f. [ NANO ] 나노바나나 레이더"],
     "[ CHART ] 4. 실시간 전술 분석실": ["4-a. [ ANALYZE ] BMS 전술 분석기", "4-b. [ INTERACTIVE ] 인터랙티브 차트", "4-c. [ RISK ] 리스크 관리 계산기"],
-    "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ MENTOR ] 본데의 연구노트", "5-b. [ STUDY ] 주식공부(차트)", "5-c. [ RADAR ] 나노바나나 레이더"],
+    "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ MENTOR ] 본데의 연구노트", "5-b. [ STUDY ] 주식공부(차트)", "5-c. [ RADAR ] 나노바나나 레이더", "5-d. [ FARM ] 농사매매 전략실"],
     "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방"],
     "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ SETUP ] 사령부 교전 수칙", "7-b. [ MONITOR ] 실시간 시장 관측", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-g. [ COMBAT ] 실시간 교전 관제소", "7-i. [ CONFIG ] 사령부 시스템 설정", "7-j. [ CHANDE ] 찬드라 지표 엔진"],
     "[ VERSUS ] 8. AI 요원 경쟁방": ["8-a. [ AGENTS ] AI 요원 소개", "8-b. [ PROFIT ] AI 요원 수익방", "8-c. [ PORTFOLIO ] AI 요원 현재 보유 종목", "8-d. [ HALL ] AI 요원 명예의 전당", "8-f. [ LIVE ] 실시간 실전수익률"]
@@ -2108,6 +2108,108 @@ elif page.startswith("5-e."):
 elif page.startswith("5-f."):
     st.header("[ LOSS ] 성찰의 방 (Loss Room)")
     st.error("실패를 분석하여 내일의 승리를 준비합니다.")
+
+elif page.startswith("5-d."):
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #1d976c 0%, #93f9b9 100%); padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;'>
+        <h1 style='margin:0; color:white; font-family:Pretendard; letter-spacing:2px;'>ANTI-GRAVITY FARMING</h1>
+        <p style='margin:5px 0 0 0; color:rgba(255,255,255,0.9); font-size:1.1rem;'>인내와 비중으로 수익을 재배하는 농사매매 전략실</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # [ STRATEGY GUIDE ]
+    with st.expander("📖 농사매매 전략 가이드 (지휘관 필독)", expanded=True):
+        st.markdown("""
+        ### 🏛️ 지휘관을 위한 운영 가이드
+        1. **인내의 미학**: 이 시스템은 매일 차트를 보며 일희일비하지 않는 농부의 마음이 핵심입니다. 유하니(AI 후배)가 아침마다 "선배님! 오늘은 사과가 3개나 익었어용!"이라고 알려줄 때까지 본업과 일상에 집중해 주세요.
+        2. **비중의 마법**: 종목당 비중을 3~5%로 작게 시작했기 때문에, -30%까지 떨어져도 전체 계좌에 미치는 영향은 제한적입니다. 오히려 저렴하게 씨앗을 더 심는 기회로 삼으시면 됩니다.
+        3. **데이터의 신뢰성**: RSI와 볼린저 밴드 지표는 주가가 과하게 꺾였을 때(과매도) 씨를 뿌리는 아주 좋은 기준이 됩니다.
+        """)
+        
+    st.subheader("🌾 농사매매 전술 교본")
+    farming_guide = [
+        {"상태": "🌱 씨 뿌리기 (새싹)", "조건": "RSI 30 이하 / BB 하단 터치", "액션": "최초 3~5% 비중 진입"},
+        {"상태": "🌿 물 주기 (성장)", "조건": "고점 대비 -10, -20, -30% 하락", "액션": "단계별 추가 매수 (5, 10, 20%)"},
+        {"상태": "🍎 수확 시기 (과일)", "조건": "수익률 15~25% 도달", "액션": "전량 매도 및 수익 확정"},
+        {"상태": "💤 대기 중 (휴면)", "조건": "목표가 미도달 및 추매 조건 아님", "액션": "인내하며 보유"}
+    ]
+    st.table(pd.DataFrame(farming_guide))
+
+    # [ FARM TRACKER ]
+    st.divider()
+    st.subheader("🚜 나의 농장 관리소")
+    if "my_farm_stocks" not in st.session_state:
+        st.session_state.my_farm_stocks = [
+            {"ticker": "NVDA", "entry": 850.0, "max": 950.0, "current": 880.0, "rsi": 45, "weight": 5},
+            {"ticker": "AAPL", "entry": 190.0, "max": 195.0, "current": 165.0, "rsi": 28, "weight": 15},
+        ]
+
+    for i, stock in enumerate(st.session_state.my_farm_stocks):
+        profit = (stock['current'] - stock['entry']) / stock['entry'] * 100
+        drop = (stock['current'] - stock['max']) / stock['max'] * 100
+        status = "🌱 새싹"
+        color = "#93f9b9"
+        if profit >= 15: status, color = "🍎 수확 가능!", "#FF4B4B"
+        elif stock['rsi'] <= 30: status, color = "🌿 물 주기 (성장 중)", "#1d976c"
+        elif drop <= -10: status, color = "🌿 물 주기 (추매 구간)", "#FFD700"
+        
+        with st.container():
+            st.markdown(f"""
+            <div class='glass-card' style='border-left: 5px solid {color}; padding: 20px; margin-bottom: 15px;'>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <h3 style='margin: 0;'>{stock['ticker']} <small style='color: #888;'>({status})</small></h3>
+                    <h4 style='margin: 0; color: {"#FF4B4B" if profit >= 0 else "#4B4BFF"};'>{profit:+.2f}%</h4>
+                </div>
+                <div style='margin-top: 10px; font-size: 0.9rem; color: #AAA;'>
+                    현재가: {stock['current']} | RSI: {stock['rsi']} | 현재 비중: {stock['weight']}% | 고점대비: {drop:.1f}%
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # [ SEEDING RADAR ENHANCED ]
+    st.divider()
+    st.subheader("🔍 글로벌 씨 뿌리기 레이더 (Seeding Radar)")
+    col1, col2, col3 = st.columns(3)
+    with col1: scan_kr = st.checkbox("🇰🇷 한국 (코스피/코스닥)", value=True)
+    with col2: scan_us = st.checkbox("🇺🇸 미국 (나스닥100)", value=True)
+    with col3: rsi_threshold = st.slider("RSI 기준 (이하)", 20, 40, 30)
+
+    if st.button("🚀 전역 시장 과매도 종목 탐색 개시", use_container_width=True):
+        with st.status("🕵️ 시장을 뒤져서 저평가된 씨앗들을 찾는 중...", expanded=True) as status:
+            token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+            universe = []
+            if scan_kr: universe += get_kospi_top_200()[:50] + get_kosdaq_100()[:50]
+            if scan_us: universe += get_nasdaq_200()[:50]
+            
+            st.write(f"📊 총 {len(universe)}개 핵심 종목 분석 중...")
+            found_seeds = []
+            
+            for ticker in universe:
+                is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
+                df = get_kis_ohlcv(ticker, token) if is_kr else get_kis_overseas_ohlcv(ticker, token)
+                
+                if not df.empty and len(df) >= 30:
+                    df = calculate_rsi(df)
+                    df = calculate_bollinger_bands(df)
+                    curr_p = df['Close'].iloc[-1]
+                    rsi_v = df['RSI'].iloc[-1]
+                    bb_l = df['BB_Lower'].iloc[-1]
+                    
+                    if rsi_v <= rsi_threshold or curr_p <= bb_l:
+                        found_seeds.append({"ticker": ticker, "name": get_stock_name(ticker), "rsi": rsi_v, "price": curr_p, "reason": "RSI 과매도" if rsi_v <= rsi_threshold else "BB 하단 터치"})
+
+            if found_seeds:
+                status.update(label=f"✅ {len(found_seeds)}개의 씨앗 포착 완료!", state="complete")
+                for s in found_seeds:
+                    with st.expander(f"🌱 {s['name']} ({s['ticker']}) | RSI: {s['rsi']:.1f}"):
+                        st.write(f"현재가: {s['price']} | 포착 사유: **{s['reason']}**")
+                        if st.button(f"{s['ticker']} 농장 등록", key=f"add_{s['ticker']}"):
+                            st.success(f"{s['name']} 종목이 나의 농장 관리소에 등록되었습니다.")
+            else:
+                status.update(label="❌ 현재 조건에 부합하는 씨앗이 없습니다.", state="complete")
+
+    st.info("💡 **전술 팁**: RSI 30 이하에서 씨를 뿌리면, 반등 시 매우 강력한 수익 곡선을 그릴 수 있습니다.")
+
 
 
 elif page.startswith("6-a."):
