@@ -861,7 +861,17 @@ def get_kis_ohlcv(ticker, token):
         # 데이터가 너무 적으면 캐싱하지 않음 (잠시 후 재시도)
         if len(df) < 5: return pd.DataFrame()
         return df
-    except: return pd.DataFrame()
+    except: pass
+    
+    # [ BACKUP ] KIS 실패 시 yfinance로 데이터 이중화 (주말/서버 점검 대응)
+    try:
+        df = yf.download(ticker, period="120d", interval="1d", progress=False)
+        if not df.empty:
+            df.index.name = 'Date'
+            return df[['Open', 'High', 'Low', 'Close', 'Volume']]
+    except: pass
+    return pd.DataFrame()
+
 
 @st.cache_data(ttl=300, show_spinner=False)
 def get_kis_overseas_ohlcv(ticker, token):
@@ -898,8 +908,20 @@ def get_kis_overseas_ohlcv(ticker, token):
                     df = pd.DataFrame(data).set_index('Date').sort_index()
                     if len(df) >= 5: return df
 
-        return pd.DataFrame()
-    except: return pd.DataFrame()
+    except: pass
+    
+    # [ BACKUP ] KIS 해외 서버 실패 시 yfinance 백업
+    try:
+        df = yf.download(ticker, period="120d", interval="1d", progress=False)
+        if not df.empty:
+            df.index.name = 'Date'
+            # yfinance는 컬럼이 MultiIndex일 수 있으므로 처리
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            return df[['Open', 'High', 'Low', 'Close', 'Volume']]
+    except: pass
+    return pd.DataFrame()
+
 
 def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
     """프라임 본데(Stockbee) 전략 분석 엔진 v8.0 (Global Pure KIS Core)"""
@@ -2068,6 +2090,22 @@ elif page.startswith("7-j."):
                     else:
                         st.error(f"❌ {ticker} 데이터 획득 실패")
                 status.update(label="✅ CMO 교전 사이클 종료", state="complete")
+        
+        # [ VISUALIZATION ] CMO 전술 차트 (마지막 종목 기준)
+        if "cmo_tickers" in locals() and cmo_tickers:
+            t = cmo_tickers[0]
+            token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+            df = get_kis_ohlcv(t, token) if t.endswith(".KS") or t.endswith(".KQ") else get_kis_overseas_ohlcv(t, token)
+            if not df.empty and len(df) >= 20:
+                df = calculate_cmo(df)
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=df.index, y=df['CMO'], name='CMO', line=dict(color='#00F2FF', width=2)))
+                fig.add_hline(y=50, line_dash="dash", line_color="#FF3131", annotation_text="OVERBOUGHT (+50)")
+                fig.add_hline(y=-50, line_dash="dash", line_color="#39FF14", annotation_text="OVERSOLD (-50)")
+                fig.add_hline(y=0, line_color="#444")
+                fig.update_layout(title=f"📈 {t} Chande Momentum Oscillator (20D)", height=350, template="plotly_dark", margin=dict(l=10, r=10, t=40, b=10))
+                st.plotly_chart(fig, use_container_width=True)
+
     
     st.divider()
     st.subheader("📊 CMO 교전 브리핑 (Strategy Logs)")
