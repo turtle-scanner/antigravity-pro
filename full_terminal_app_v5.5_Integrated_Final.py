@@ -2329,18 +2329,20 @@ elif page.startswith("8-b."):
     data = pd.DataFrame({
         "Bonde": np.cumsum(np.random.normal(0.5, 1.2, 100)),
         "Minervini": np.cumsum(np.random.normal(0.4, 0.8, 100)),
-        "O'Neil": np.cumsum(np.random.normal(0.3, 1.0, 100)),
+        "ONeil": np.cumsum(np.random.normal(0.3, 1.0, 100)),
         "Weinstein": np.cumsum(np.random.normal(0.2, 0.5, 100)),
         "Buffett": np.cumsum(np.random.normal(0.1, 0.3, 100))
     }, index=days)
 
     st.markdown("<div class='glass-card'>지난 100거래일간 AI 요원들의 누적 수익률 추이입니다.</div>", unsafe_allow_html=True)
-    st.line_chart(data)
+    # 차트용 데이터 컬럼명 정리
+    chart_data = data.rename(columns={"ONeil": "O'Neil"})
+    st.line_chart(chart_data)
 
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Bonde", f"{data['Bonde'].iloc[-1]:.1f}%", "+2.1%")
     m2.metric("Minervini", f"{data['Minervini'].iloc[-1]:.1f}%", "+1.5%")
-    m3.metric("O'Neil", f"{data['O'Neil'].iloc[-1]:.1f}%", "+0.8%")
+    m3.metric("O'Neil", f"{data['ONeil'].iloc[-1]:.1f}%", "+0.8%")
     m4.metric("Weinstein", f"{data['Weinstein'].iloc[-1]:.1f}%", "+0.3%")
     m5.metric("Buffett", f"{data['Buffett'].iloc[-1]:.1f}%", "+0.1%")
 
