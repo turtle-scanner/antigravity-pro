@@ -1967,19 +1967,21 @@ elif page.startswith("3-f."):
                 with cols[i % 3]:
                     color = "#00FF00" if ready_score >= 85 else "#FFD700"
                     st.markdown(f"""
-                    <div class='glass-card' style='border-top: 5px solid {color}; padding: 15px; min-height: 210px; display: flex; flex-direction: column; justify-content: space-between;'>
-                        <div>
-                            <div style='display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;'>
-                                <h3 style='margin: 0; font-size: 1.05rem; line-height: 1.3; color: #FFF;'>{get_stock_name(stock['ticker'])}</h3>
-                                <span style='color: {color}; font-weight: 800; font-size: 1.1rem; white-space: nowrap;'>{ready_score}%</span>
+                    <div class='glass-card' style='border-top: 5px solid {color}; padding: 18px; min-height: 220px; display: flex; flex-direction: column; justify-content: space-between;'>
+                        <div style='height: 55px; display: flex; align-items: center;'>
+                            <div style='display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 10px;'>
+                                <h3 style='margin: 0; font-size: 1rem; line-height: 1.2; color: #FFF; font-weight: 700;'>{get_stock_name(stock['ticker'])}</h3>
+                                <span style='color: {color}; font-weight: 800; font-size: 1.15rem; white-space: nowrap;'>{ready_score}%</span>
                             </div>
                         </div>
-                        <div style='margin-top: auto;'>
-                            <div class='banana-track' style='margin-bottom: 12px;'>
-                                <div class='banana-fill' style='width: {ready_score}%; background: {color};'></div>
+                        <div style='margin-top: 15px;'>
+                            <div class='banana-track' style='margin-bottom: 15px;'>
+                                <div class='banana-fill' style='width: {ready_score}%; background: {color}; box-shadow: 0 0 10px {color}66;'></div>
                             </div>
-                            <p style='font-size: 0.75rem; color: #888; margin: 0;'>🍌 상태: {'잘 익음 (임박)' if ready_score >= 85 else '숙성 중'}</p>
-                            <p style='font-size: 0.7rem; color: #555; margin-top: 2px;'>({stock['ticker']})</p>
+                            <div style='display: flex; flex-direction: column; gap: 2px;'>
+                                <p style='font-size: 0.8rem; color: #BBB; margin: 0;'>🍌 상태: <span style='color: {color}; font-weight: bold;'>{'잘 익음 (임박)' if ready_score >= 85 else '숙성 중'}</span></p>
+                                <p style='font-size: 0.75rem; color: #666; margin: 0;'>({stock['ticker']})</p>
+                            </div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -2063,19 +2065,21 @@ elif page.startswith("5-c."):
                 with cols[i % 3]:
                     color = "#00FF00" if ready_score >= 90 else "#FFD700"
                     st.markdown(f"""
-                    <div class='glass-card' style='border-top: 5px solid {color}; padding: 15px; min-height: 210px; display: flex; flex-direction: column; justify-content: space-between;'>
-                        <div>
-                            <div style='display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;'>
-                                <h3 style='margin: 0; font-size: 1.05rem; line-height: 1.3; color: #FFF;'>{get_stock_name(stock['ticker'])}</h3>
-                                <span style='color: {color}; font-weight: 800; font-size: 1.1rem; white-space: nowrap;'>{ready_score}%</span>
+                    <div class='glass-card' style='border-top: 5px solid {color}; padding: 18px; min-height: 220px; display: flex; flex-direction: column; justify-content: space-between;'>
+                        <div style='height: 55px; display: flex; align-items: center;'>
+                            <div style='display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 10px;'>
+                                <h3 style='margin: 0; font-size: 1rem; line-height: 1.2; color: #FFF; font-weight: 700;'>{get_stock_name(stock['ticker'])}</h3>
+                                <span style='color: {color}; font-weight: 800; font-size: 1.15rem; white-space: nowrap;'>{ready_score}%</span>
                             </div>
                         </div>
-                        <div style='margin-top: auto;'>
-                            <div class='banana-track' style='margin-bottom: 12px;'>
-                                <div class='banana-fill' style='width: {ready_score}%; background: {color};'></div>
+                        <div style='margin-top: 15px;'>
+                            <div class='banana-track' style='margin-bottom: 15px;'>
+                                <div class='banana-fill' style='width: {ready_score}%; background: {color}; box-shadow: 0 0 10px {color}66;'></div>
                             </div>
-                            <p style='font-size: 0.75rem; color: #888; margin: 0;'>🔬 분석: {stock.get('TIC', 'NANO')} 전략 포착</p>
-                            <p style='font-size: 0.7rem; color: #555; margin-top: 2px;'>({stock['ticker']})</p>
+                            <div style='display: flex; flex-direction: column; gap: 2px;'>
+                                <p style='font-size: 0.8rem; color: #BBB; margin: 0;'>🔬 분석: <span style='color: {color}; font-weight: bold;'>{stock.get('TIC', 'NANO')} 전략 포착</span></p>
+                                <p style='font-size: 0.75rem; color: #666; margin: 0;'>({stock['ticker']})</p>
+                            </div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
