@@ -22,18 +22,32 @@ import concurrent.futures
 # --- [ UI/UX ] Premium Design System v9.9 ---
 @st.cache_resource
 def get_assets():
-    """정적 자산(이미지, 오디오)을 한 번만 로드하여 캐싱 (성능 극대화)"""
+    """정적 자산(이미지, 오디오)을 최적화하여 로드 (초기 로딩 속도 개선)"""
     assets = {"bg": "", "logo": "", "audio": {}}
-    for f in ["StockDragonfly2.png", "StockDragonfly.png"]:
-        if os.path.exists(f):
-            with open(f, "rb") as imm: assets["logo" if "2" not in f else "bg"] = base64.b64encode(imm.read()).decode()
-            if not assets["logo"]: assets["logo"] = assets["bg"]
-    
-    bgm_files = {"full": "full.mp3", "hope": "hope.mp3", "happy": "happy.mp3", "YouRaise": "YouRaise.mp3", "petty": "petty.mp3"}
-    for k, v in bgm_files.items():
-        if os.path.exists(v):
-            with open(v, "rb") as f: assets["audio"][k] = base64.b64encode(f.read()).decode()
+    try:
+        # 이미지 로드 (필수 자산 우선)
+        for f in ["StockDragonfly2.png", "StockDragonfly.png"]:
+            if os.path.exists(f):
+                with open(f, "rb") as imm: 
+                    encoded = base64.b64encode(imm.read()).decode()
+                    if "2" in f: assets["bg"] = encoded
+                    else: assets["logo"] = encoded
+        if not assets["logo"]: assets["logo"] = assets["bg"]
+        
+        # 오디오 파일은 선택 시점에 로드하도록 하여 초기 부하 감소 (여기서는 껍데기만 유지)
+        assets["audio_manifest"] = ["full", "hope", "happy", "YouRaise", "petty"]
+    except: pass
     return assets
+
+@st.cache_data(ttl=3600)
+def get_audio_base64(name):
+    """오디오 파일을 개별적으로 로드하여 메모리 및 초기 속도 최적화"""
+    file_map = {"full": "full.mp3", "hope": "hope.mp3", "happy": "happy.mp3", "YouRaise": "YouRaise.mp3", "petty": "petty.mp3"}
+    fname = file_map.get(name)
+    if fname and os.path.exists(fname):
+        with open(fname, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return ""
 
 def inject_premium_design():
     st.markdown("""
@@ -461,6 +475,19 @@ def get_current_acc_no():
 KIS_MOCK_TRADING = get_kis_mock_status()
 KIS_ACCOUNT_NO = get_current_acc_no()
 
+def get_user_kis_creds():
+    """[ TACTICAL ] 현재 로그인한 요원의 개인 KIS 정보를 동적으로 로드"""
+    users = load_users()
+    u = st.session_state.get("current_user")
+    personal = users.get(u, {}).get("kis_credentials", {})
+    
+    # 개인 키가 있으면 우선순위 1, 없으면 시스템 전역 키(Secrets) 사용
+    ak = personal.get("app_key") or KIS_APP_KEY
+    as_ = personal.get("app_secret") or KIS_APP_SECRET
+    an = personal.get("acc_no") or KIS_ACCOUNT_NO
+    return ak.strip(), as_.strip(), an.strip()
+
+
 # [ NEW ] 텔레그램 설정
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
@@ -511,11 +538,11 @@ def get_kis_access_token(app_key, app_secret, mock=True):
     
     return st.session_state.get("last_valid_token")
 
-@st.cache_data(ttl=30, show_spinner=False)
-def get_kis_balance(token, mock=None):
-
-    """국내 주식 잔고 및 수익 현황 조회 (실제 연동)"""
-    if not token or not KIS_ACCOUNT_NO: return 0, 0, []
+@st.cache_data(ttl=300, show_spinner=False)
+def get_kis_balance(token, mock=None, acc_no=None):
+    """국내 주식 잔고 및 수익 현황 조회 (TTL 연장으로 로딩 속도 개선)"""
+    target_acc = acc_no if acc_no else KIS_ACCOUNT_NO
+    if not token or not target_acc: return 0, 0, []
     use_mock = mock if mock is not None else KIS_MOCK_TRADING
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
@@ -527,10 +554,10 @@ def get_kis_balance(token, mock=None):
         "tr_id": "VTTC8434R" if use_mock else "TTTC8434R",
         "custtype": "P"
     }
-    suffixes = [KIS_ACCOUNT_NO[8:], "01", "02", "03", "04", "05", "06"]
+    suffixes = [target_acc[8:], "01", "02", "03", "04", "05", "06"]
     for suffix in list(dict.fromkeys(suffixes)):
         params = {
-            "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix,
+            "CANO": target_acc[:8], "ACNT_PRDT_CD": suffix,
             "AFHR_FLG": "N", "OVAL_DLY_TR_FECONT_YN": "N", "PRCS_DLY_VW_FNC_G": "0",
             "CANL_DLY_VW_FNC_G": "0", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""
         }
@@ -542,38 +569,35 @@ def get_kis_balance(token, mock=None):
                     cash = float(data['output2'][0].get('dnca_tot_amt', 0))
                     total_eval = float(data['output2'][0].get('tot_evlu_amt', 0))
                     holdings = data.get('output1', [])
-                    # KIS 국내 잔고(TTTC8434R)에서 tot_evlu_amt는 총 자산 평가액이므로 현금을 별도로 더하지 않음
                     return total_eval, cash, holdings
-
             elif res.status_code == 500:
                 err_data = res.json()
                 msg = err_data.get('msg1', 'Internal Server Error')
-                if "계좌" in msg or "권한" in msg: continue # 다음 접미사 시도
+                if "계좌" in msg or "권한" in msg: continue 
                 st.warning(f"⚠️ KIS 서버 응답(500): {msg}")
         except: continue
     return 0, 0, []
 
-@st.cache_data(ttl=30, show_spinner=False)
-def get_kis_overseas_balance(token, mock=None):
-
-    """해외 주식 잔고 현황 조회 (통합 계좌 + 거래소별 잔고 + 전수 스캔)"""
-    if not token or not KIS_ACCOUNT_NO: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
+@st.cache_data(ttl=300, show_spinner=False)
+def get_kis_overseas_balance(token, mock=None, acc_no=None):
+    """해외 주식 잔고 현황 조회 (TTL 연장으로 사이드바 렉 방지)"""
+    target_acc = acc_no if acc_no else KIS_ACCOUNT_NO
+    if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
     use_mock = mock if mock is not None else KIS_MOCK_TRADING
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     
-    suffixes = [KIS_ACCOUNT_NO[8:], "01", "02", "03", "04", "05", "06"]
+    suffixes = [target_acc[8:], "01", "02", "03", "04", "05", "06"]
     best_data = {"krw": 0, "usd_total": 0, "usd_cash": 0}
     best_holdings = []
     
     for suffix in list(dict.fromkeys(suffixes)):
-        # 전략 1: TTTS3061R (해외주식 통합잔고 - 가장 정확)
         url_61 = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
         headers_61 = {
             "Content-Type": "application/json", "authorization": f"Bearer {token}",
             "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
             "tr_id": "VTTS3061R" if use_mock else "TTTS3061R", "custtype": "P"
         }
-        params_61 = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""}
+        params_61 = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""}
         
         try:
             res = requests.get(url_61, headers=headers_61, params=params_61, timeout=10)
@@ -581,37 +605,14 @@ def get_kis_overseas_balance(token, mock=None):
                 d = res.json()
                 o2 = d.get('output2', {})
                 if o2:
-                    total_usd = float(o2.get('frcr_evlu_amt2') or o2.get('tot_evlu_pamt') or 0) # 외화평가금액
-                    cash_usd = float(o2.get('frcr_dnca_amt') or o2.get('frcr_dncl_amt_2') or o2.get('frcr_drwg_psbl_amt_1') or 0)   # 외화예수금액
+                    total_usd = float(o2.get('frcr_evlu_amt2') or o2.get('tot_evlu_pamt') or 0)
+                    cash_usd = float(o2.get('frcr_dnca_amt') or o2.get('frcr_dncl_amt_2') or o2.get('frcr_drwg_psbl_amt_1') or 0)
                     total_krw = float(o2.get('tot_evlu_pamt') or o2.get('tot_asst_amt') or 0)
-                    
-                    # 미니위탁의 경우 자산금액(tot_asst_amt)만 찍히는 경우가 많음
                     if total_usd + cash_usd == 0 and total_krw > 0:
-                        # 한화로만 찍히는 경우 대비 (임시)
                         total_usd = total_krw / 1350 
-                        
                     if total_usd + cash_usd > 0 or total_krw > 0:
                         return {"krw": total_krw, "usd_total": total_usd + cash_usd, "usd_cash": cash_usd}, d.get('output1', [])
         except:    pass
-
-        # 전략 2: TTTS3012R (해외주식 잔고 - 거래소 지정 필요)
-        headers_12 = headers_61.copy()
-        headers_12["tr_id"] = "VTTS3012R" if use_mock else "TTTS3012R"
-        for excd in ["NASD", "NYSE"]:
-            params_12 = params_61.copy()
-            params_12.update({"OVRS_EXCG_CD": excd, "CTX_AREA_FK200": "", "CTX_AREA_NK200": ""})
-            try:
-                res = requests.get(url_61, headers=headers_12, params=params_12, timeout=10)
-                if res.status_code == 200:
-                    d = res.json()
-                    o2 = d.get('output2', {})
-                    if o2:
-                        total_usd = float(o2.get('frcr_evlu_amt2', 0))
-                        cash_usd = float(o2.get('frcr_dnca_amt', 0))
-                        if total_usd + cash_usd > 0:
-                            return {"krw": float(o2.get('tot_evlu_pamt', 0)), "usd_total": total_usd + cash_usd, "usd_cash": cash_usd}, d.get('output1', [])
-            except: continue
-
     return best_data, best_holdings
 
 # --- [ KIS: REAL-TIME RISK MONITORING (PRO EDITION) ] ---
@@ -691,7 +692,7 @@ def execute_kis_auto_cut(token):
                 if execute_kis_market_order(ticker, qty, is_buy=False):
                     send_telegram_msg(f"💰 [TAKE PROFIT] {ticker} 목표달성 익절! (+{roi:.1f}%)")
                     return True
-            elif roi <= -3.0:
+            elif roi <= st.session_state.get("cfg_stop_loss_pct_val", -3.0):
                 if execute_kis_market_order(ticker, qty, is_buy=False):
                     send_telegram_msg(f"📉 [STOP LOSS] {ticker} 기계적 손절 집행. ({roi:.1f}%)")
                     return True
@@ -711,6 +712,7 @@ def fast_analyze_stock(ticker, token):
 def play_tactical_sound(sound_type="buy"):
     """전술 상황에 따른 오디오 알림 (매수: 북소리 / 매도: 종소리)"""
     # [ ACTION ] 매수: Drum/Taiko, 매도: Bell/Chime
+    # 초기 로딩 최적화를 위해 오디오 파일은 하단 JS 컴포넌트로 지연 로딩
     src = "https://www.soundjay.com/buttons/beep-07a.mp3" # Default
     if sound_type == "buy": src = "https://www.soundjay.com/misc/sounds/drum-roll-1.mp3"
     elif sound_type == "sell": src = "https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3"
@@ -745,8 +747,7 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
             "PDNO": ticker.split('.')[0], "ORD_DVSN": "01", "ORD_QTY": str(qty), "ORD_UNPR": "0"
         }
     else:
-        # [ PRO ] 미국 거래소별 로직 고도화
-        exchange_code = "NASD" # 기본값
+        exchange_code = "NASD" 
         try:
             info = yf.Ticker(ticker).info
             ex_name = info.get('exchange', '').upper()
@@ -754,13 +755,12 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
             elif 'ASE' in ex_name or 'AMERICAN' in ex_name: exchange_code = "AMEX"
         except:    pass
         
-        url = f"{base_url}/uapi/overseas-stock/v1/trading/order"
         tr_id = ("VTTW0801U" if is_buy else "VTTW0802U") if KIS_MOCK_TRADING else ("TTTW0801U" if is_buy else "TTTW0802U")
-        # 미국 시장가 주문 처리 (ORD_DVSN 00 지정, 가격 0 전송 시 KIS 서버에서 처리 가능성 고려)
+        
         body = {
             "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
             "OVRS_EXCG_CD": exchange_code, "PDNO": ticker, "ORD_QTY": str(qty), 
-            "ORD_OVRS_P": "0", "ORD_DVSN": "00"
+            "ORD_OVRS_P": "0", "ORD_DVSN": "00" 
         }
 
     headers = {
@@ -771,15 +771,12 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
         res = requests.post(url, headers=headers, json=body, timeout=7)
         res_data = res.json()
         if res.status_code == 200 and res_data.get('rt_cd') == '0':
-            # [ AUDIO ] 교전 결과 사운드 보고 (매수: 북소리 / 매도: 종소리)
             play_tactical_sound("buy" if is_buy else "sell")
-            # 전투 로그 기록
             log_type = "SUCCESS"
             msg = f"{'✅ 매수' if is_buy else '📉 매도'} 완료: {ticker} ({qty}주)"
             st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": msg, "type": log_type})
             return True
         else:
-            # 실패 사유 추출 및 정교화
             err_msg = res_data.get('msg1', 'API 통신 오류')
             if "잔고" in err_msg or "부족" in err_msg or "balance" in err_msg.lower():
                 err_msg = "🚨 계좌 잔액(증거금)이 부족하여 매수 불가"
@@ -812,169 +809,125 @@ def calculate_cmo(df, period=20):
     df['CMO'] = np.where(df['Sum_Abs_Change'] == 0, 0, 100 * (df['Net_Change'] / df['Sum_Abs_Change']))
     return df
 
-def analyze_stockbee_setup(ticker, hist_df=None):
-
-    """
-    [ BONDE ELITE ENGINE ] 프라딥 본데의 시장 셋업 (4가지)
-    - 9 Million EP
-    - Story-based EP
-    - Delayed Reaction EP
-    - 4% Momentum Burst
-    """
-@st.cache_data(ttl=300, show_spinner=False) # 5분 캐시, 스피너 비활성
-def get_kis_ohlcv(ticker, token):
-    """한국투자증권 OpenAPI 국내 주식 일봉 (120일 최적화 버전)"""
-    if not token: return pd.DataFrame()
+@st.cache_data(ttl=300, show_spinner=False)
+def get_kis_ohlcv(ticker, token=None):
+    """[ TACTICAL SOURCE ] yfinance 기반 국내 차트 데이터 획득"""
     try:
-        symbol = ticker.split('.')[0]
-        base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
-        url = f"{base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
-        headers = {
-            "Content-Type": "application/json", "authorization": f"Bearer {token}",
-            "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
-            "tr_id": "FHKST03010100", "custtype": "P"
-        }
-        # 본데 전략(SMA65)에 필요한 최소 120일로 기간 축소하여 제공 극대화
-        params = {
-            "FID_COND_SCR_DIV_CODE": "16641", "FID_INPUT_ISCD": symbol,
-            "FID_INPUT_DATE_1": (datetime.now() - pd.Timedelta(days=120)).strftime("%Y%m%d"),
-            "FID_INPUT_DATE_2": datetime.now().strftime("%Y%m%d"),
-            "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "0"
-        }
-        resp = requests.get(url, headers=headers, params=params, timeout=15)
-        if resp.status_code != 200: return pd.DataFrame()
+        yf_ticker = ticker
+        if ticker.isdigit() and len(ticker) == 6: yf_ticker = f"{ticker}.KS"
         
-        res_json = resp.json()
-        output = res_json.get('output2', [])
-        if not output: return pd.DataFrame()
-        
-        data = []
-        for r in reversed(output):
-            if not r.get('stck_bsop_date'): continue
-            data.append({
-                'Date': datetime.strptime(r['stck_bsop_date'], '%Y%m%d'),
-                'Open': float(r['stck_oprc']), 'High': float(r['stck_hgpr']),
-                'Low': float(r['stck_lwpr']), 'Close': float(r['stck_clpr']),
-                'Volume': float(r['acml_vol'])
-            })
-        df = pd.DataFrame(data).set_index('Date').sort_index()
-        # 데이터가 너무 적으면 캐싱하지 않음 (잠시 후 재시도)
-        if len(df) < 5: return pd.DataFrame()
-        return df
-    except: pass
-    
-    # [ BACKUP ] KIS 실패 시 yfinance로 데이터 이중화 (주말/서버 점검 대응)
-    try:
-        df = yf.download(ticker, period="120d", interval="1d", progress=False)
+        df = yf.download(yf_ticker, period="150d", interval="1d", progress=False)
         if not df.empty:
             df.index.name = 'Date'
+            if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
             return df[['Open', 'High', 'Low', 'Close', 'Volume']]
     except: pass
     return pd.DataFrame()
-
 
 @st.cache_data(ttl=300, show_spinner=False)
-def get_kis_overseas_ohlcv(ticker, token):
-    """한국투자증권 OpenAPI 해외 주식 일봉 (120일 최적화 버전)"""
-    if not token: return pd.DataFrame()
+def get_kis_overseas_ohlcv(ticker, token=None):
+    """[ TACTICAL SOURCE ] yfinance 기반 해외 차트 데이터 획득"""
     try:
-        base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
-        url = f"{base_url}/uapi/overseas-stock/v1/quotations/dailyprice"
-        headers = {
-            "Content-Type": "application/json", "authorization": f"Bearer {token}",
-            "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
-            "tr_id": "HHDFS76240000", "custtype": "P"
-        }
-        for excd in ["NAS", "NYS", "AMS"]:
-            params = {"AUTH": "", "EXCD": excd, "SYMB": ticker, "GUBN": "0", "BYMD": "", "MODP": "1"}
-            resp = requests.get(url, headers=headers, params=params, timeout=15)
-            if resp.status_code == 200:
-                output = resp.json().get('output2', [])
-                if output:
-                    data = []
-                    for r in reversed(output):
-                        # KIS 해외 주식 일봉(HHDFS76240000) 필드명 대응
-                        d_val = r.get('kz_date') or r.get('stck_bsop_date') or r.get('xy_date')
-                        if not d_val: continue
-                        
-                        data.append({
-                            'Date': datetime.strptime(d_val, '%Y%m%d'),
-                            'Open': float(r.get('open', 0)),
-                            'High': float(r.get('high', 0)),
-                            'Low': float(r.get('low', 0)),
-                            'Close': float(r.get('last') or r.get('clos') or 0),
-                            'Volume': float(r.get('vlou') or r.get('tvol') or 0)
-                        })
-                    df = pd.DataFrame(data).set_index('Date').sort_index()
-                    if len(df) >= 5: return df
-
-    except: pass
-    
-    # [ BACKUP ] KIS 해외 서버 실패 시 yfinance 백업
-    try:
-        df = yf.download(ticker, period="120d", interval="1d", progress=False)
+        df = yf.download(ticker, period="150d", interval="1d", progress=False)
         if not df.empty:
             df.index.name = 'Date'
-            # yfinance는 컬럼이 MultiIndex일 수 있으므로 처리
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
+            if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
             return df[['Open', 'High', 'Low', 'Close', 'Volume']]
     except: pass
     return pd.DataFrame()
 
 
+def get_nasdaq_200():
+    """나스닥 주요 200 종목 (주도주 후보군)"""
+    return ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "GOOG", "AVGO", "COST", "ASML", "AZN", "PEP", "LIN", "AMD", "ADBE", "CSCO", "QCOM", "TMUS", "INTU", "AMAT", "TXN", "AMGN", "ISRG", "HON", "VRTX", "SBUX", "BKNG", "PANW", "MDLZ", "REGN", "LRCX", "GILD", "INTC", "MU", "ADI", "ADP", "KLAC", "MELI", "PDD", "PYPL", "SNPS", "MAR", "CDNS", "CTAS", "ORLY", "CSX", "MARA", "COIN", "MSTR", "PLTR", "SMCI"]
+
+@st.cache_data(ttl=86400)
+def get_sheet_tickers(url):
+    """구글 시트에서 티커 리스트 추출 (1~5열 대상)"""
+    try:
+        # CSV 내보내기 링크 생성
+        base_url = url.split("/edit")[0]
+        gid = url.split("gid=")[1].split("#")[0] if "gid=" in url else "0"
+        export_url = f"{base_url}/export?format=csv&gid={gid}"
+        
+        df = pd.read_csv(export_url)
+        found_tickers = []
+        import re
+        # 왼쪽 1열부터 5열까지 스캔
+        for col_idx in range(min(5, len(df.columns))):
+            potential = df.iloc[:, col_idx].dropna().astype(str).tolist()
+            for p in potential:
+                p = p.strip().upper()
+                # 미국 티커(1-5자 영문) 또는 한국 티커(6자 숫자) 패턴
+                if re.match(r'^[A-Z]{1,5}$', p) or re.match(r'^\d{6}$', p):
+                    found_tickers.append(p)
+        return list(dict.fromkeys(found_tickers))
+    except Exception as e:
+        print(f"DEBUG: Sheet Load Error: {e}")
+        return []
+
 def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
-    """프라임 본데(Stockbee) 전략 분석 엔진 v8.0 (Global Pure KIS Core)"""
+    """프라임 본데(Stockbee) 전략 분석 엔진 v9.0 (High-Speed Tactical Scanner)"""
     try:
         is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
-        # [ PURE KIS DATA ENGINE ] 모든 데이터는 한국투자증권 OpenAPI에서 100% 수집
-        token = kis_token if kis_token else get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-        hist = get_kis_ohlcv(ticker, token) if is_kr else get_kis_overseas_ohlcv(ticker, token)
-        
-        if hist.empty:
-            return {"status": "REJECT", "reason": "데이터 부족 (KIS OpenAPI 응답 0)", "ticker": ticker, "name": ticker}
+        # [ OPTIMIZE ] 데이터가 이미 전달된 경우(벌크) 재호출 생략
+        if hist_df is not None and not hist_df.empty:
+            hist = hist_df
+        else:
+            token = kis_token if kis_token else get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+            hist = get_kis_ohlcv(ticker, token) if is_kr else get_kis_overseas_ohlcv(ticker, token)
+
+        if hist.empty or len(hist) < 150:
+            return {"status": "REJECT", "reason": f"데이터 부족 ({len(hist)}일)", "ticker": ticker, "name": ticker}
             
-        if len(hist) < 70:
-            return {"status": "REJECT", "reason": f"데이터 부족 (필요:70일 현재:{len(hist)}일)", "ticker": ticker, "name": ticker}
-        
         # [ PREPARE DATA ]
         df = hist.copy()
         df['C1'], df['C2'], df['V1'] = df['Close'].shift(1), df['Close'].shift(2), df['Volume'].shift(1)
         df['Pct'] = (df['Close'] / (df['C1'] + 1e-9) - 1) * 100
+        df['Gap'] = (df['Open'] / (df['C1'] + 1e-9) - 1) * 100
+        df['SMA20'], df['SMA50'], df['SMA200'] = df['Close'].rolling(20).mean(), df['Close'].rolling(50).mean(), df['Close'].rolling(200).mean()
         df['SMA7'], df['SMA65'] = df['Close'].rolling(7).mean(), df['Close'].rolling(65).mean()
         df['TI65'] = df['SMA7'] / (df['SMA65'] + 1e-9)
         df['Range_Pos'] = (df['Close'] - df['Low']) / (df['High'] - df['Low'] + 1e-9)
         df['ADR20'] = ((df['High'] / (df['Low'] + 1e-9) - 1) * 100).rolling(20).mean()
         
         row = df.iloc[-1]
-        c, o, v, pct, ti65, adr20, range_pos = row['Close'], row['Open'], row['Volume'], row['Pct'], row['TI65'], row['ADR20'], row['Range_Pos']
+        c, o, v, pct, gap, ti65, adr20, range_pos = row['Close'], row['Open'], row['Volume'], row['Pct'], row['Gap'], row['TI65'], row['ADR20'], row['Range_Pos']
         p_c, p_c2, p_v = row['C1'], row['C2'], row['V1']
+        sma50, sma200 = row['SMA50'], row['SMA200']
 
-        # [ FLEXIBLE CONFIG ] 사용자가 설정한 감도 적용 (기본값: 엄격모드)
+        setups = []
+        is_ep = is_dr = is_tight = False
+
+        # [ BONDE FILTER ] 2단계 추세 확인 (Stage 2 check)
+        is_stage2 = c > sma50 and sma50 > (sma200 if not pd.isna(sma200) else 0)
+
+        # [ FLEXIBLE CONFIG ]
         cfg_pct = st.session_state.get("cfg_min_pct", 4.0)
         cfg_prev_tight = st.session_state.get("cfg_max_prev_pct", 2.0)
         cfg_range = st.session_state.get("cfg_min_range_pos", 0.7)
 
-        # 돌파 EP (주도주) - 조건 완화 적용
-        if pct >= cfg_pct and v > p_v and v >= 50000 and (p_c/p_c2) <= (1 + cfg_prev_tight/100) and range_pos >= cfg_range:
-            is_ep = True; setups.append("EP (주도주)")
+        # 1. 돌파 EP (Episodic Pivot) - 정교화
+        vol_surge = v / (p_v + 1e-9)
+        # 본데 EP 조건: 4% 이상 상승 + 갭상승 + 거래량 폭증 + 상단 마감
+        if pct >= cfg_pct and vol_surge >= 2.0 and gap >= 2.0 and range_pos >= cfg_range and is_stage2:
+            is_ep = True; setups.append("EP (Episodic Pivot)")
 
-
-        # 조정 DR (지속성 반등)
-        df['Mega'] = (df['Volume'] >= 9000000) & (df['Pct'] >= 4.0)
+        # 2. 조정 DR (Delayed Reaction)
+        df['Mega'] = (df['Volume'] >= 5000000) & (df['Pct'] >= 4.0)
         recent_mega = df['Mega'].shift(1).rolling(25).max().iloc[-1] == 1.0
-        if recent_mega and ((o < p_c and c > p_c) or ((p_c/p_c2) <= 1.02 and v > p_v and pct >= 4.0)):
+        if recent_mega and is_stage2 and ((o < p_c and c > p_c) or ((p_c/p_c2) <= 1.02 and v > p_v and pct >= 4.0)):
             is_dr = True; setups.append("DR (지속성 반등)")
 
-        # 변동성 TIGHT (응축)
-        ttt = df['Pct'].rolling(3).apply(lambda x: all(abs(x) <= 1.0)).iloc[-1] == 1.0
-        if df['Volume'].rolling(3).min().iloc[-1] >= 300000 and ti65 >= 1.05 and ttt:
-            is_tight = True; setups.append("TIGHT (응축)")
+        # 3. 변동성 TIGHT (응축) - ADR 필터 추가
+        ttt = df['Pct'].rolling(3).apply(lambda x: all(abs(x) <= 1.2)).iloc[-1] == 1.0
+        if is_stage2 and adr20 >= 3.5 and ti65 >= 1.05 and ttt:
+            is_tight = True; setups.append("TIGHT (변동성 응축)")
 
-        # RS 품질
-        rs = round(((c/df['Close'].iloc[-126])*0.7 + (c/df['Close'].iloc[-63])*0.3)*100, 1) if len(df) >= 126 else 50
+        # RS 품질 (Relative Strength)
+        rs = round(((c/df['Close'].iloc[-min(len(df), 126)])*0.7 + (c/df['Close'].iloc[-min(len(df), 63)])*0.3)*100, 1)
         v_ratio = v / (p_v + 1e-9)
-        quality = round((rs*0.4) + (adr20*3) + (v_ratio*3), 1)
+        quality = round((rs*0.3) + (adr20*4) + (v_ratio*2), 1)
         name = get_stock_name(ticker)
 
         return {
@@ -982,14 +935,11 @@ def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
             "adr": round(adr20, 2), "quality": quality, "tight": round(abs(pct), 2),
             "is_ep": is_ep, "is_dr": is_dr, "is_tight": is_tight, "status": "SUCCESS" if setups else "PASS",
             "reason": f"🎯 {setups[0]} 포착!" if setups else "조건 미충족", "setups": setups,
-            "volume": v, "prev_volume": p_v, "ti65": round(ti65, 3)
+            "volume": v, "prev_volume": p_v, "ti65": round(ti65, 3), "is_stage2": is_stage2
         }
     except Exception as e:
-        return {"status": "ERROR", "reason": str(e), "ticker": ticker, "name": ticker}
+        return {"status": "ERROR", "reason": str(e), "ticker": ticker, "name": ticker}   
 
-
-# --- [ SCANNER HELPERS: STOCKBEE STRICT EDITION ] ---
-        
 
 # --- [ SCANNER HELPERS: UNIVERSE EXPANSION ] ---
 
@@ -1151,13 +1101,8 @@ def fetch_gs_visitors():
 # --- [ ACTION ] Optimized Data Helpers ---
 @st.cache_data(ttl=86400) # ROE는 하루 한 번 정도면 충분
 def get_ticker_roe(tic):
-    """
-    yf.Ticker.info는 매우 느리므로 캐시 루프 등에서 직접 사용을 지양해 주십시오.
-    최대한 캐싱을 사용하고 일괄 데이터는 Fastinfo 사용을 고려합니다.
-    """
     try:
         tk = yf.Ticker(tic)
-        # ROE는 info에 있음. 재호출 방지를 위해 st.cache_data 적용
         info = tk.info
         return info.get('returnOnEquity', 0) * 100
     except:
@@ -1388,7 +1333,7 @@ if not st.session_state["password_correct"]:
 ZONE_CONFIG = {
     "[ HQ ] 1. 본부 사령부": ["1-a. [ ADMIN ] 관리자 메인 센터", "1-b. [ HR ] HQ 정예 요원 사령부", "1-c. [ SECURE ] 계정 보안 설정", "1-d. [ EXIT ] 탈퇴/휴식 신청"],
     "[ MARKET ] 2. 시장 상황실": ["2-a. [ TREND ] 마켓 트렌드 요약", "2-b. [ MAP ] 실시간 히트맵", "2-c. [ SENTIMENT ] 시장 심리 게이지", "2-d. [ ABOUT ] 제작 전기"],
-    "[ TARGET ] 3. 주도주 추격기": ["3-a. [ SCAN ] 주도주 전술 스캐너", "3-b. [ RANK ] 주도주 리스트 TOP 50", "3-c. [ WATCH ] 본데 감시 리스트", "3-d. [ INDUSTRY ] 산업동향(TOP 10)", "3-e. [ RS ] RS 강도(TOP 10)"],
+    "[ TARGET ] 3. 주도주 추격기": ["3-a. [ SCAN ] 주도주 전술 스캐너", "3-b. [ RANK ] 주도주 리스트 TOP 50", "3-c. [ WATCH ] 본데 감시 리스트", "3-d. [ INDUSTRY ] 산업동향(TOP 10)", "3-e. [ RS ] RS 강도(TOP 10)", "3-f. [ NANO ] 나노바나나 레이더"],
     "[ CHART ] 4. 실시간 전술 분석실": ["4-a. [ ANALYZE ] BMS 전술 분석기", "4-b. [ INTERACTIVE ] 인터랙티브 차트", "4-c. [ RISK ] 리스크 관리 계산기"],
     "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ MENTOR ] 본데의 연구노트", "5-b. [ STUDY ] 주식공부(차트)", "5-c. [ RADAR ] 나노바나나 레이더"],
     "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방"],
@@ -1423,10 +1368,13 @@ with st.sidebar:
 
     # BGM Player
     st.markdown("<p style='font-size:0.7rem; color:#888; margin-bottom:5px;'>[ AUDIO ] TACTICAL BGM</p>", unsafe_allow_html=True)
-    sel_bgm = st.selectbox("BGM", ["MUTE"] + list(assets["audio"].keys()), label_visibility="collapsed")
+    audio_list = assets.get("audio_manifest", [])
+    sel_bgm = st.selectbox("BGM", ["MUTE"] + audio_list, label_visibility="collapsed")
     vol = st.slider("VOL", 0.0, 1.0, 0.4, 0.1)
-    if sel_bgm != "MUTE" and sel_bgm in assets["audio"]:
-        st.components.v1.html(f"<audio autoplay loop id='bgm'><source src='data:audio/mp3;base64,{assets['audio'][sel_bgm]}' type='audio/mp3'></audio><script>document.getElementById('bgm').volume={vol};</script>", height=0)
+    if sel_bgm != "MUTE":
+        audio_b64 = get_audio_base64(sel_bgm)
+        if audio_b64:
+            st.components.v1.html(f"<audio autoplay loop id='bgm'><source src='data:audio/mp3;base64,{audio_b64}' type='audio/mp3'></audio><script>document.getElementById('bgm').volume={vol};</script>", height=0)
 
     # Navigation
     st.markdown("<p style='color:#FFD700; font-size:0.8rem; font-weight:700; margin-top:20px; margin-bottom:10px;'>[ MISSION CONTROL ]</p>", unsafe_allow_html=True)
@@ -1434,29 +1382,34 @@ with st.sidebar:
     curr_grade = users.get(st.session_state.current_user, {}).get("grade", "회원")
     is_admin = curr_grade in ["관리자", "방장"]
 
-    st.sidebar.divider()
-    st.sidebar.markdown("### ⚙️ ACCOUNT CONTROL")
-    
-    # [ NEW ] 계좌 데이터 탭 주입
-    selected_acc = st.sidebar.selectbox(
-        "교전 계좌 선택", 
-        list(ACC_PRESETS.keys()), 
-        index=list(ACC_PRESETS.keys()).index(st.session_state.get("selected_acc_name", "위탁(종합)")),
-        key="selected_acc_name"
-    )
-    # 계좌 변경 시 전역 변수 변경 및 즉시 업데이트 효과를 위해 세션 상태 강제 반영
-    KIS_ACCOUNT_NO = ACC_PRESETS[selected_acc]
-    
-    is_live = st.sidebar.toggle("🚨 실전 매매 모드 (LIVE)", value=st.session_state.get("is_live_mode", not KIS_MOCK_TRADING), key="is_live_mode")
-    st.session_state.kis_mock_mode = not is_live
-    st.sidebar.caption(f"📡 현재 연결 키: {KIS_APP_KEY[:5]}***")
-    st.sidebar.caption(f"💳 계좌번호: {KIS_ACCOUNT_NO[:8]}-** (현재 {'실전' if is_live else '모의'})")
+    # [ SECURITY ] 계좌 컨트롤 섹션은 우선 'cntfed' 아이디만 접근 가능하도록 제한
+    if st.session_state.get("current_user") == "cntfed":
+        st.sidebar.divider()
+        st.sidebar.markdown("### ⚙️ ACCOUNT CONTROL (ADMIN ONLY)")
+        
+        # [ NEW ] 계좌 데이터 탭 주입
+        selected_acc = st.sidebar.selectbox(
+            "교전 계좌 선택", 
+            list(ACC_PRESETS.keys()), 
+            index=list(ACC_PRESETS.keys()).index(st.session_state.get("selected_acc_name", "위탁(종합)")),
+            key="selected_acc_name"
+        )
+        # 계좌 변경 시 전역 변수 변경 및 즉시 업데이트 효과를 위해 세션 상태 강제 반영
+        KIS_ACCOUNT_NO = ACC_PRESETS[selected_acc]
+        
+        # [ NEW ] 개인화된 키 로드
+        u_ak, u_as, u_an = get_user_kis_creds()
+        
+        is_live = st.sidebar.toggle("🚨 실전 매매 모드 (LIVE)", value=st.session_state.get("is_live_mode", not KIS_MOCK_TRADING), key="is_live_mode")
+        st.session_state.kis_mock_mode = not is_live
+        st.sidebar.caption(f"📡 연결 키: {u_ak[:5]}*** (개인설정 {'적용됨' if 'kis_credentials' in users.get(st.session_state.current_user, {}) else '기본값'})")
+        st.sidebar.caption(f"💳 계좌번호: {u_an[:8]}-** (현재 {'실전' if is_live else '모의'})")
 
-    # [ SIDEBAR BALANCE INFO ]
-    if st.session_state.get("current_user"):
+        # [ SIDEBAR BALANCE INFO ]
         try:
             current_mock = not is_live
-            token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, current_mock)
+            token = get_kis_access_token(u_ak, u_as, current_mock)
+
             
             # 독립적 호출 에러 격리
             r_total, r_cash = 0, 0
@@ -1472,6 +1425,7 @@ with st.sidebar:
             except:    pass
             
             full_b = r_total + o_total_krw
+            st.session_state.last_total_equity = full_b
             
             st.sidebar.markdown(f"""
                 <div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:5px; border:1px solid #FFD70033;'>
@@ -1491,9 +1445,11 @@ with st.sidebar:
                 st.rerun()
         except:
             st.sidebar.caption("인증 세션 확인 중..")
-            if st.sidebar.button("🔑 토큰 재발급", use_container_width=True):
-                get_kis_access_token.clear()
-                st.rerun()
+    else:
+        st.sidebar.divider()
+        st.sidebar.info("🔒 계좌 제어권은 사령관 전용입니다.")
+
+
     st.sidebar.divider()
     
     for zone, missions in ZONE_CONFIG.items():
@@ -1773,6 +1729,36 @@ elif page.startswith("1-b."):
                 if st.button("[ EXEC: DELETE ]", key=f"hr_del_{u}"):
                     del users[u]; save_users(users); st.rerun()
 
+elif page.startswith("1-c."):
+    st.header("[ SECURE ] 개인 계정 보안 및 KIS 연동 설정")
+    st.markdown("<div class='glass-card'>각 요원의 개인 한국투자증권 API 키를 안전하게 연동하여 개별 매매 환경을 구축합니다.</div>", unsafe_allow_html=True)
+    
+    users = load_users()
+    curr_u = st.session_state.current_user
+    u_data = users.get(curr_u, {})
+    kis_creds = u_data.get("kis_credentials", {})
+
+    with st.form("kis_secure_form"):
+        st.subheader("🔑 KIS API Credentials")
+        new_app_key = st.text_input("APP KEY", value=kis_creds.get("app_key", ""), type="password")
+        new_app_secret = st.text_input("APP SECRET", value=kis_creds.get("app_secret", ""), type="password")
+        new_acc_no = st.text_input("계좌번호 (8자리-2자리)", value=kis_creds.get("acc_no", ""))
+        
+        st.info("💡 입력된 키는 본인 계정에만 저장되며, 매매 및 잔고 조회 시 우선적으로 사용됩니다.")
+        
+        if st.form_submit_button("🛡️ 보안 설정 저장 및 적용"):
+            if not u_data: u_data = {}
+            u_data["kis_credentials"] = {
+                "app_key": new_app_key,
+                "app_secret": new_app_secret,
+                "acc_no": new_acc_no
+            }
+            users[curr_u] = u_data
+            save_users(users)
+            st.success("✅ 개인 보안 설정이 저장되었습니다. 이제 본인의 계좌로 매매가 진행됩니다.")
+            st.rerun()
+
+
 elif page.startswith("2-a."):
     st.header("[ TREND ] 마켓 트렌드 요약")
     st.info("실시간 시장 강도: **MODERATE BULLISH**")
@@ -1818,19 +1804,39 @@ elif page.startswith("3-a."):
             if scan_kr: target_universe += get_kospi_top_200() + get_kosdaq_100()
             target_universe = list(set(target_universe))
             
-            token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+            st.write(f"📊 총 {len(target_universe)}개 종목 벌크 데이터 수집 중...")
+            # [ OPTIMIZE ] 벌크 다운로드로 네트워크 병목 해결
+            bulk_data = get_bulk_market_data(target_universe, period="250d")
+            
             hits = {"9M_EP": [], "Burst": [], "Story_EP": [], "Delayed_EP": []}
             
-            progress_bar = st.progress(0)
-            for i, ticker in enumerate(target_universe):
-                res = analyze_stockbee_setup(ticker, kis_token=token)
-                if res.get("status") == "SUCCESS":
-                    # 간단히 Burst 섹션에 모두 통합 또는 분류
-                    hits["Burst"].append(res)
-                progress_bar.progress((i + 1) / len(target_universe))
+            st.write("⚔️ 병렬 전술 분석 엔진 가동...")
+            # [ OPTIMIZE ] ThreadPoolExecutor로 CPU 작업 및 개별 분석 병렬화
+            import concurrent.futures
+            
+            def scan_worker(ticker):
+                hist = get_ticker_data_from_bulk(bulk_data, ticker)
+                if not hist.empty:
+                    return analyze_stockbee_setup(ticker, hist_df=hist)
+                return None
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                future_to_ticker = {executor.submit(scan_worker, t): t for t in target_universe}
+                completed = 0
+                progress_bar = st.progress(0)
+                
+                for future in concurrent.futures.as_completed(future_to_ticker):
+                    res = future.result()
+                    if res and res.get("status") == "SUCCESS":
+                        hits["Burst"].append(res)
+                    completed += 1
+                    progress_bar.progress(completed / len(target_universe))
+            
+            # 품질(Quality)순으로 정렬하여 최정예 종목 상단 배치
+            hits["Burst"] = sorted(hits["Burst"], key=lambda x: x.get("quality", 0), reverse=True)
             
             st.session_state.antigravity_scan = hits
-            status.update(label="✅ 스캔 완료! 주도주 후보군 포착", state="complete")
+            status.update(label=f"✅ 스캔 완료! {len(hits['Burst'])}개 주도주 포착", state="complete")
         st.rerun()
 
     if "antigravity_scan" in st.session_state:
@@ -1853,8 +1859,42 @@ elif page.startswith("3-a."):
 
 elif page.startswith("3-c."):
     st.header("[ WATCHLIST ] 사령부 관심 저격 종목")
-    wl = fetch_q_watchlist()
+    # [ FIX ] 정의되지 않은 함수 대신 빈 리스트 또는 시트 데이터 활용
+    st.info("🎯 사령부에서 실시간 감시 중인 전략 종목 리스트입니다.")
+    wl = get_bonde_top_50()
     st.write(wl)
+
+elif page.startswith("3-f."):
+    st.markdown("<h1 style='text-align: center; color: #00FF00;'>🔥 나노바나나 레이더 (Ripened Target)</h1>", unsafe_allow_html=True)
+    st.markdown("<div class='glass-card' style='text-align: center;'>현재 사령부 감시망에너지가 축적되어 돌파가 임박한 '잘 익은' 종목들을 실시간 추적합니다.</div>", unsafe_allow_html=True)
+    
+    if "antigravity_scan" in st.session_state:
+        res = st.session_state.antigravity_scan
+        all_hits = res.get("9M_EP", []) + res.get("Burst", []) + res.get("Story_EP", []) + res.get("Delayed_EP", [])
+        
+        if not all_hits:
+            st.warning("🕵️ 현재 레이더망에 포착된 임박 종목이 없습니다. 3-a에서 스캔을 먼저 진행하십시오.")
+        else:
+            cols = st.columns(3)
+            for i, stock in enumerate(all_hits[:12]):
+                # 잘 익은 정도(Ready Score) 계산: RS와 Quality 기반
+                ready_score = min(99, int(stock.get('quality', 50) + stock.get('rs', 50) / 10))
+                with cols[i % 3]:
+                    color = "#00FF00" if ready_score >= 85 else "#FFD700"
+                    st.markdown(f"""
+                    <div class='glass-card' style='border-top: 5px solid {color}; padding: 15px;'>
+                        <div style='display: flex; justify-content: space-between; align-items: center;'>
+                            <h3 style='margin: 0; font-size: 1.1rem;'>{stock['ticker']}</h3>
+                            <span style='color: {color}; font-weight: 800;'>{ready_score}%</span>
+                        </div>
+                        <div class='banana-track'>
+                            <div class='banana-fill' style='width: {ready_score}%; background: {color}; color: {color};'></div>
+                        </div>
+                        <p style='font-size: 0.75rem; color: #888; margin-top: 8px;'>🍌 상태: {'잘 익음 (임박)' if ready_score >= 85 else '숙성 중'}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+    else:
+        st.info("📡 [ SYSTEM ] 현재 나노 엔진 가열 중입니다. **3-a. [ SCAN ]** 메뉴에서 먼저 시장 스캔을 진행하십시오.")
 
 elif page.startswith("4-a."):
     st.header("[ ANALYZE ] BMS 전술 분석기")
@@ -2001,10 +2041,13 @@ elif page.startswith("7-c."):
                 for ticker in target_universe:
                     res = analyze_stockbee_setup(ticker, kis_token=token)
                     if res.get("status") == "SUCCESS":
-                        st.write(f"🎯 타겟 포착: {res['name']} ({ticker})")
-                        # 자동 매수 집행
-                        if execute_kis_market_order(ticker, 1, is_buy=True):
-                            st.info(f"🚀 {res['name']} 자동 매수 집행 완료!")
+                        # [ TACTICAL ] 자본 대비 1% 리스크 수량 계산
+                        risk_pct = abs(st.session_state.get("cfg_stop_loss_pct_val", -3.0)) / 100
+                        total_equity = st.session_state.get("last_total_equity", 10000000)
+                        trade_qty = max(1, int((total_equity * 0.1) / res['close'])) # 단순 예시: 자산의 10% 투입
+                        
+                        if execute_kis_market_order(ticker, trade_qty, is_buy=True):
+                            st.info(f"🚀 {res['name']} 자동 매수 집행 완료! ({trade_qty}주)")
                 
                 status.update(label="✅ 교전 사이클 종료", state="complete")
 
@@ -2038,7 +2081,7 @@ elif page.startswith("7-i."):
     
     st.divider()
     st.subheader("🛡️ 리스크 관리 설정")
-    st.slider("기계적 손절 임계값(%)", 2.0, 10.0, 5.0)
+    st.session_state.cfg_stop_loss_pct_val = st.slider("기계적 손절 임계값(%)", -10.0, -1.0, st.session_state.get("cfg_stop_loss_pct_val", -3.0), 0.5, key="stop_loss_slider")
     if st.button("설정 저장 및 사령부 적용"):
         st.success("✅ 시스템 설정이 서버에 영구 반영되었습니다.")
 
@@ -2050,16 +2093,33 @@ elif page.startswith("7-j."):
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([1, 1])
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
         cmo_active = st.toggle("🚀 CHANDE 엔진 가동 (CMO)", value=st.session_state.get("cmo_engine_active", False))
         st.session_state.cmo_engine_active = cmo_active
     with col2:
-        cmo_tickers = st.text_input("교전 티커 (쉼표 구분)", value="NVDA,TSLA,AAPL,PLTR").upper().replace(" ", "").split(",")
+        use_auto_universe = st.checkbox("나스닥100 + 시트 연동", value=True)
+    with col3:
+        manual_tickers = st.text_input("추가 티커", value="NVDA,TSLA").upper().replace(" ", "").split(",")
     
+    # 유니버스 구성
+    if use_auto_universe:
+        sheet_url = "https://docs.google.com/spreadsheets/d/1xjbe9SF0HsxwY_Uy3NC2tT92BqK0nhArUaYU16Q0p9M/edit#gid=1499398020"
+        # 나스닥 상위 15 (Stage Analysis 기준 핵심 종목군)
+        nasdaq_top_15 = ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "AVGO", "META", "TSLA", "WMT", "ASML", "NFLX", "CSCO", "AMD", "MU", "COST"]
+        sheet_tickers = get_sheet_tickers(sheet_url)
+        cmo_tickers = list(dict.fromkeys(nasdaq_top_15 + sheet_tickers + manual_tickers))
+    else:
+        cmo_tickers = manual_tickers
+
+
     if cmo_active:
-        st.success(f"📡 찬드라 엔진 감시 중... 타겟: {', '.join(cmo_tickers)}")
+        st.success(f"📡 찬드라 엔진 감시 중... 유니버스 크기: {len(cmo_tickers)} 종목")
+        with st.expander("🔍 현재 감시 리스트 확인"):
+            st.write(", ".join(cmo_tickers))
+            
         if st.button("⚡ 즉시 CMO 교전 실행"):
+
             with st.status("⚔️ CMO 전술 사이클 가동...", expanded=True) as status:
                 token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
                 
