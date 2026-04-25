@@ -540,9 +540,11 @@ def get_kis_balance(token, mock=None):
                 data = res.json()
                 if data.get('output2'):
                     cash = float(data['output2'][0].get('dnca_tot_amt', 0))
-                    eval_amt = float(data['output2'][0].get('tot_evlu_amt', 0))
+                    total_eval = float(data['output2'][0].get('tot_evlu_amt', 0))
                     holdings = data.get('output1', [])
-                    return cash + eval_amt, cash, holdings
+                    # KIS 국내 잔고(TTTC8434R)에서 tot_evlu_amt는 총 자산 평가액이므로 현금을 별도로 더하지 않음
+                    return total_eval, cash, holdings
+
             elif res.status_code == 500:
                 err_data = res.json()
                 msg = err_data.get('msg1', 'Internal Server Error')
@@ -799,7 +801,17 @@ def get_bonde_top_50():
     except:
         return ["NVDA", "TSLA", "AAPL", "MSFT", "PLTR", "SMCI", "AMD", "META", "GOOGL", "AVGO", "MSTR", "COIN", "MARA"]
 
+def calculate_cmo(df, period=20):
+    """투시아르 찬드(Tushar Chande)의 CMO 지표 계산"""
+    if len(df) < period: return df
+    df['Net_Change'] = df['Close'] - df['Close'].shift(period)
+    df['Abs_Change'] = df['Close'].diff().abs()
+    df['Sum_Abs_Change'] = df['Abs_Change'].rolling(window=period).sum()
+    df['CMO'] = np.where(df['Sum_Abs_Change'] == 0, 0, 100 * (df['Net_Change'] / df['Sum_Abs_Change']))
+    return df
+
 def analyze_stockbee_setup(ticker, hist_df=None):
+
     """
     [ BONDE ELITE ENGINE ] 프라딥 본데의 시장 셋업 (4가지)
     - 9 Million EP
@@ -1350,8 +1362,9 @@ ZONE_CONFIG = {
     "[ CHART ] 4. 실시간 전술 분석실": ["4-a. [ ANALYZE ] BMS 전술 분석기", "4-b. [ INTERACTIVE ] 인터랙티브 차트", "4-c. [ RISK ] 리스크 관리 계산기"],
     "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ MENTOR ] 본데의 연구노트", "5-b. [ STUDY ] 주식공부(차트)", "5-c. [ RADAR ] 나노바나나 레이더"],
     "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방"],
-    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ SETUP ] 사령부 교전 수칙", "7-b. [ MONITOR ] 실시간 시장 관측", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-g. [ COMBAT ] 실시간 교전 관제소", "7-i. [ CONFIG ] 사령부 시스템 설정"]
+    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ SETUP ] 사령부 교전 수칙", "7-b. [ MONITOR ] 실시간 시장 관측", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-g. [ COMBAT ] 실시간 교전 관제소", "7-i. [ CONFIG ] 사령부 시스템 설정", "7-j. [ CHANDE ] 찬드라 지표 엔진"]
 }
+
 
 def load_trades():
     return safe_load_json(TRADES_DB, {"mock": [], "auto": [], "history": [], "wallets": {}})
@@ -1998,6 +2011,64 @@ elif page.startswith("7-i."):
     st.slider("기계적 손절 임계값(%)", 2.0, 10.0, 5.0)
     if st.button("설정 저장 및 사령부 적용"):
         st.success("✅ 시스템 설정이 서버에 영구 반영되었습니다.")
+
+elif page.startswith("7-j."):
+    st.markdown("""
+    <div style='background: linear-gradient(90deg, #00F2FF 0%, #0066FF 100%); padding: 25px; border-radius: 15px; text-align: center; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,242,255,0.3);'>
+        <h1 style='margin:0; color:white; font-family:Orbitron; letter-spacing:5px;'>CHANDE MOMENTUM ENGINE</h1>
+        <p style='margin:5px 0 0 0; color:rgba(255,255,255,0.8); font-size:0.9rem;'>Tushar Chande's Tactical Momentum Algorithm v1.0</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        cmo_active = st.toggle("🚀 CHANDE 엔진 가동 (CMO)", value=st.session_state.get("cmo_engine_active", False))
+        st.session_state.cmo_engine_active = cmo_active
+    with col2:
+        cmo_tickers = st.text_input("교전 티커 (쉼표 구분)", value="NVDA,TSLA,AAPL,PLTR").upper().replace(" ", "").split(",")
+    
+    if cmo_active:
+        st.success(f"📡 찬드라 엔진 감시 중... 타겟: {', '.join(cmo_tickers)}")
+        if st.button("⚡ 즉시 CMO 교전 실행"):
+            with st.status("⚔️ CMO 전술 사이클 가동...", expanded=True) as status:
+                token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+                
+                # 1. 공통 리스크 관리 (-3% 손절 등)
+                st.write("🛡️ 전술적 리스크 관리(Stop-Loss) 점검...")
+                execute_kis_auto_cut(token)
+                
+                # 2. CMO 전술 분석 및 매매
+                for ticker in cmo_tickers:
+                    st.write(f"🔍 {ticker} 분석 중...")
+                    # 실제 OHLCV 데이터 획득 (국내/해외 구분)
+                    is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
+                    df = get_kis_ohlcv(ticker, token) if is_kr else get_kis_overseas_ohlcv(ticker, token)
+                    
+                    if not df.empty and len(df) >= 20:
+                        df = calculate_cmo(df, period=20)
+                        latest_cmo = df['CMO'].iloc[-1]
+                        st.write(f"📊 {ticker} CMO 수치: **{latest_cmo:.2f}**")
+                        
+                        if latest_cmo <= -50.0:
+                            st.info(f"🟢 [BUY SIGNAL] {ticker} 과매도 포착! (-50 이하)")
+                            if execute_kis_market_order(ticker, 1, is_buy=True):
+                                st.success(f"🚀 {ticker} 매수 집행 완료!")
+                        elif latest_cmo >= 50.0:
+                            st.warning(f"🔴 [SELL SIGNAL] {ticker} 과매수 포착! (+50 이상)")
+                            if execute_kis_market_order(ticker, 1, is_buy=False):
+                                st.success(f"📉 {ticker} 매도 집행 완료!")
+                    else:
+                        st.error(f"❌ {ticker} 데이터 획득 실패")
+                status.update(label="✅ CMO 교전 사이클 종료", state="complete")
+    
+    st.divider()
+    st.subheader("📊 CMO 교전 브리핑 (Strategy Logs)")
+    if st.session_state.get("combat_logs"):
+        for log in reversed(st.session_state.combat_logs[-20:]):
+            if "CMO" in log["msg"] or any(t in log["msg"] for t in cmo_tickers):
+                color = "#00F2FF" if "매수" in log["msg"] else ("#FF3131" if "매도" in log["msg"] else "#888")
+                st.markdown(f"<small style='color:#666;'>[{log['time']}]</small> <span style='color:{color};'>{log['msg']}</span>", unsafe_allow_html=True)
+
 
 
 # --- 시스템 하단 글로벌 전술 푸터 (Global Footer) ---
