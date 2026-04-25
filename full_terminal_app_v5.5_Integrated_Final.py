@@ -883,15 +883,21 @@ def get_kis_overseas_ohlcv(ticker, token):
                 if output:
                     data = []
                     for r in reversed(output):
-                        if not r.get('xy_date'): continue
+                        # KIS 해외 주식 일봉(HHDFS76240000) 필드명 대응
+                        d_val = r.get('kz_date') or r.get('stck_bsop_date') or r.get('xy_date')
+                        if not d_val: continue
+                        
                         data.append({
-                            'Date': datetime.strptime(r['xy_date'], '%Y%m%d'),
-                            'Open': float(r['open']), 'High': float(r['high']),
-                            'Low': float(r['low']), 'Close': float(r['clos']),
-                            'Volume': float(r['tvol'])
+                            'Date': datetime.strptime(d_val, '%Y%m%d'),
+                            'Open': float(r.get('open', 0)),
+                            'High': float(r.get('high', 0)),
+                            'Low': float(r.get('low', 0)),
+                            'Close': float(r.get('last') or r.get('clos') or 0),
+                            'Volume': float(r.get('vlou') or r.get('tvol') or 0)
                         })
                     df = pd.DataFrame(data).set_index('Date').sort_index()
                     if len(df) >= 5: return df
+
         return pd.DataFrame()
     except: return pd.DataFrame()
 
