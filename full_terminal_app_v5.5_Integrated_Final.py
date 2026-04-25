@@ -382,9 +382,14 @@ def fetch_macro_ticker_tape():
 
 # --- [ SESSION STATE INITIALIZATION ] ---
 if "combat_logs" not in st.session_state: st.session_state.combat_logs = []
-if "is_live_mode" not in st.session_state: st.session_state.is_live_mode = not KIS_MOCK_TRADING
-if "kis_mock_mode" not in st.session_state: st.session_state.kis_mock_mode = KIS_MOCK_TRADING
+if "kis_mock_mode" not in st.session_state: st.session_state.kis_mock_mode = st.secrets.get("KIS_MOCK_TRADING", False)
+if "is_live_mode" not in st.session_state: st.session_state.is_live_mode = not st.session_state.kis_mock_mode
 if "selected_acc_name" not in st.session_state: st.session_state.selected_acc_name = "위탁(종합)"
+if "page" not in st.session_state: st.session_state.page = "6-a. [ CHECK ] 출석체크(오늘한줄)"
+if "cfg_min_pct" not in st.session_state: st.session_state.cfg_min_pct = 4.0
+if "cfg_max_prev_pct" not in st.session_state: st.session_state.cfg_max_prev_pct = 2.0
+if "cfg_min_range_pos" not in st.session_state: st.session_state.cfg_min_range_pos = 0.7
+
 
 def get_ticker_data_from_bulk(bulk_df, ticker):
     """일괄 다운로드 데이터에서 특정 종목 추출"""
