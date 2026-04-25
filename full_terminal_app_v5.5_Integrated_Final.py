@@ -2208,50 +2208,85 @@ elif page.startswith("5-z."):
     ]
     st.table(pd.DataFrame(farming_guide))
 
-    # [ FARM TRACKER ]
+    # [ FARM TRACKER FUNCTIONAL ]
     st.divider()
-    st.subheader("🚜 나의 농장 관리소")
+    st.subheader("🚜 나의 농장 관리소 (Active Crops)")
+    
     if "my_farm_stocks" not in st.session_state:
-        st.session_state.my_farm_stocks = [
-            {"ticker": "NVDA", "entry": 850.0, "max": 950.0, "current": 880.0, "rsi": 45, "weight": 5},
-            {"ticker": "AAPL", "entry": 190.0, "max": 195.0, "current": 165.0, "rsi": 28, "weight": 15},
-        ]
+        st.session_state.my_farm_stocks = []
 
-    for i, stock in enumerate(st.session_state.my_farm_stocks):
-        profit = (stock['current'] - stock['entry']) / stock['entry'] * 100
-        drop = (stock['current'] - stock['max']) / stock['max'] * 100
-        status = "🌱 새싹"
-        color = "#93f9b9"
-        if profit >= 15: status, color = "🍎 수확 가능!", "#FF4B4B"
-        elif stock['rsi'] <= 30: status, color = "🌿 물 주기 (성장 중)", "#1d976c"
-        elif drop <= -10: status, color = "🌿 물 주기 (추매 구간)", "#FFD700"
-        
-        with st.container():
-            st.markdown(f"""
-            <div class='glass-card' style='border-left: 5px solid {color}; padding: 20px; margin-bottom: 15px;'>
-                <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <h3 style='margin: 0;'>{stock['ticker']} <small style='color: #888;'>({status})</small></h3>
-                    <h4 style='margin: 0; color: {"#FF4B4B" if profit >= 0 else "#4B4BFF"};'>{profit:+.2f}%</h4>
+    if st.session_state.my_farm_stocks:
+        if st.button("🔄 전체 작물 상태 최신화 (Update All)"):
+            with st.status("농작물들의 건강 상태를 체크 중입니다...", expanded=False):
+                token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+                for stock in st.session_state.my_farm_stocks:
+                    is_kr = stock['ticker'].endswith(".KS") or stock['ticker'].endswith(".KQ")
+                    df = get_kis_ohlcv(stock['ticker'], token) if is_kr else get_kis_overseas_ohlcv(stock['ticker'], token)
+                    if not df.empty:
+                        df = calculate_rsi(df)
+                        stock['current'] = df['Close'].iloc[-1]
+                        stock['rsi'] = df['RSI'].iloc[-1]
+                        if stock['current'] > stock['max']: stock['max'] = stock['current']
+            st.rerun()
+
+        for i, stock in enumerate(st.session_state.my_farm_stocks):
+            profit = (stock['current'] - stock['entry']) / stock['entry'] * 100
+            drop = (stock['current'] - stock['max']) / stock['max'] * 100
+            
+            # [ TACTICAL LOGIC ]
+            status = "🌱 새싹 (안정적 보유)"
+            color = "#93f9b9"
+            action_tip = "인내하며 성장을 지켜보세요."
+            
+            if profit >= 20: 
+                status, color, action_tip = "🍎 과일 (수확 적기!)", "#FF4B4B", "전량 매도하여 수익을 확정하세요!"
+            elif profit >= 10:
+                status, color, action_tip = "🌼 개화 (수익 진행 중)", "#FFD700", "목표가(20%)까지 홀딩하세요."
+            elif drop <= -30:
+                status, color, action_tip = "🆘 위기 (3차 물주기)", "#FF0000", "비중 20% 추가 매수 (강력 매수 구간)"
+            elif drop <= -20:
+                status, color, action_tip = "🌿 성장 (2차 물주기)", "#FF4500", "비중 10% 추가 매수 권장"
+            elif drop <= -10:
+                status, color, action_tip = "🌿 성장 (1차 물주기)", "#FFA500", "비중 5% 추가 매수 준비"
+            
+            with st.container():
+                st.markdown(f"""
+                <div class='glass-card' style='border-left: 5px solid {color}; padding: 20px; margin-bottom: 15px;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <h3 style='margin: 0;'>{get_stock_name(stock['ticker'])} <small style='color: #888;'>({stock['ticker']})</small></h3>
+                        <h4 style='margin: 0; color: {"#FF4B4B" if profit >= 0 else "#4B4BFF"};'>{profit:+.2f}%</h4>
+                    </div>
+                    <div style='margin: 10px 0; font-size: 0.95rem; color: #FFF; font-weight: bold;'>상태: {status}</div>
+                    <div style='font-size: 0.85rem; color: #AAA;'>
+                        진입가: {stock['entry']:,} | 현재가: {stock['current']:,} | RSI: {stock['rsi']:.1f} | 고점대비: <span style='color: #FF4B4B;'>{drop:.1f}%</span>
+                    </div>
+                    <div style='margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px dashed {color}55;'>
+                        <span style='color: {color}; font-weight: bold;'>⚔️ 지휘관 대응:</span> {action_tip}
+                    </div>
+                    <div style='text-align: right; margin-top: 10px;'>
+                        <button style='background: transparent; border: 1px solid #444; color: #888; border-radius: 5px; cursor: pointer;' 
+                                onclick='window.location.reload()'>작물 삭제</button>
+                    </div>
                 </div>
-                <div style='margin-top: 10px; font-size: 0.9rem; color: #AAA;'>
-                    현재가: {stock['current']} | RSI: {stock['rsi']} | 현재 비중: {stock['weight']}% | 고점대비: {drop:.1f}%
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+                if st.button(f"🗑️ {stock['ticker']} 작물 삭제", key=f"del_{stock['ticker']}"):
+                    st.session_state.my_farm_stocks.pop(i)
+                    st.rerun()
+    else:
+        st.info("현재 농장에 심어진 작물이 없습니다. 아래 레이더에서 우량한 씨앗을 찾아보세요!")
 
     # [ SEEDING RADAR ENHANCED ]
     st.divider()
-    st.subheader("🔍 글로벌 씨 뿌리기 레이더 (Seeding Radar)")
+    st.subheader("🔍 글로벌 우량주 씨 뿌리기 레이더")
     col1, col2, col3 = st.columns(3)
-    with col1: scan_kr = st.checkbox("🇰🇷 한국 (코스피/코스닥)", value=True)
-    with col2: scan_us = st.checkbox("🇺🇸 미국 (나스닥100)", value=True)
-    with col3: rsi_threshold = st.slider("RSI 기준 (이하)", 20, 40, 30)
+    with col1: scan_kr = st.checkbox("🇰🇷 한국 (KOSPI/KOSDAQ)", value=True)
+    with col2: scan_us = st.checkbox("🇺🇸 미국 (NASDAQ 100)", value=True)
+    with col3: rsi_threshold = st.slider("RSI 기준 (과매도 강도)", 15, 45, 30)
 
     if st.button("🚀 전역 시장 과매도 종목 탐색 개시 (KR 우선)", use_container_width=True):
         with st.status("🕵️ 시장을 뒤져서 저평가된 씨앗들을 찾는 중...", expanded=True) as status:
             token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
             
-            # [ OPTIMIZE ] 시장별 순차 처리 및 병렬 분석
             markets = []
             if scan_kr: markets.append(("KR", get_kr_all_tickers()))
             if scan_us: markets.append(("US", get_nasdaq_200()[:50]))
@@ -2260,8 +2295,6 @@ elif page.startswith("5-z."):
             
             for m_type, universe in markets:
                 st.write(f"📊 {m_type} 시장 {len(universe)}개 핵심 종목 전술 분석 중...")
-                
-                # 벌크 데이터 다운로드
                 bulk_df = get_bulk_market_data(universe, period="60d")
                 
                 def analyze_worker(ticker):
@@ -2274,28 +2307,30 @@ elif page.startswith("5-z."):
                         bb_l = hist['BB_Lower'].iloc[-1]
                         
                         if rsi_v <= rsi_threshold or curr_p <= bb_l:
-                            # 조건 부합 시 ROE 등 추가 정보 획득 및 필터링
                             roe_val = 0
                             roe_str = "N/A"
                             try:
                                 info = yf.Ticker(ticker).info
                                 roe_val = info.get('returnOnEquity', 0)
-                                if roe_val < 0: return None # [ RULE ] ROE 마이너스 종목 제외
+                                if roe_val < 0: return None
                                 roe_str = f"{roe_val * 100:.1f}%"
                             except: pass
+                            
+                            # [ TACTICAL RATING ]
+                            score = 50
+                            if rsi_v <= 25: score += 20
+                            if roe_val > 0.2: score += 20
+                            if curr_p <= bb_l: score += 10
                             
                             reason = []
                             if rsi_v <= rsi_threshold: reason.append(f"RSI 과매도({rsi_v:.1f})")
                             if curr_p <= bb_l: reason.append("볼린저밴드 하단 터치")
                             
                             return {
-                                "ticker": ticker, 
-                                "name": get_stock_name(ticker), 
-                                "rsi": rsi_v, 
-                                "price": curr_p, 
-                                "roe": roe_str,
-                                "reason": " & ".join(reason),
-                                "market": m_type
+                                "ticker": ticker, "name": get_stock_name(ticker), 
+                                "rsi": rsi_v, "price": curr_p, "roe": roe_str,
+                                "reason": " & ".join(reason), "market": m_type,
+                                "score": score
                             }
                     return None
 
@@ -2305,24 +2340,42 @@ elif page.startswith("5-z."):
 
             if found_seeds:
                 status.update(label=f"✅ {len(found_seeds)}개의 우량 씨앗 포착 완료!", state="complete")
-                # 결과 출력 (국내 우선 정렬)
-                found_seeds.sort(key=lambda x: 0 if x['market'] == "KR" else 1)
                 
+                unique_found = []
+                seen_names = set()
                 for s in found_seeds:
+                    if s['name'] not in seen_names:
+                        unique_found.append(s)
+                        seen_names.add(s['name'])
+                
+                unique_found.sort(key=lambda x: (0 if x['market'] == "KR" else 1, -x['score']))
+                
+                for s in unique_found:
                     market_icon = "🇰🇷" if s['market'] == "KR" else "🇺🇸"
-                    with st.expander(f"{market_icon} {s['name']} ({s['ticker']}) | RSI: {s['rsi']:.1f} | ROE: {s['roe']}"):
+                    rating_stars = "⭐" * (s['score'] // 20)
+                    with st.expander(f"{market_icon} {s['name']} | 전술 점수: {s['score']} {rating_stars}"):
                         st.markdown(f"""
-                        - **현재가**: {s['price']:,} ({"원" if s['market'] == "KR" else "$"})
-                        - **ROE (자기자본이익률)**: <span style='color:#FFD700;'>{s['roe']}</span>
-                        - **포착 사유**: {s['reason']}
-                        - **전술적 제언**: 주가가 과매도 구간에 진입하여 기술적 반등 가능성이 매우 높습니다. 분할 매수로 씨를 뿌리기에 적합한 시점입니다.
+                        <div style='padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.02);'>
+                            <p><b>종목명</b>: {s['name']} ({s['ticker']})</p>
+                            <p><b>현재가</b>: {s['price']:,} | <b>ROE</b>: <span style='color:#FFD700;'>{s['roe']}</span></p>
+                            <p><b>포착 사유</b>: <span style='color:#39FF14;'>{s['reason']}</span></p>
+                            <p style='color: #888; font-size: 0.9rem;'>* 전술 점수가 높을수록 우량주가 바닥권에 진입했음을 의미합니다.</p>
+                        </div>
                         """, unsafe_allow_html=True)
-                        if st.button(f"🚜 {s['ticker']} 농장 등록", key=f"add_{s['ticker']}"):
-                            st.success(f"{s['name']} 종목이 사령부 농장 관리소에 등록되었습니다.")
+                        if st.button(f"🚜 {s['ticker']} 농장 등록 (씨 뿌리기)", key=f"add_{s['ticker']}"):
+                            new_crop = {
+                                "ticker": s['ticker'], "entry": s['price'], 
+                                "max": s['price'], "current": s['price'], 
+                                "rsi": s['rsi'], "weight": 5
+                            }
+                            if "my_farm_stocks" not in st.session_state: st.session_state.my_farm_stocks = []
+                            st.session_state.my_farm_stocks.append(new_crop)
+                            st.success(f"{s['name']} 종목이 나의 농장에 심어졌습니다. 인내하며 키워보세요!")
+                            st.rerun()
             else:
                 status.update(label="❌ 현재 전역 시장에 씨를 뿌릴 만한 과매도 종목이 없습니다.", state="complete")
 
-    st.info("💡 **전술 팁**: ROE가 높으면서 RSI가 낮은 종목은 '싸게 살 수 있는 우량주'일 확률이 매우 높습니다.")
+    st.info("💡 **전술 핵심**: 우량주가 이유 없이(지수 영향 등) 떨어질 때가 가장 큰 기회입니다. ROE와 전술 점수를 믿고 씨를 뿌리십시오.")
 
 
 
