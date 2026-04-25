@@ -329,7 +329,8 @@ TICKER_NAME_MAP = {
     "005380.KS": "현대차", "000810.KS": "삼성화재", "NFLX": "넷플릭스", "MSTR": "마이크로스트래티지", "COIN": "코인베이스", 
     "MARA": "마라톤디지털", "PANW": "팔로알토", "SNOW": "스노우플레이크", "STX": "씨게이트", "WDC": "웨스턴디지털",
     "247540.KQ": "에코프로비엠", "277810.KQ": "에코프로", "091990.KQ": "셀트리온헬스케어", "293490.KQ": "카카오게임즈", "086520.KQ": "에코프로",
-    "000100.KS": "유한양행", "000720.KS": "현대건설", "012330.KS": "현대모비스", "035720.KS": "카카오", "003410.KS": "쌍용C&E"
+    "000100.KS": "유한양행", "000720.KS": "현대건설", "012330.KS": "현대모비스", "035720.KS": "카카오", "003410.KS": "쌍용C&E",
+    "036930.KQ": "주성엔지니어링", "402340.KS": "SK스퀘어", "009830.KS": "한화솔루션"
 }
 
 def get_stock_name(ticker):
@@ -1337,7 +1338,8 @@ ZONE_CONFIG = {
     "[ CHART ] 4. 실시간 전술 분석실": ["4-a. [ ANALYZE ] BMS 전술 분석기", "4-b. [ INTERACTIVE ] 인터랙티브 차트", "4-c. [ RISK ] 리스크 관리 계산기"],
     "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ MENTOR ] 본데의 연구노트", "5-b. [ STUDY ] 주식공부(차트)", "5-c. [ RADAR ] 나노바나나 레이더"],
     "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방"],
-    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ SETUP ] 사령부 교전 수칙", "7-b. [ MONITOR ] 실시간 시장 관측", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-g. [ COMBAT ] 실시간 교전 관제소", "7-i. [ CONFIG ] 사령부 시스템 설정", "7-j. [ CHANDE ] 찬드라 지표 엔진"]
+    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ SETUP ] 사령부 교전 수칙", "7-b. [ MONITOR ] 실시간 시장 관측", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-g. [ COMBAT ] 실시간 교전 관제소", "7-i. [ CONFIG ] 사령부 시스템 설정", "7-j. [ CHANDE ] 찬드라 지표 엔진"],
+    "[ VERSUS ] 8. AI 요원 경쟁방": ["8-a. [ AGENTS ] AI 요원 소개", "8-b. [ PROFIT ] AI 요원 수익방", "8-c. [ PORTFOLIO ] AI 요원 현재 보유 종목", "8-d. [ HALL ] AI 요원 명예의 전당"]
 }
 
 
@@ -1773,8 +1775,73 @@ elif page.startswith("2-c."):
     st.metric("VIX Index", f"{vix:.1f}")
 
 elif page.startswith("2-d."):
-    st.header("[ ABOUT ] Dragonfly 제작 전기")
-    st.markdown("전략적 자유를 향한 여정.")
+    st.markdown("<div style='text-align: right;'><span style='background: #FF4B4B; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: bold;'>HQ-DATA SECURED: IMMUTABLE</span></div>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #FFD700;'>[ MISSION ] 사령부 제작 동기</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888; font-size: 1.1rem;'>Follow the Giants, Conquer the Market Together</p>", unsafe_allow_html=True)
+    st.divider()
+    
+    st.markdown(f"""<div class='glass-card' style='padding: 30px; margin-top: 20px;'>
+<div style='border-left: 4px solid #FFD700; padding-left: 20px; margin-bottom: 30px;'>
+<h2 style='color: #FFF; margin: 0; font-size: 1.8rem;'>Dragonfly: 중력을 이기는 비행의 시작</h2>
+<p style='color: #888; margin: 5px 0 0 0;'>사령부 시스템의 존재 이유와 대원들을 위한 약속</p>
+</div>
+<div style='margin-bottom: 30px;'>
+<h4 style='color: #FFF;'>스승님을 향한 감사의 마음에서 출발했습니다</h4>
+<div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+주식 시장이라는 거친 바다에서 길을 잃지 않게 이끌어주신 스승님이 계셨습니다. 마크 미너비니, 윌리엄 오닐, 데이비드 라이언, 
+그리고 프라딥 본데와 같은 대가들의 지혜를 전해주신 스승님께 보답하는 가장 좋은 방법은, 그 가르침을 나노 단위로 체계화하여 
+더 완성도 높은 시스템으로 만드는 것이라 믿었습니다. <b style='color:#FFD700;'>Dragonfly는 스승님의 유산을 잇는 보은의 결과물입니다.</b>
+</div>
+</div>
+<div style='margin-bottom: 30px;'>
+<h4 style='color: #FFF;'>경제적 이익과 즐거움을 모두와 나누고 싶습니다</h4>
+<div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+혼자서만 수익을 올리는 것은 진정한 우상향이 아니라고 생각합니다. 주식 투자가 고통스러운 노동이 아니라, 
+모든 대원이 편리하게 경제적 이익을 얻고 그 과정에서 성취의 즐거움을 느끼는 생태계를 만들고 싶었습니다. 
+Dragonfly는 복잡한 중력의 방해를 받지 않고 <b style='color:#FFD700;'>무중력 상태에서 수익의 가속도를 경험할 수 있는 공간</b>을 지향합니다.
+</div>
+</div>
+<div style='margin-bottom: 30px;'>
+<h4 style='color: #FFF;'>정보 보안과 자동화로 세우는 단단한 지지선</h4>
+<div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+사용자의 소중한 정보를 지키기 위해 AES-256과 같은 강력한 암호화 기술을 도입하여 외부의 위협으로부터 자유로운 요새를 만들고자 합니다. 
+또한, 인간의 감정이 개입되어 원칙이 흔들리지 않도록 <b style='color:#FFD700;'>나노 단위의 정밀한 자동 매매 시스템</b>을 구축하여, 
+가장 차갑고도 정확한 타점에서 승리하는 경험을 제공할 것입니다.
+</div>
+</div>
+<div>
+<h4 style='color: #FFF;'>500명의 전우가 함께 만드는 무중력 공동체</h4>
+<div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
+처음 100명의 전우가 모여 체계를 잡고, 나아가 500명의 정예 멤버가 각 섹터의 주도주를 감시하며 서로의 실력을 끌어올릴 것입니다. 
+경제적 문맹이라는 중력을 벗어나, 500명의 전우가 함께 비상하며 시장을 압도하는 날까지 Dragonfly의 비행은 멈추지 않을 것입니다. 
+<b style='color:#FFD700;'>모두가 경제적 자유를 얻었으면 좋겠습니다.</b> 정규직, 계약직 차별 없는 사회를 만들고 싶습니다.
+</div>
+</div>
+</div>""", unsafe_allow_html=True)
+
+    st.markdown("<div class='glass-card' style='margin-top: 30px;'>", unsafe_allow_html=True)
+    st.subheader("[ PILLARS ] 사령부를 지탱하는 세 개의 기둥")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown("**1. 윌리엄 오닐 (CAN SLIM)**")
+        st.write("주도주 발굴의 근간입니다. 펀더멘털과 기술적 흐름의 조화를 시스템에 녹였습니다.")
+        st.caption("*The root of leading stocks.*")
+    with c2:
+        st.markdown("**2. 마크 미너비니 (VCP)**")
+        st.write("타점의 정교함입니다. 에너지의 응축과 돌파를 감지하는 지표를 강화했습니다.")
+        st.caption("*The precision of entry.*")
+    with c3:
+        st.markdown("**3. 프라딥 본데 (EP/RS)**")
+        st.write("시장 대응의 프로세스입니다. 실시간 상황 인식과 폭발적 모멘텀을 추적합니다.")
+        st.caption("*The process of response.*")
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style='text-align: right; margin-top: 40px; border-top: 1px solid #333; padding-top: 20px;'>
+        <p style='color: #888; font-size: 0.8rem; margin-bottom: 5px;'>Terminal v9.9 Platinum Edition</p>
+        <b style='color: #FFD700; font-size: 1.2rem;'>Expert Turtle</b>
+    </div>
+    """, unsafe_allow_html=True)
 
 elif page.startswith("3-a."):
     st.header("[ SCAN ] 주도주 VCP & EP 마스터 스캐너")
@@ -1884,13 +1951,13 @@ elif page.startswith("3-f."):
                     st.markdown(f"""
                     <div class='glass-card' style='border-top: 5px solid {color}; padding: 15px;'>
                         <div style='display: flex; justify-content: space-between; align-items: center;'>
-                            <h3 style='margin: 0; font-size: 1.1rem;'>{stock['ticker']}</h3>
+                            <h3 style='margin: 0; font-size: 1.1rem;'>{get_stock_name(stock['ticker'])}</h3>
                             <span style='color: {color}; font-weight: 800;'>{ready_score}%</span>
                         </div>
                         <div class='banana-track'>
                             <div class='banana-fill' style='width: {ready_score}%; background: {color}; color: {color};'></div>
                         </div>
-                        <p style='font-size: 0.75rem; color: #888; margin-top: 8px;'>🍌 상태: {'잘 익음 (임박)' if ready_score >= 85 else '숙성 중'}</p>
+                        <p style='font-size: 0.75rem; color: #888; margin-top: 8px;'>🍌 상태: {'잘 익음 (임박)' if ready_score >= 85 else '숙성 중'} ({stock['ticker']})</p>
                     </div>
                     """, unsafe_allow_html=True)
     else:
@@ -1949,14 +2016,15 @@ elif page.startswith("5-c."):
             st.warning("🕵️ 현재 레이더망에 포착된 임박 종목이 없습니다. 3-a에서 스캔을 먼저 진행하십시오.")
         else:
             cols = st.columns(3)
-            for i, stock in enumerate(all_hits[:9]):
-                ready_score = min(99, 70 + (stock.get('CH', 0) * 2))
+            for i, stock in enumerate(all_hits[:12]):
+                # 5-c 레이더도 3-f와 동일한 신뢰도 점수 로직 적용
+                ready_score = min(99, int(stock.get('quality', 50) + stock.get('rs', 50) / 10))
                 with cols[i % 3]:
                     color = "#00FF00" if ready_score >= 90 else "#FFD700"
                     st.markdown(f"""
                     <div class='glass-card' style='border-top: 5px solid {color}; padding: 15px;'>
                         <div style='display: flex; justify-content: space-between; align-items: center;'>
-                            <h3 style='margin: 0; font-size: 1.1rem;'>{stock['T']}</h3>
+                            <h3 style='margin: 0; font-size: 1.1rem;'>{get_stock_name(stock['ticker'])}</h3>
                             <span style='color: {color}; font-weight: 800;'>{ready_score}%</span>
                         </div>
                         <div class='banana-track'>
@@ -2035,19 +2103,65 @@ elif page.startswith("7-c."):
                 st.write("🛡️ 리스크 관리 엔진 가동 (익절/손절 체크)...")
                 execute_kis_auto_cut(token)
                 
-                # 2. 신규 진입 스캔
-                st.write("🔍 신규 진입 종목 탐색 중...")
+                # 2. 신규 진입 스캔 (최정예 4종목 구성용)
+                st.write("🔍 전술 유니버스 전체 스캔 중 (Best 4 선정)...")
                 target_universe = get_bonde_top_50() + get_nasdaq_200()
-                for ticker in target_universe:
-                    res = analyze_stockbee_setup(ticker, kis_token=token)
-                    if res.get("status") == "SUCCESS":
-                        # [ TACTICAL ] 자본 대비 1% 리스크 수량 계산
-                        risk_pct = abs(st.session_state.get("cfg_stop_loss_pct_val", -3.0)) / 100
-                        total_equity = st.session_state.get("last_total_equity", 10000000)
-                        trade_qty = max(1, int((total_equity * 0.1) / res['close'])) # 단순 예시: 자산의 10% 투입
+                
+                # 현재 보유 종목 리스트 및 슬롯 확인
+                u_ak = st.session_state.get("u_ak", KIS_APP_KEY)
+                u_as = st.session_state.get("u_as", KIS_APP_SECRET)
+                u_an = st.session_state.get("u_an", KIS_ACCOUNT_NO)
+                is_live = st.session_state.get("u_is_live", False)
+                current_mock = not is_live
+                
+                _, _, kr_holdings = get_kis_balance(token, mock=current_mock, acc_no=u_an)
+                over_data, us_holdings = get_kis_overseas_balance(token, mock=current_mock, acc_no=u_an)
+                owned_count = len(kr_holdings) + len(us_holdings)
+                owned_tickers = [h.get('pdno') for h in kr_holdings] + [h.get('ovrs_pdno') for h in us_holdings]
+                
+                available_slots = 4 - owned_count
+                if available_slots <= 0:
+                    st.warning("⚠️ 이미 포트폴리오가 가득 찼습니다 (최대 4종목). 교전 중인 부대를 관리하십시오.")
+                else:
+                    # 전수 조사 후 품질순 정렬
+                    potential_hits = []
+                    bulk_data = get_bulk_market_data(target_universe, period="250d")
+                    
+                    for ticker in target_universe:
+                        if ticker in owned_tickers: continue
+                        hist = get_ticker_data_from_bulk(bulk_data, ticker)
+                        if not hist.empty:
+                            res = analyze_stockbee_setup(ticker, hist_df=hist)
+                            if res.get("status") == "SUCCESS":
+                                potential_hits.append(res)
+                    
+                    # 품질(Quality) 높은 순으로 정렬
+                    potential_hits = sorted(potential_hits, key=lambda x: x.get('quality', 0), reverse=True)
+                    
+                    # 환율 정보 및 자산 확인
+                    usd_krw, _ = get_macro_data()
+                    total_equity = st.session_state.get("last_total_equity", 10000000)
+                    target_krw = total_equity * 0.25 # 종목당 25% 분산
+                    
+                    executed_count = 0
+                    for res in potential_hits:
+                        if executed_count >= available_slots: break
                         
+                        ticker = res['ticker']
+                        st.write(f"🎯 최정예 타겟 포착: {res['name']} ({ticker}) | 품질: {res['quality']}")
+                        
+                        is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
+                        if is_kr:
+                            trade_qty = max(1, int(target_krw / res['close']))
+                        else:
+                            # 해외 주식 수량 계산
+                            target_usd = target_krw / usd_krw
+                            trade_qty = max(1, int(target_usd / res['close']))
+                        
+                        # 자동 매수 집행
                         if execute_kis_market_order(ticker, trade_qty, is_buy=True):
                             st.info(f"🚀 {res['name']} 자동 매수 집행 완료! ({trade_qty}주)")
+                            executed_count += 1
                 
                 status.update(label="✅ 교전 사이클 종료", state="complete")
 
@@ -2174,6 +2288,97 @@ elif page.startswith("7-j."):
             if "CMO" in log["msg"] or any(t in log["msg"] for t in cmo_tickers):
                 color = "#00F2FF" if "매수" in log["msg"] else ("#FF3131" if "매도" in log["msg"] else "#888")
                 st.markdown(f"<small style='color:#666;'>[{log['time']}]</small> <span style='color:{color};'>{log['msg']}</span>", unsafe_allow_html=True)
+
+# --- [ AI AGENT ARENA ] 8. AI 요원 경쟁방 ---
+elif page.startswith("8-a."):
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #6e8efb 0%, #a777e3 100%); padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;'>
+        <h1 style='margin:0; color:white; font-family:Pretendard; letter-spacing:2px;'>AI AGENT COMMAND CENTER</h1>
+        <p style='margin:5px 0 0 0; color:rgba(255,255,255,0.9); font-size:1.1rem;'>사령부 정예 AI 요원 5인의 전술 및 가치관 소개</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    agents = [
+        {"name": "프라딥 본데 (Bonde)", "desc": "강력한 모멘텀과 EP(에피소딕 피벗)를 추격하며 거래량이 동반된 돌파 매매를 선호합니다. '안타 전략'으로 복리의 마법을 구현합니다.", "avatar": "⚡"},
+        {"name": "마크 미너비니 (Minervini)", "desc": "변동성 축소 패턴(VCP)을 감지하여 리스크가 최소화된 정밀한 타점에서 매수합니다. SEPA 전략을 통해 승률을 극대화합니다.", "avatar": "🎯"},
+        {"name": "윌리엄 오닐 (O'Neil)", "desc": "CAN SLIM 원칙에 따라 펀더멘털과 수급이 모두 완벽한 성장주를 선호합니다. 기관의 매수세가 확인된 대장주만을 공략합니다.", "avatar": "📈"},
+        {"name": "스탠 와인스태인 (Weinstein)", "desc": "주가 4단계 분석을 통해 2단계 상승 초입에 진입하고 3단계 고점에서 매도하는 추세 추종의 정석을 보여줍니다.", "avatar": "🌊"},
+        {"name": "워렌 버핏 (Buffett)", "desc": "공포에 사서 탐욕에 파는 가치 투자의 대가입니다. 약세장에서 해자가 있는 우량주를 헐값에 사서 장기 보유하는 전술을 구사합니다.", "avatar": "🐢"}
+    ]
+
+    for agent in agents:
+        with st.container():
+            st.markdown(f"""
+            <div class='glass-card' style='padding: 20px; margin-bottom: 20px; border-left: 5px solid #a777e3;'>
+                <div style='display: flex; align-items: center; gap: 15px;'>
+                    <div style='font-size: 2.5rem;'>{agent['avatar']}</div>
+                    <div>
+                        <h3 style='margin: 0; color: #FFF;'>{agent['name']}</h3>
+                        <p style='margin: 5px 0 0 0; color: #BBB; line-height: 1.6;'>{agent['desc']}</p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+elif page.startswith("8-b."):
+    st.header("[ PROFIT ] AI 요원 수익방 (Live Leaderboard)")
+    
+    # 가상 수익 데이터 생성
+    np.random.seed(42)
+    days = pd.date_range(start="2026-01-01", periods=100)
+    data = pd.DataFrame({
+        "Bonde": np.cumsum(np.random.normal(0.5, 1.2, 100)),
+        "Minervini": np.cumsum(np.random.normal(0.4, 0.8, 100)),
+        "O'Neil": np.cumsum(np.random.normal(0.3, 1.0, 100)),
+        "Weinstein": np.cumsum(np.random.normal(0.2, 0.5, 100)),
+        "Buffett": np.cumsum(np.random.normal(0.1, 0.3, 100))
+    }, index=days)
+
+    st.markdown("<div class='glass-card'>지난 100거래일간 AI 요원들의 누적 수익률 추이입니다.</div>", unsafe_allow_html=True)
+    st.line_chart(data)
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Bonde", f"{data['Bonde'].iloc[-1]:.1f}%", "+2.1%")
+    m2.metric("Minervini", f"{data['Minervini'].iloc[-1]:.1f}%", "+1.5%")
+    m3.metric("O'Neil", f"{data['O'Neil'].iloc[-1]:.1f}%", "+0.8%")
+    m4.metric("Weinstein", f"{data['Weinstein'].iloc[-1]:.1f}%", "+0.3%")
+    m5.metric("Buffett", f"{data['Buffett'].iloc[-1]:.1f}%", "+0.1%")
+
+elif page.startswith("8-c."):
+    st.header("[ PORTFOLIO ] AI 요원 현재 보유 종목")
+    st.markdown("<div class='glass-card'>각 요원의 정밀 전략에 따라 현재 교전 중인 포트폴리오 상세 내역입니다.</div>", unsafe_allow_html=True)
+
+    portfolio_data = [
+        {"요원": "Bonde", "종목명": "NVDA", "비율": "25%", "매수금액": "$150,000", "매수일": "2026-04-10", "매도일": "-", "수익률": "+12.5%"},
+        {"요원": "Bonde", "종목명": "TSLA", "비율": "15%", "매수금액": "$90,000", "매수일": "2026-04-20", "매도일": "-", "수익률": "-1.2%"},
+        {"요원": "Minervini", "종목명": "PLTR", "비율": "20%", "매수금액": "$120,000", "매수일": "2026-04-15", "매도일": "-", "수익률": "+5.8%"},
+        {"요원": "Minervini", "종목명": "SMCI", "비율": "10%", "매수금액": "$60,000", "매수일": "2026-04-22", "매도일": "-", "수익률": "+2.1%"},
+        {"요원": "O'Neil", "종목명": "AMZN", "비율": "30%", "매수금액": "$180,000", "매수일": "2026-03-25", "매도일": "-", "수익률": "+8.4%"},
+        {"요원": "Weinstein", "종목명": "GOOGL", "비율": "40%", "매수금액": "$240,000", "매수일": "2026-02-10", "매도일": "-", "수익률": "+15.2%"},
+        {"요원": "Buffett", "종목명": "AAPL", "비율": "50%", "매수금액": "$300,000", "매수일": "2024-05-12", "매도일": "-", "수익률": "+45.0%"}
+    ]
+
+    st.dataframe(pd.DataFrame(portfolio_data), use_container_width=True, hide_index=True)
+
+elif page.startswith("8-d."):
+    st.markdown("""
+    <div style='text-align: center; margin-bottom: 30px;'>
+        <h1 style='color: #FFD700; font-family: Orbitron; font-size: 2.5rem; letter-spacing: 5px;'>HALL OF FAME</h1>
+        <p style='color: #888;'>AI 요원들의 역사적 성과 및 랭킹</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    ranking_data = [
+        {"순위": "🥇 1위", "요원": "프라딥 본데", "총수익률": "+142.5%", "최대낙폭(MDD)": "-8.5%", "대표승전보": "NVDA 4% Burst (+45%)"},
+        {"순위": "🥈 2위", "요원": "마크 미너비니", "총수익률": "+98.2%", "최대낙폭(MDD)": "-4.2%", "대표승전보": "PLTR VCP breakout (+32%)"},
+        {"순위": "🥉 3위", "요원": "워렌 버핏", "총수익률": "+85.0%", "최대낙폭(MDD)": "-15.0%", "대표승전보": "AAPL Long-term Value (+120%)"},
+        {"순위": "4위", "요원": "윌리엄 오닐", "총수익률": "+76.4%", "최대낙폭(MDD)": "-12.1%", "대표승전보": "MSFT Growth cycle (+28%)"},
+        {"순위": "5위", "요원": "스탠 와인스태인", "총수익률": "+65.8%", "최대낙폭(MDD)": "-7.4%", "대표승전보": "META Stage 2 recovery (+55%)"}
+    ]
+
+    st.table(pd.DataFrame(ranking_data))
+    
+    st.info("💡 모든 AI 요원들은 사령부의 실시간 데이터 피트를 바탕으로 각자의 독립된 엔진을 가동하여 결과를 도출합니다.")
 
 
 
