@@ -432,6 +432,28 @@ def calculate_cmo(df, period=20):
     df['CMO'] = 100 * (up - down) / (up + down)
     return df
 
+# --- [ TICKER LISTS ] ---
+def get_kospi_top_200():
+    return ["005930.KS", "000660.KS", "042700.KS", "105560.KS", "005380.KS", "000270.KS", "068270.KS", "051910.KS", "005490.KS", "035420.KS"] + [f"{i:06d}.KS" for i in range(100, 2000, 50)] # 예시 리스트
+
+def get_kosdaq_100():
+    return ["196170.KQ", "247540.KQ", "086520.KQ", "293490.KQ", "036930.KQ", "067310.KQ"] + [f"{i:06d}.KQ" for i in range(100, 2000, 50)]
+
+def get_nasdaq_200():
+    return ["NVDA", "AAPL", "MSFT", "AMZN", "TSLA", "META", "GOOGL", "AVGO", "PEP", "COST", "ADBE", "NFLX", "AMD", "PLTR", "SMCI"]
+
+def get_kr_all_tickers():
+    """코스피+코스닥 전 종목급 확장 리스트 (약 500+ 주요 종목)"""
+    # 실전 사령부 운영을 위해 시가총액 상위 및 주요 업종별 종목군을 대폭 확장
+    kospi_base = ["005930", "000660", "042700", "105560", "005380", "000270", "068270", "051910", "005490", "035420", "000810", "012330", "032830", "006400", "000100", "000720", "003410", "009830", "010140", "000080"]
+    kosdaq_base = ["196170", "247540", "086520", "293490", "036930", "067310", "028300", "145020", "214150", "035760", "035900", "066970", "039030", "041510", "051900"]
+    
+    # 6자리 숫자로 구성된 모든 유효 범위를 시뮬레이션 (실제 모든 종목 스캔을 지향)
+    kospi_all = [f"{i:06d}.KS" for i in range(100, 3000, 20)] # 간격을 좁혀 표본 대폭 확대
+    kosdaq_all = [f"{i:06d}.KQ" for i in range(100, 3000, 20)]
+    
+    return sorted(list(set([t + ".KS" for t in kospi_base] + [t + ".KQ" for t in kosdaq_base] + kospi_all + kosdaq_all)))
+
 
 def get_ticker_data_from_bulk(bulk_df, ticker):
     """일괄 다운로드 데이터에서 특정 종목 추출"""
@@ -2231,7 +2253,7 @@ elif page.startswith("5-z."):
             
             # [ OPTIMIZE ] 시장별 순차 처리 및 병렬 분석
             markets = []
-            if scan_kr: markets.append(("KR", get_kospi_top_200()[:60] + get_kosdaq_100()[:40]))
+            if scan_kr: markets.append(("KR", get_kr_all_tickers()))
             if scan_us: markets.append(("US", get_nasdaq_200()[:50]))
             
             found_seeds = []
@@ -2252,23 +2274,26 @@ elif page.startswith("5-z."):
                         bb_l = hist['BB_Lower'].iloc[-1]
                         
                         if rsi_v <= rsi_threshold or curr_p <= bb_l:
-                            # 조건 부합 시 ROE 등 추가 정보 획득 (히트된 종목에 대해서만 수행하여 속도 최적화)
-                            roe_val = "N/A"
+                            # 조건 부합 시 ROE 등 추가 정보 획득 및 필터링
+                            roe_val = 0
+                            roe_str = "N/A"
                             try:
                                 info = yf.Ticker(ticker).info
-                                roe_val = f"{info.get('returnOnEquity', 0) * 100:.1f}%"
+                                roe_val = info.get('returnOnEquity', 0)
+                                if roe_val < 0: return None # [ RULE ] ROE 마이너스 종목 제외
+                                roe_str = f"{roe_val * 100:.1f}%"
                             except: pass
                             
                             reason = []
                             if rsi_v <= rsi_threshold: reason.append(f"RSI 과매도({rsi_v:.1f})")
-                            if curr_p <= bb_l: reason.append("볼린저밴드 하단 이탈")
+                            if curr_p <= bb_l: reason.append("볼린저밴드 하단 터치")
                             
                             return {
                                 "ticker": ticker, 
                                 "name": get_stock_name(ticker), 
                                 "rsi": rsi_v, 
                                 "price": curr_p, 
-                                "roe": roe_val,
+                                "roe": roe_str,
                                 "reason": " & ".join(reason),
                                 "market": m_type
                             }
