@@ -1336,7 +1336,7 @@ ZONE_CONFIG = {
     "[ MARKET ] 2. 시장 상황실": ["2-a. [ TREND ] 마켓 트렌드 요약", "2-b. [ MAP ] 실시간 히트맵", "2-c. [ SENTIMENT ] 시장 심리 게이지", "2-d. [ ABOUT ] 제작 전기"],
     "[ TARGET ] 3. 주도주 추격기": ["3-a. [ SCAN ] 주도주 전술 스캐너", "3-b. [ RANK ] 주도주 리스트 TOP 50", "3-c. [ WATCH ] 본데 감시 리스트", "3-d. [ INDUSTRY ] 산업동향(TOP 10)", "3-e. [ RS ] RS 강도(TOP 10)", "3-f. [ NANO ] 나노바나나 레이더"],
     "[ CHART ] 4. 실시간 전술 분석실": ["4-a. [ ANALYZE ] BMS 전술 분석기", "4-b. [ INTERACTIVE ] 인터랙티브 차트", "4-c. [ RISK ] 리스크 관리 계산기"],
-    "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ MENTOR ] 본데의 연구노트", "5-b. [ STUDY ] 주식공부(차트)", "5-c. [ RADAR ] 나노바나나 레이더", "5-d. [ FARM ] 농사매매 전략실"],
+    "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ MENTOR ] 본데의 연구노트", "5-b. [ STUDY ] 주식공부(차트)", "5-c. [ RADAR ] 나노바나나 레이더", "5-d. [ EXAM ] HQ 정예요원 승급시험", "5-z. [ FARM ] 농사매매 전략실"],
     "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방"],
     "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ SETUP ] 사령부 교전 수칙", "7-b. [ MONITOR ] 실시간 시장 관측", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-g. [ COMBAT ] 실시간 교전 관제소", "7-i. [ CONFIG ] 사령부 시스템 설정", "7-j. [ CHANDE ] 찬드라 지표 엔진"],
     "[ VERSUS ] 8. AI 요원 경쟁방": ["8-a. [ AGENTS ] AI 요원 소개", "8-b. [ PROFIT ] AI 요원 수익방", "8-c. [ PORTFOLIO ] AI 요원 현재 보유 종목", "8-d. [ HALL ] AI 요원 명예의 전당", "8-f. [ LIVE ] 실시간 실전수익률"]
@@ -2109,7 +2109,31 @@ elif page.startswith("5-f."):
     st.header("[ LOSS ] 성찰의 방 (Loss Room)")
     st.error("실패를 분석하여 내일의 승리를 준비합니다.")
 
+    st.error("실패를 분석하여 내일의 승리를 준비합니다.")
+
 elif page.startswith("5-d."):
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%); padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;'>
+        <h1 style='margin:0; color:white; font-family:Orbitron; letter-spacing:5px;'>HQ ELITE PROMOTION TEST</h1>
+        <p style='margin:5px 0 0 0; color:rgba(255,255,255,0.9); font-size:1.1rem;'>사령부 정예요원 승급을 위한 전술 지식 검증</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.subheader("📝 전술 이론 평가 (Phase 1)")
+    with st.form("exam_v9"):
+        q1 = st.radio("1. 프라딥 본데의 'EP' 전략에서 가장 중요한 요소는?", ["뉴스 없이 상승", "강력한 거래량과 갭상승", "역배열에서의 반등", "배당금 확인"])
+        q2 = st.radio("2. 마크 미너비니의 VCP 패턴에서 변동성은 어떻게 변해야 하는가?", ["점점 커져야 함", "일정하게 유지됨", "점점 수축되어야 함", "상관 없음"])
+        q3 = st.radio("3. 리스크 관리의 핵심인 '1% Rule'은 무엇을 의미하는가?", ["총 자산의 1%만 매수", "한 종목당 손실을 총 자산의 1%로 제한", "수익 1%에서 무조건 익절", "1% 확률에 베팅"])
+        
+        if st.form_submit_button("전술 보고서 제출"):
+            if q1 == "강력한 거래량과 갭상승" and q2 == "점점 수축되어야 함" and q3 == "한 종목당 손실을 총 자산의 1%로 제한":
+                st.balloons()
+                st.success("✅ [합격] 지휘관님, 모든 전술 이론을 완벽하게 숙지하셨습니다. 이제 정예요원 자격이 부여됩니다.")
+                st.info("사이드바 6-c 메뉴에서 정회원 신청을 진행해 주십시오.")
+            else:
+                st.error("❌ [불합격] 전술 이해도가 부족합니다. 마스터 훈련소 자료를 다시 검토하십시오.")
+
+elif page.startswith("5-z."):
     st.markdown("""
     <div style='background: linear-gradient(135deg, #1d976c 0%, #93f9b9 100%); padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;'>
         <h1 style='margin:0; color:white; font-family:Pretendard; letter-spacing:2px;'>ANTI-GRAVITY FARMING</h1>
