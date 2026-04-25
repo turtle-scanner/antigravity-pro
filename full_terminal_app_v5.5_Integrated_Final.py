@@ -2404,7 +2404,8 @@ elif page.startswith("8-f."):
     df_live = pd.DataFrame(live_trades)
     
     # 요원별 필터링
-    selected_agent = st.selectbox("🎯 특정 요원의 실전 기록 상세 보기", ["전체 요원"] + [t["요원"] for t in agents])
+    agent_names = ["프라딥 본데", "마크 미너비니", "윌리엄 오닐", "스탠 와인스태인", "워렌 버핏"]
+    selected_agent = st.selectbox("🎯 특정 요원의 실전 기록 상세 보기", ["전체 요원"] + agent_names)
     
     if selected_agent != "전체 요원":
         df_display = df_live[df_live["요원"] == selected_agent]
