@@ -1184,7 +1184,7 @@ AI_OPERATIVES = {
 @st.cache_data(ttl=60)
 def get_realtime_ai_ranking():
     missions = {"Bonde": "NVDA", "Minervini": "247540.KQ", "ONeil": "AAPL", "Weinstein": "TSLA", "Buffett": "005930.KS"}
-    # [ RESET ] 2026-04-26 기준 현재가로 진입가 초기화 (1000만원 + 800$ 기준)
+    # [ RESET ] 2026-04-27 기준 현재가로 진입가 초기화 (1000만원 + 800$ 기준)
     entry_prices = {"Bonde": 208.27, "Minervini": 208000, "ONeil": 271.06, "Weinstein": 376.30, "Buffett": 219500}
     
     bulk_data = get_bulk_market_data(list(missions.values()))
