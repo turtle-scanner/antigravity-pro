@@ -738,7 +738,7 @@ def get_kis_balance(token, mock=None, acc_no=None):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
-    """해외 주식 잔고 현황 조회 (CTRP6504R 전용 예수금 조회 추가)"""
+    """해외 주식 잔고 현황 조회 (원화/외화 이중 수색 및 자산 역산)"""
     ak, as_, an = get_user_kis_creds()
     target_acc = acc_no if acc_no else an
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
@@ -749,53 +749,61 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     best_data = {"krw": 0, "usd_total": 0, "usd_cash": 0}
     best_holdings = []
     
+    # [ STRATEGY ] 02(외화) 뿐만 아니라 01(원화) 조회를 통해 통합증거금 내의 달러 가치를 추적
+    div_codes = ["02", "01"]
     tr_ids = ["TTTS3061R", "TTTS3012R", "TTTS3011R"]
     if use_mock: tr_ids = ["VTTS3061R", "VTTS3012R", "VTTS3011R"]
     
     for suffix in list(dict.fromkeys(suffixes)):
         if not suffix: continue
-        for tr_id in tr_ids:
-            url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
-            headers = {
-                "Content-Type": "application/json", "authorization": f"Bearer {token}",
-                "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"
-            }
-            params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""}
-            
-            try:
-                res = requests.get(url, headers=headers, params=params, timeout=10)
-                if res.status_code == 200:
-                    d = res.json()
-                    o2 = d.get('output2')
-                    if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
-                    
-                    if o2 and isinstance(o2, dict):
-                        total_usd = float(o2.get('frcr_evlu_amt2') or o2.get('tot_evlu_pamt') or 0)
-                        cash_usd = float(o2.get('frcr_dncl_amt_2') or o2.get('frcr_dnca_amt') or o2.get('frcr_drwg_psbl_amt_1') or 0)
-                        total_krw = float(o2.get('tot_evlu_pamt') or o2.get('tot_asst_amt') or 0)
+        for div_code in div_codes:
+            for tr_id in tr_ids:
+                url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+                headers = {
+                    "Content-Type": "application/json", "authorization": f"Bearer {token}",
+                    "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"
+                }
+                params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": div_code, "NATN_CD": "840", "TR_PACC_CD": ""}
+                
+                try:
+                    res = requests.get(url, headers=headers, params=params, timeout=10)
+                    if res.status_code == 200:
+                        d = res.json()
+                        o2 = d.get('output2')
+                        if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
                         
-                        # [ ULTIMATE FALLBACK ] 달러 잔고가 여전히 0일 경우 전용 예수금 TR(CTRP6504R) 시도
-                        if cash_usd == 0:
-                            url_p = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
-                            h_p = headers.copy()
-                            h_p["tr_id"] = "VTRP6504R" if use_mock else "CTRP6504R"
-                            res_p = requests.get(url_p, headers=h_p, params=params, timeout=10)
-                            if res_p.status_code == 200:
-                                d_p = res_p.json()
-                                o2_p = d_p.get('output2')
-                                if isinstance(o2_p, list) and len(o2_p) > 0: o2_p = o2_p[0]
-                                if o2_p and isinstance(o2_p, dict):
-                                    cash_usd = float(o2_p.get('frcr_dnca_amt') or o2_p.get('frcr_dncl_amt_2') or 0)
-                                    if total_krw == 0: total_krw = float(o2_p.get('tot_evlu_pamt') or 0)
+                        if o2 and isinstance(o2, dict):
+                            # [ 현금 수색 ] 가능한 모든 필드 전수 조사
+                            cash_usd = float(
+                                o2.get('frcr_dncl_amt_2') or o2.get('frcr_dnca_amt') or 
+                                o2.get('frcr_drwg_psbl_amt_1') or o2.get('frcr_dnca_amt_2') or 
+                                o2.get('frcr_dncl_amt_1') or 0
+                            )
+                            total_eval_usd = float(o2.get('frcr_evlu_amt2') or o2.get('tot_evlu_pamt') or 0)
+                            total_krw = float(o2.get('tot_evlu_pamt') or o2.get('tot_asst_amt') or 0)
+                            
+                            # [ ULTIMATE FALLBACK ] 달러가 0인데 총 자산(원화)이 잡힐 경우 환율로 역산
+                            if div_code == "01" and cash_usd == 0 and total_krw > 0:
+                                # 국내 잔고(r_total)를 제외한 나머지를 해외 달러로 간주
+                                cash_usd = (total_krw / 1400.0) 
+                            
+                            # [ SPECIAL CASE ] 전용 예수금 조회 (CTRP6504R)
+                            if cash_usd == 0:
+                                url_p = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
+                                h_p = headers.copy()
+                                h_p["tr_id"] = "VTRP6504R" if use_mock else "CTRP6504R"
+                                res_p = requests.get(url_p, headers=h_p, params=params, timeout=10)
+                                if res_p.status_code == 200:
+                                    o2_p = res_p.json().get('output2')
+                                    if isinstance(o2_p, list) and len(o2_p) > 0: o2_p = o2_p[0]
+                                    if o2_p: cash_usd = float(o2_p.get('frcr_dnca_amt') or o2_p.get('frcr_dncl_amt_2') or cash_usd)
 
-                        if (total_usd + cash_usd) == 0 and total_krw > 0:
-                            total_usd = total_krw / 1350.0
-                        
-                        if (total_usd + cash_usd) > 0 or total_krw > 0:
-                            return {"krw": total_krw, "usd_total": total_usd + cash_usd, "usd_cash": cash_usd}, d.get('output1', [])
-            except: continue
+                            if (total_eval_usd + cash_usd) > 0 or total_krw > 0:
+                                return {"krw": total_krw, "usd_total": total_eval_usd + cash_usd, "usd_cash": cash_usd}, d.get('output1', [])
+                except: continue
             
     return best_data, best_holdings
+
 
 
 
