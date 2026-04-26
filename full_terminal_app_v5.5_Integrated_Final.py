@@ -292,7 +292,8 @@ ATTENDANCE_FILE = get_db_path("attendance.csv")
 PROFIT_FILE = get_db_path("profit_brags.csv")
 LOSS_FILE = get_db_path("loss_reviews.csv")
 COMMENTS_FILE = get_db_path("shared_comments.csv")
-MASTER_GAS_URL = st.secrets.get("MASTER_GAS_URL", "https://script.google.com/macros/s/AKfycbyp31pP_T4nVi0rEoeOu-kc6t_ynofxRYnnYZTTO1kxOcQWinBfyhEeDjTRZXzp1eCo/exec")
+MASTER_GAS_URL = st.secrets.get("MASTER_GAS_URL", "")
+
 
 def gsheet_sync_bg(sheet_name, cols, row_data):
     """비동기 구글 시트 데이터 전송 (UI 프리징 방지)"""
@@ -352,14 +353,15 @@ def safe_load_json(file_path, default=None):
             return json.load(f)
     except: return default if default is not None else {}
 
-# [ SECURE ] 영구 백업용 구글 시트 URL (CSV 정보 읽기 주소) - 보안을 위해 st.secrets 사용
-USERS_SHEET_URL = st.secrets.get("USERS_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1180564490")
-ATTENDANCE_SHEET_URL = st.secrets.get("ATTENDANCE_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=0")
-CHAT_SHEET_URL = st.secrets.get("CHAT_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=2147147361")
-VISITOR_SHEET_URL = st.secrets.get("VISITOR_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=621380834")
-WITHDRAWN_SHEET_URL = st.secrets.get("WITHDRAWN_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1873947039")
+# [ SECURE ] 영구 백업용 구글 시트 URL (CSV 정보 읽기 주소)
+USERS_SHEET_URL = st.secrets.get("USERS_SHEET_URL", "")
+ATTENDANCE_SHEET_URL = st.secrets.get("ATTENDANCE_SHEET_URL", "")
+CHAT_SHEET_URL = st.secrets.get("CHAT_SHEET_URL", "")
+VISITOR_SHEET_URL = st.secrets.get("VISITOR_SHEET_URL", "")
+WITHDRAWN_SHEET_URL = st.secrets.get("WITHDRAWN_SHEET_URL", "")
 # [ GLOBAL ] 전역 공통 및 UI 레이아웃 설정
-NOTICE_SHEET_URL = st.secrets.get("NOTICE_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1619623253")
+NOTICE_SHEET_URL = st.secrets.get("NOTICE_SHEET_URL", "")
+
 
 TICKER_NAME_MAP = {
     "NVDA": "엔비디아", "TSLA": "테슬라", "AAPL": "애플", "MSFT": "마이크로소프트", "PLTR": "팔란티어", "SMCI": "슈퍼마이크로", 
@@ -572,9 +574,9 @@ def get_macro_data():
         return 1400.0, 4.3
 
 # --- [ ENGINE ] KIS API & Core Trading Logic ---
-# [ SECURITY ] 사령관님이 제공하신 실제 전술 키 주입
-NEW_KEY = "PSzuu6dcYxkkHvTyAXm61J1Zta6oBrSZHoaq"
-NEW_SECRET = "H5dGS5kHK3AbpskI0E0ovYAL6aS82Li/4SioJGlLK6ypvlc3ejf1NNpbwkxTpsuO81mhqEFOW62OaFSCRtd/J9/v8c5WVKOf0uMigMblMeMI1riXUaeVf+LuBnSE+kXN1OEkn1MBlQ2GiLd4tFBEEQxOH/cQgFf0YaU2Q1S5OeHnecRCcuQ="
+# [ SECURITY ] 사령부 보안을 위해 실제 키는 secrets.toml에 저장하십시오. (하드코딩 제거)
+NEW_KEY = ""
+NEW_SECRET = ""
 
 KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", NEW_KEY).strip()
 KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", NEW_SECRET).strip()
@@ -696,16 +698,17 @@ def execute_panic_sell_all(token):
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_balance(token, mock=None, acc_no=None):
     """국내 주식 잔고 및 수익 현황 조회 (TTL 연장으로 로딩 속도 개선)"""
-    target_acc = acc_no if acc_no else KIS_ACCOUNT_NO
+    ak, as_, an = get_user_kis_creds()
+    target_acc = acc_no if acc_no else an
     if not token or not target_acc: return 0, 0, []
-    use_mock = mock if mock is not None else KIS_MOCK_TRADING
+    use_mock = mock if mock is not None else get_kis_mock_status()
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
     headers = {
         "Content-Type": "application/json",
         "authorization": f"Bearer {token}",
-        "appkey": KIS_APP_KEY,
-        "appsecret": KIS_APP_SECRET,
+        "appkey": ak,
+        "appsecret": as_,
         "tr_id": "VTTC8434R" if use_mock else "TTTC8434R",
         "custtype": "P"
     }
@@ -736,7 +739,8 @@ def get_kis_balance(token, mock=None, acc_no=None):
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
     """해외 주식 잔고 현황 조회 (TTL 연장으로 사이드바 렉 방지)"""
-    target_acc = acc_no if acc_no else get_current_acc_no()
+    ak, as_, an = get_user_kis_creds()
+    target_acc = acc_no if acc_no else an
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
     use_mock = mock if mock is not None else get_kis_mock_status()
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
@@ -749,7 +753,7 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
         url_61 = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
         headers_61 = {
             "Content-Type": "application/json", "authorization": f"Bearer {token}",
-            "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET,
+            "appkey": ak, "appsecret": as_,
             "tr_id": "VTTS3061R" if use_mock else "TTTS3061R", "custtype": "P"
         }
         params_61 = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""}
@@ -830,15 +834,16 @@ def get_kis_current_price(ticker, token):
         use_mock = get_kis_mock_status()
         base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
         
+        ak, as_, _ = get_user_kis_creds()
         if is_kr:
             url = f"{base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
-            headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "FHKST01010100"}
+            headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": ak, "appsecret": as_, "tr_id": "FHKST01010100"}
             params = {"FID_COND_SCR_DIV_CODE": "11111", "FID_INPUT_ISCD": symbol}
             resp = requests.get(url, headers=headers, params=params, timeout=15)
             return float(resp.json().get('output', {}).get('stck_prpr', 0))
         else:
             url = f"{base_url}/uapi/overseas-stock/v1/quotations/price"
-            headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "HHDFS76200200"}
+            headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": ak, "appsecret": as_, "tr_id": "HHDFS76200200"}
             for excd in ["NAS", "NYS", "AMS"]:
                 params = {"AUTH": "", "EXCD": excd, "SYMB": ticker}
                 resp = requests.get(url, headers=headers, params=params, timeout=15)
@@ -896,8 +901,9 @@ def get_ticker_roe(ticker):
 
 def execute_kis_market_order(ticker, qty, is_buy=True):
     """시장가 주문 실행 엔진 (KIS API 연동)"""
+    ak, as_, an = get_user_kis_creds()
     use_mock = get_kis_mock_status()
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, use_mock)
+    token = get_kis_access_token(ak, as_, use_mock)
     if not token: return False
     
     # 변수 초기화 (UnboundLocalError 방지)
@@ -913,7 +919,7 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
         url = f"{base_url}/uapi/domestic-stock/v1/trading/order-cash"
         tr_id = ("VTTC0802U" if is_buy else "VTTC0801U") if use_mock else ("TTTC0802U" if is_buy else "TTTC0801U")
         body = {
-            "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
+            "CANO": an[:8], "ACNT_PRDT_CD": an[8:],
             "PDNO": ticker.split('.')[0], "ORD_DVSN": "01", "ORD_QTY": str(qty), "ORD_UNPR": "0"
         }
     else:
@@ -929,14 +935,14 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
         tr_id = ("VTTW0801U" if is_buy else "VTTW0802U") if use_mock else ("TTTW0801U" if is_buy else "TTTW0802U")
         
         body = {
-            "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
+            "CANO": an[:8], "ACNT_PRDT_CD": an[8:],
             "OVRS_EXCG_CD": exchange_code, "PDNO": ticker, "ORD_QTY": str(qty), 
             "ORD_OVRS_P": "0", "ORD_DVSN": "00" 
         }
 
     headers = {
         "Content-Type": "application/json", "authorization": f"Bearer {token}",
-        "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": tr_id
+        "appkey": ak, "appsecret": as_, "tr_id": tr_id
     }
     try:
         res = requests.post(url, headers=headers, json=body, timeout=7)
@@ -2609,6 +2615,11 @@ elif page.startswith("7-c."):
 
         if st.button("⚡ 즉시 1회 자동 교전 사이클 실행") or auto_trigger:
             if auto_trigger: st.session_state.last_auto_run_time = time.time()
+            # [ OPTIMIZE ] 현재 세션 설정에 따른 토큰 획득
+            ak, as_, an = get_user_kis_creds()
+            use_mock = get_kis_mock_status()
+            token = get_kis_access_token(ak, as_, use_mock)
+            
             with st.status("⚔️ 자동 교전 사이클 시작...", expanded=True) as status:
                 # 0. AI 참모 브리핑 (1시간 주기)
                 send_ai_tactical_coaching(token)
