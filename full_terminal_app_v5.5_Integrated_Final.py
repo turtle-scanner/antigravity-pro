@@ -233,7 +233,8 @@ def trigger_ai_chat():
         {"name": "[ AI ] 마크 미너비니", "grade": "AI_거장(VCP)"},
         {"name": "[ AI ] 윌리엄 오닐", "grade": "AI_거장(CAN SLIM)"},
         {"name": "[ AI ] 스탠 와인스태인", "grade": "AI_거장(추세추종)"},
-        {"name": "[ AI ] 워렌 버핏", "grade": "AI_거장(가치투자)"}
+        {"name": "[ AI ] 워렌 버핏", "grade": "AI_거장(가치투자)"},
+        {"name": "[ AI ] 한샘농사매매", "grade": "AI_거장(농사매매)"}
     ]
     ai_phrases = [
         "오늘 코스피 선물 흐름 심상치 않네요. 전술적 관망 권고합니다.",
@@ -1178,14 +1179,15 @@ AI_OPERATIVES = {
     "Minervini": {"strategy": "VCP/SEPA Specialist", "risk": "Balanced", "win_rate": 0.75},
     "ONeil": {"strategy": "CAN SLIM Specialist", "risk": "Balanced", "win_rate": 0.70},
     "Weinstein": {"strategy": "Stage Analysis Specialist", "risk": "Conservative", "win_rate": 0.68},
-    "Buffett": {"strategy": "Value/Moat Specialist", "risk": "Conservative", "win_rate": 0.80}
+    "Buffett": {"strategy": "Value/Moat Specialist", "risk": "Conservative", "win_rate": 0.80},
+    "Hansam": {"strategy": "Farm Trading Specialist", "risk": "Conservative", "win_rate": 0.85}
 }
 
 @st.cache_data(ttl=60)
 def get_realtime_ai_ranking():
-    missions = {"Bonde": "NVDA", "Minervini": "247540.KQ", "ONeil": "AAPL", "Weinstein": "TSLA", "Buffett": "005930.KS"}
+    missions = {"Bonde": "NVDA", "Minervini": "247540.KQ", "ONeil": "AAPL", "Weinstein": "TSLA", "Buffett": "005930.KS", "Hansam": "035420.KS"}
     # [ RESET ] 2026-04-27 기준 현재가로 진입가 초기화 (1000만원 + 800$ 기준)
-    entry_prices = {"Bonde": 208.27, "Minervini": 208000, "ONeil": 271.06, "Weinstein": 376.30, "Buffett": 219500}
+    entry_prices = {"Bonde": 208.27, "Minervini": 208000, "ONeil": 271.06, "Weinstein": 376.30, "Buffett": 219500, "Hansam": 214000}
     
     bulk_data = get_bulk_market_data(list(missions.values()))
     results = []
@@ -1199,7 +1201,8 @@ def get_realtime_ai_ranking():
         
         display_name = {
             "Bonde": "프라딥 본데", "Minervini": "마크 미너비니", 
-            "ONeil": "윌리엄 오닐", "Weinstein": "스탠 와인스태인", "Buffett": "워렌 버핏"
+            "ONeil": "윌리엄 오닐", "Weinstein": "스탠 와인스태인", "Buffett": "워렌 버핏",
+            "Hansam": "한샘농사매매"
         }.get(name, name)
         
         results.append({
