@@ -1847,8 +1847,16 @@ with c_rad1:
 with c_rad2:
     st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
     if st.button("🚨 PANIC SELL ALL (즉시 철수)", use_container_width=True, type="primary"):
-        st.session_state.page = "7-p. [ EMERGENCY ] 비상 탈출 버튼"
-        st.rerun()
+        st.session_state.show_panic_auth = True
+    
+    if st.session_state.get("show_panic_auth"):
+        auth_code = st.text_input("사령부 승인 번호 (4자리)", type="password", key="dash_panic_auth")
+        if auth_code == "1353":
+            st.session_state.page = "7-p. [ EMERGENCY ] 비상 탈출 버튼"
+            st.session_state.show_panic_auth = False
+            st.rerun()
+        elif auth_code != "":
+            st.error("❌ 보안 코드가 일치하지 않습니다.")
 
 st.divider()
 
@@ -2745,14 +2753,18 @@ elif page.startswith("7-p."):
     confirm_panic = st.checkbox("나는 위험을 인지했으며, 현재 모든 포지션을 즉시 정리하기를 원합니다.")
     
     if confirm_panic:
+        auth_code_final = st.text_input("최종 승인 번호를 입력하십시오 (1353)", type="password", key="final_panic_auth")
         if st.button("🔥 [ DANGER ] 모든 포지션 즉시 시장가 전량 매도", use_container_width=True):
-            with st.spinner("⚔️ 함대 전체 긴급 퇴각 및 현금화 집행 중..."):
-                token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-                if execute_panic_sell_all(token):
-                    st.balloons()
-                    st.error("🚨 전량 매도 작전이 완료되었습니다. 텔레그램 보고서를 확인하십시오.")
-                else:
-                    st.error("❌ 일부 종목 매도 중 오류가 발생했습니다. 수동 확인이 필요합니다.")
+            if auth_code_final == "1353":
+                with st.spinner("⚔️ 함대 전체 긴급 퇴각 및 현금화 집행 중..."):
+                    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+                    if execute_panic_sell_all(token):
+                        st.balloons()
+                        st.error("🚨 전량 매도 작전이 완료되었습니다. 텔레그램 보고서를 확인하십시오.")
+                    else:
+                        st.error("❌ 일부 종목 매도 중 오류가 발생했습니다. 수동 확인이 필요합니다.")
+            else:
+                st.error("❌ 승인 번호가 올바르지 않습니다. 작전을 중단합니다.")
 
 elif page.startswith("7-q."):
     st.header("📡 [ BREADTH ] 마켓 브레스 감시 시스템")
