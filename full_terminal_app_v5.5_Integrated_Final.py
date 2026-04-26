@@ -369,7 +369,7 @@ def resolve_ticker(query):
     return query.upper()
 
 # --- [ ENGINE ] Unified Market Data Center ---
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def get_bulk_market_data(tickers, period="60d"):
     """전역 마켓 데이터 엔진 (API 호출 최적화)"""
     if not tickers: return pd.DataFrame()
@@ -378,7 +378,7 @@ def get_bulk_market_data(tickers, period="60d"):
         return data if not data.empty else pd.DataFrame()
     except: return pd.DataFrame()
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def fetch_macro_ticker_tape():
     """애니메이션 티커 테이프 데이터 수집"""
     watch = {"S&P500": "^GSPC", "NASDAQ": "^IXIC", "BTC": "BTC-USD", "GOLD": "GC=F", "KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
@@ -588,7 +588,7 @@ def get_kis_access_token(app_key, app_secret, mock=True):
     
     return st.session_state.get("last_valid_token")
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def get_kis_balance(token, mock=None, acc_no=None):
     """국내 주식 잔고 및 수익 현황 조회 (TTL 연장으로 로딩 속도 개선)"""
     target_acc = acc_no if acc_no else KIS_ACCOUNT_NO
@@ -628,7 +628,7 @@ def get_kis_balance(token, mock=None, acc_no=None):
         except: continue
     return 0, 0, []
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
     """해외 주식 잔고 현황 조회 (TTL 연장으로 사이드바 렉 방지)"""
     target_acc = acc_no if acc_no else KIS_ACCOUNT_NO
@@ -665,7 +665,47 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
         except:    pass
     return best_data, best_holdings
 
-# --- [ KIS: REAL-TIME RISK MONITORING (PRO EDITION) ] ---
+def execute_kis_auto_cut(token):
+    """[ SUPREME RISK ENGINE ] 익절(+21%), 손절(-5%), 파워무브(고점-3%) 벌크 집행"""
+    try:
+        _, _, kr_holdings = get_kis_balance(token)
+        over_data, us_holdings = get_kis_overseas_balance(token)
+        all_h = kr_holdings + us_holdings
+        if not all_h: return False
+        
+        # [ OPTIMIZE ] 보유 종목 전체 데이터 벌크 수집
+        tickers = [h.get('pdno') or h.get('ovrs_pdno') for h in all_h]
+        bulk_data = get_bulk_market_data(tickers, period="5d")
+        
+        for h in all_h:
+            ticker = h.get('pdno') or h.get('ovrs_pdno')
+            qty = int(h.get('hldg_qty', 0))
+            buy_p = float(h.get('pchs_avg_pric', 0))
+            if qty <= 0 or buy_p <= 0: continue
+            
+            hist = get_ticker_data_from_bulk(bulk_data, ticker)
+            if hist.empty: continue
+            
+            curr_p = hist['Close'].iloc[-1]
+            high_3d = hist['High'].iloc[-3:].max() if len(hist) >= 3 else hist['High'].max()
+            roi = (curr_p / buy_p - 1) * 100
+            
+            # [ TACTICAL LOGIC ]
+            stop_loss_val = st.session_state.get("cfg_stop_loss_pct_val", -5.0)
+            
+            if (high_3d / buy_p - 1) >= 0.20 and curr_p <= high_3d * 0.97: # Power Move Exit
+                if execute_kis_market_order(ticker, qty, is_buy=False): 
+                    send_telegram_msg(f"⚡ [POWER MOVE EXIT] {ticker} 익절! (+{roi:.1f}%)")
+            elif roi >= 21.0: # Hard Profit Target
+                if execute_kis_market_order(ticker, qty, is_buy=False):
+                    send_telegram_msg(f"💰 [TAKE PROFIT] {ticker} 목표달성! (+{roi:.1f}%)")
+            elif roi <= stop_loss_val: # Hard Stop Loss
+                if execute_kis_market_order(ticker, qty, is_buy=False):
+                    send_telegram_msg(f"📉 [STOP LOSS] {ticker} 손절 집행. ({roi:.1f}%)")
+    except Exception as e:
+        print(f"DEBUG: Auto Cut Error: {e}")
+    return False
+
 def get_kis_current_price(ticker, token):
     """KIS OpenAPI를 통한 실시간 현재가 획득"""
     if not token: return 0
@@ -683,7 +723,6 @@ def get_kis_current_price(ticker, token):
         else:
             url = f"{base_url}/uapi/overseas-stock/v1/quotations/price"
             headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "HHDFS76200200"}
-            # 거래소 코드 NAS/NYS/AMS 자동 유도
             for excd in ["NAS", "NYS", "AMS"]:
                 params = {"AUTH": "", "EXCD": excd, "SYMB": ticker}
                 resp = requests.get(url, headers=headers, params=params, timeout=15)
@@ -692,63 +731,21 @@ def get_kis_current_price(ticker, token):
         return 0
     except: return 0
 
+
 def get_market_breadth(token):
     """[ MARKET BREADTH ] 시장 건강도 체크 (종목들의 SMA50 상회 비율)"""
     try:
-        # 코스피 200 샘플 20종목 기반 간이 브레드 측정 (속도 최적화)
         sample_tickers = ["005930.KS", "000660.KS", "373220.KS", "207940.KS", "005380.KS", "005490.KS", "000270.KS", "035420.KS"]
         above_count = 0
-        from concurrent.futures import ThreadPoolExecutor
-        
         def check_sma50(t):
             df = get_kis_ohlcv(t, token)
             if len(df) < 50: return False
             return df['Close'].iloc[-1] > df['Close'].rolling(50).mean().iloc[-1]
-            
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            results = list(executor.map(check_sma50, sample_tickers))
-            above_count = sum(results)
-            
-        breadth_pct = (above_count / len(sample_tickers)) * 100
-        return breadth_pct
-    except: return 50.0 # 에러 시 보수적으로 50% 반환
+        for t in sample_tickers:
+            if check_sma50(t): above_count += 1
+        return (above_count / len(sample_tickers)) * 100
+    except: return 50.0
 
-def execute_kis_auto_cut(token):
-    """[ SUPREME RISK ENGINE ] 익절(+21%), 손절(-3%), 파워무브(고점-3%) 복합 집행"""
-    try:
-        _, _, kr_holdings = get_kis_balance(token)
-        over_data, us_holdings = get_kis_overseas_balance(token)
-        
-        for h in kr_holdings + us_holdings:
-            ticker = h.get('pdno') or h.get('ovrs_pdno')
-            qty = int(h.get('hldg_qty', 0))
-            buy_p = float(h.get('pchs_avg_pric', 0))
-            if qty <= 0 or buy_p <= 0: continue
-            
-            is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
-            hist = get_kis_ohlcv(ticker, token) if is_kr else get_kis_overseas_ohlcv(ticker, token)
-            
-            if hist.empty: continue
-            curr_p = hist['Close'].iloc[-1]
-            high_3d = hist['High'].iloc[-3:].max() if len(hist) >= 3 else hist['High'].max()
-            roi = (curr_p / buy_p - 1) * 100
-            
-            if (high_3d / buy_p - 1) >= 0.20: # Power Move
-                if curr_p <= high_3d * 0.97:
-                    if execute_kis_market_order(ticker, qty, is_buy=False): 
-                        send_telegram_msg(f"⚡ [POWER MOVE EXIT] {ticker} 익절 완료! (+{roi:.1f}%)")
-                        return True
-            elif roi >= 21.0:
-                if execute_kis_market_order(ticker, qty, is_buy=False):
-                    send_telegram_msg(f"💰 [TAKE PROFIT] {ticker} 목표달성 익절! (+{roi:.1f}%)")
-                    return True
-            elif roi <= st.session_state.get("cfg_stop_loss_pct_val", -3.0):
-                if execute_kis_market_order(ticker, qty, is_buy=False):
-                    send_telegram_msg(f"📉 [STOP LOSS] {ticker} 기계적 손절 집행. ({roi:.1f}%)")
-                    return True
-    except Exception as e:
-        print(f"DEBUG: Auto Cut Error: {e}")
-    return False
 
 
 def fast_analyze_stock(ticker, token):
@@ -859,7 +856,7 @@ def calculate_cmo(df, period=20):
     df['CMO'] = np.where(df['Sum_Abs_Change'] == 0, 0, 100 * (df['Net_Change'] / df['Sum_Abs_Change']))
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def get_kis_ohlcv(ticker, token=None):
     """[ TACTICAL SOURCE ] yfinance 기반 국내 차트 데이터 획득"""
     try:
@@ -874,7 +871,7 @@ def get_kis_ohlcv(ticker, token=None):
     except: pass
     return pd.DataFrame()
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_ohlcv(ticker, token=None):
     """[ TACTICAL SOURCE ] yfinance 기반 해외 차트 데이터 획득"""
     try:
@@ -951,6 +948,13 @@ def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
 
         # [ BONDE FILTER ] 2단계 추세 확인 (Stage 2 check)
         is_stage2 = c > sma50 and sma50 > (sma200 if not pd.isna(sma200) else 0)
+        
+        # [ LIQUIDITY FILTER ] 슬리피지 방지를 위한 거래대금 체크 (최소 20억/2M$ 이상 권장)
+        avg_dollar_vol = (df['Close'] * df['Volume']).rolling(20).mean().iloc[-1]
+        is_liquid = avg_dollar_vol >= (2000000000 if is_kr else 2000000) # 한화 20억 or 200만 달러
+        
+        if not is_liquid:
+            return {"status": "REJECT", "reason": "거래대금 부족 (슬리피지 위험)", "ticker": ticker, "name": get_stock_name(ticker)}
 
         # [ FLEXIBLE CONFIG ]
         cfg_pct = st.session_state.get("cfg_min_pct", 4.0)
@@ -959,8 +963,8 @@ def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
 
         # 1. 돌파 EP (Episodic Pivot) - 정교화
         vol_surge = v / (p_v + 1e-9)
-        # 본데 EP 조건: 4% 이상 상승 + 갭상승 + 거래량 폭증 + 상단 마감
-        if pct >= cfg_pct and vol_surge >= 2.0 and gap >= 2.0 and range_pos >= cfg_range and is_stage2:
+        # 본데 EP 조건: 4% 이상 상승 + 갭상승 + 거래량 폭증(장중 0.5배 이상) + 상단 마감
+        if pct >= cfg_pct and vol_surge >= 0.5 and gap >= 2.0 and range_pos >= cfg_range and is_stage2:
             is_ep = True; setups.append("EP (Episodic Pivot)")
 
         # 2. 조정 DR (Delayed Reaction)
@@ -969,15 +973,23 @@ def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
         if recent_mega and is_stage2 and ((o < p_c and c > p_c) or ((p_c/p_c2) <= 1.02 and v > p_v and pct >= 4.0)):
             is_dr = True; setups.append("DR (지속성 반등)")
 
-        # 3. 변동성 TIGHT (응축) - ADR 필터 추가
+        # 3. 변동성 TIGHT (응축) - Volume Dry-up(50% 이하) 및 변동성 수렴 필터 강화
+        vol_avg20 = df['Volume'].rolling(20).mean().iloc[-2] # 전일 기준 20일 평균 거래량
+        is_dry_up = p_v <= (vol_avg20 * 0.5) # 거래량 말라붙음(Dry-up) 체크
+        
+        # 3일 연속 종가 변동성 1.2% 이내 + 캔들 몸통(Range Pos) 수렴
         ttt = df['Pct'].rolling(3).apply(lambda x: all(abs(x) <= 1.2)).iloc[-1] == 1.0
-        if is_stage2 and adr20 >= 3.5 and ti65 >= 1.05 and ttt:
-            is_tight = True; setups.append("TIGHT (변동성 응축)")
+        if is_stage2 and adr20 >= 3.5 and ti65 >= 1.05 and ttt and is_dry_up:
+            is_tight = True; setups.append("TIGHT (Dry-up & 변동성 응축)")
 
-        # RS 품질 (Relative Strength)
-        rs = round(((c/df['Close'].iloc[-min(len(df), 126)])*0.7 + (c/df['Close'].iloc[-min(len(df), 63)])*0.3)*100, 1)
+        # RS 품질 (Relative Strength) - 주도주 필터링 강화
+        # 본데 스타일: 6개월 및 3개월 수익률 가중합
+        rs = round(((c/df['Close'].iloc[-min(len(df), 126)])*0.4 + (c/df['Close'].iloc[-min(len(df), 63)])*0.4 + (c/df['Close'].iloc[-min(len(df), 21)])*0.2)*100, 1)
         v_ratio = v / (p_v + 1e-9)
-        quality = round((rs*0.3) + (adr20*4) + (v_ratio*2), 1)
+        # RS가 90 이상일 때 가산점 부여
+        quality = round((rs*0.5) + (adr20*4) + (v_ratio*2), 1)
+        if rs >= 90: quality += 20 
+        
         name = get_stock_name(ticker)
 
         return {
@@ -1125,7 +1137,7 @@ def fetch_gs_attendance():
     except:    pass
     return pd.DataFrame(columns=["시간", "아이디", "인사", "등급"])
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def fetch_gs_chat():
     try:
         response = safe_get(CHAT_SHEET_URL, timeout=4)
@@ -1137,7 +1149,7 @@ def fetch_gs_chat():
     except:    pass
     return pd.DataFrame()
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def fetch_gs_visitors():
     try:
         response = requests.get(VISITOR_SHEET_URL, timeout=15)
@@ -1433,8 +1445,8 @@ with st.sidebar:
     curr_grade = users.get(st.session_state.current_user, {}).get("grade", "회원")
     is_admin = curr_grade in ["관리자", "방장"]
 
-    # [ SECURITY ] 계좌 컨트롤 섹션은 우선 'cntfed' 아이디만 접근 가능하도록 제한
-    if st.session_state.get("current_user") == "cntfed":
+    # [ SECURITY ] 계좌 컨트롤 섹션은 사령부 관리자(관리자, 방장)만 접근 가능하도록 수정
+    if is_admin:
         st.sidebar.divider()
         st.sidebar.markdown("### ⚙️ ACCOUNT CONTROL (ADMIN ONLY)")
         
@@ -1496,9 +1508,8 @@ with st.sidebar:
                 st.rerun()
         except:
             st.sidebar.caption("인증 세션 확인 중..")
-    else:
-        st.sidebar.divider()
-        st.sidebar.info("🔒 계좌 제어권은 사령관 전용입니다.")
+    # 일반 회원에게는 표시하지 않음 (완전 은닉)
+    pass
 
 
     st.sidebar.divider()
@@ -2414,7 +2425,28 @@ elif page.startswith("7-c."):
 
     if auto_trade_on:
         st.success(f"📡 엔진 가동 중... {interval}분 간격으로 시장을 감시합니다.")
-        if st.button("⚡ 즉시 1회 자동 교전 사이클 실행"):
+        
+        # [ AUTO-EXECUTION LOGIC ]
+        last_run = st.session_state.get("last_auto_run_time", 0)
+        time_passed = (time.time() - last_run) / 60
+        
+        if time_passed >= interval:
+            st.info(f"🔄 자동 교전 주기 도달 ({interval}분). 시스템이 자동으로 사이클을 실행합니다.")
+            auto_trigger = True
+        else:
+            auto_trigger = False
+            st.caption(f"⏱️ 다음 자동 스캔까지 약 {int(interval - time_passed)}분 남음")
+            # [ JS HEARTBEAT ] 브라우저 강제 리프레시 스크립트 주입
+            st.components.v1.html(f"""
+                <script>
+                setTimeout(function() {{
+                    window.parent.location.reload();
+                }}, {(interval * 60 * 1000) + 1000});
+                </script>
+            """, height=0)
+
+        if st.button("⚡ 즉시 1회 자동 교전 사이클 실행") or auto_trigger:
+            if auto_trigger: st.session_state.last_auto_run_time = time.time()
             with st.status("⚔️ 자동 교전 사이클 시작...", expanded=True) as status:
                 token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
                 
@@ -2471,11 +2503,14 @@ elif page.startswith("7-c."):
                         
                         is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
                         if is_kr:
-                            trade_qty = max(1, int(target_krw / res['close']))
+                            # [ SLIPPAGE GUARD ] 평균 거래량의 1% 이내로 수량 제한
+                            max_qty = int(res['volume'] * 0.01)
+                            trade_qty = min(max_qty, max(1, int(target_krw / res['close'])))
                         else:
                             # 해외 주식 수량 계산
                             target_usd = target_krw / usd_krw
-                            trade_qty = max(1, int(target_usd / res['close']))
+                            max_qty = int(res['volume'] * 0.01)
+                            trade_qty = min(max_qty, max(1, int(target_usd / res['close'])))
                         
                         # 자동 매수 집행
                         if execute_kis_market_order(ticker, trade_qty, is_buy=True):
@@ -2514,7 +2549,7 @@ elif page.startswith("7-i."):
     
     st.divider()
     st.subheader("🛡️ 리스크 관리 설정")
-    st.session_state.cfg_stop_loss_pct_val = st.slider("기계적 손절 임계값(%)", -10.0, -1.0, st.session_state.get("cfg_stop_loss_pct_val", -3.0), 0.5, key="stop_loss_slider")
+    st.session_state.cfg_stop_loss_pct_val = st.slider("기계적 손절 임계값(%)", -10.0, -1.0, st.session_state.get("cfg_stop_loss_pct_val", -5.0), 0.5, key="stop_loss_slider")
     if st.button("설정 저장 및 사령부 적용"):
         st.success("✅ 시스템 설정이 서버에 영구 반영되었습니다.")
 
