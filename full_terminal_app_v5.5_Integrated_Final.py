@@ -2937,7 +2937,7 @@ elif page.startswith("8-a."):
     st.markdown("""
     <div style='background: linear-gradient(135deg, #6e8efb 0%, #a777e3 100%); padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;'>
         <h1 style='margin:0; color:white; font-family:Pretendard; letter-spacing:2px;'>AI AGENT COMMAND CENTER</h1>
-        <p style='margin:5px 0 0 0; color:rgba(255,255,255,0.9); font-size:1.1rem;'>사령부 정예 AI 요원 5인의 전술 및 가치관 소개</p>
+        <p style='margin:5px 0 0 0; color:rgba(255,255,255,0.9); font-size:1.1rem;'>사령부 정예 AI 요원 6인의 전술 및 가치관 소개</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2946,7 +2946,8 @@ elif page.startswith("8-a."):
         {"name": "마크 미너비니 (Minervini)", "desc": "변동성 축소 패턴(VCP)을 감지하여 리스크가 최소화된 정밀한 타점에서 매수합니다. SEPA 전략을 통해 승률을 극대화합니다.", "avatar": "🎯"},
         {"name": "윌리엄 오닐 (O'Neil)", "desc": "CAN SLIM 원칙에 따라 펀더멘털과 수급이 모두 완벽한 성장주를 선호합니다. 기관의 매수세가 확인된 대장주만을 공략합니다.", "avatar": "📈"},
         {"name": "스탠 와인스태인 (Weinstein)", "desc": "주가 4단계 분석을 통해 2단계 상승 초입에 진입하고 3단계 고점에서 매도하는 추세 추종의 정석을 보여줍니다.", "avatar": "🌊"},
-        {"name": "워렌 버핏 (Buffett)", "desc": "공포에 사서 탐욕에 파는 가치 투자의 대가입니다. 약세장에서 해자가 있는 우량주를 헐값에 사서 장기 보유하는 전술을 구사합니다.", "avatar": "🐢"}
+        {"name": "워렌 버핏 (Buffett)", "desc": "공포에 사서 탐욕에 파는 가치 투자의 대가입니다. 약세장에서 해자가 있는 우량주를 헐값에 사서 장기 보유하는 전술을 구사합니다.", "avatar": "🐢"},
+        {"name": "한샘농사매매 (Hansam)", "desc": "안정적인 농사매매 기법(Farm Trading)을 기반으로, 보수적인 타점에서 다수의 우량 종목을 씨앗처럼 심어 꾸준한 복리 수익을 거둡니다.", "avatar": "🧑‍🌾"}
     ]
 
     for agent in agents:
@@ -2967,7 +2968,7 @@ elif page.startswith("8-b."):
     st.markdown("""
     <div style='background: linear-gradient(135deg, #FFD700 0%, #B8860B 100%); padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;'>
         <h1 style='margin:0; color:white; font-family:Orbitron; letter-spacing:5px;'>2026 GRAND LEAGUE: AI vs COMMANDER</h1>
-        <p style='margin:5px 0 0 0; color:rgba(255,255,255,0.9); font-size:1.1rem;'>거장 5인과 사령관의 자동매매 진검승부 (시작: 2026-04-27)</p>
+        <p style='margin:5px 0 0 0; color:rgba(255,255,255,0.9); font-size:1.1rem;'>거장 6인과 사령관의 자동매매 진검승부 (시작: 2026-04-27)</p>
     </div>
     """, unsafe_allow_html=True)
     
