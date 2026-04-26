@@ -21,6 +21,9 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 US_RATIO = 0.7
 KR_RATIO = 0.3
 SLOTS_PER_REGION = 4
+RISK_PER_TRADE = 0.01   # 한 매매당 총 자산의 1% 리스크 (손절 시 손실액)
+STOP_LOSS_PCT = 0.05    # 기본 손절 라인 5%
+EXCHANGE_RATE = 1400    # 환율 (보수적 적용)
 
 # --- [ UTILS ] ---
 def send_telegram_msg(msg):
@@ -37,15 +40,32 @@ def log_combat(msg, type="INFO"):
         send_telegram_msg(f"{prefix}<b>[HEADLESS]</b> {msg}")
 
 # --- [ KIS API AUTH ] ---
+def call_kis_api(method, url, headers, params=None, json_body=None, retries=3):
+    """재시도 로직이 포함된 KIS API 공통 호출 함수"""
+    for i in range(retries):
+        try:
+            if method.upper() == 'GET':
+                res = requests.get(url, headers=headers, params=params, timeout=12)
+            else:
+                res = requests.post(url, headers=headers, json=json_body, timeout=12)
+            
+            data = res.json()
+            if res.status_code == 200 and data.get('rt_cd') in ['0', None]:
+                return data
+            else:
+                msg = data.get('msg1', res.text)
+                log_combat(f"API 응답 에러 (시도 {i+1}/{retries}): {msg}", "ERROR")
+        except Exception as e:
+            log_combat(f"네트워크/접속 에러 (시도 {i+1}/{retries}): {str(e)}", "ERROR")
+        time.sleep(2)
+    return None
+
 def get_kis_access_token():
     base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/oauth2/tokenP"
     body = {"grant_type": "client_credentials", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET}
-    try:
-        res = requests.post(url, json=body, timeout=7)
-        if res.status_code == 200: return res.json().get("access_token")
-    except Exception as e: log_combat(f"토큰 발급 실패: {str(e)}", "ERROR")
-    return None
+    res = call_kis_api("POST", url, {}, json_body=body)
+    return res.get("access_token") if res else None
 
 # --- [ DATA FETCH ] ---
 def get_bulk_market_data(tickers, period="250d"):
@@ -68,27 +88,35 @@ def get_ticker_data_from_bulk(bulk_df, ticker):
 def get_total_assets(token):
     try:
         base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+        
+        # 국내 자산 조회
         url_kr = f"{base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
         headers_kr = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTC8434R" if KIS_MOCK_TRADING else "TTTC8434R"}
         params_kr = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:], "AFHR_FLG": "N", "OFRT_BLAM_YN": "N", "PRCS_DVSN": "01", "UNPR_DVSN": "01", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""}
-        res_kr = requests.get(url_kr, headers=headers_kr, params=params_kr, timeout=10)
+        res_kr = call_kis_api("GET", url_kr, headers_kr, params=params_kr)
         kr_total = 0
-        if res_kr.status_code == 200:
-            out2 = res_kr.json().get('output2', [])
+        if res_kr:
+            out2 = res_kr.get('output2', [])
             if out2: kr_total = float(out2[0].get('tot_evlu_amt', 0))
         
+        # 해외 자산 조회
         url_us = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
         headers_us = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTS3061R" if KIS_MOCK_TRADING else "TTTS3061R", "custtype": "P"}
         us_total_krw = 0
         for suffix in ["01", "02"]:
             params_us = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""}
-            res_us = requests.get(url_us, headers=headers_us, params=params_us, timeout=10)
-            if res_us.status_code == 200:
-                us_total_krw += float(res_us.json().get('output2', {}).get('tot_asst_amt', 0))
+            res_us = call_kis_api("GET", url_us, headers_us, params=params_us)
+            if res_us:
+                us_total_krw += float(res_us.get('output2', {}).get('tot_asst_amt', 0))
         
         total = kr_total + us_total_krw
-        return total if total > 0 else 10000000
-    except: return 10000000
+        if total <= 0:
+            log_combat("자산 조회 결과가 0입니다. 기본값(1,000만원)을 사용합니다.", "WARNING")
+            return 10000000
+        return total
+    except Exception as e:
+        log_combat(f"자산 조회 중 치명적 오류: {str(e)}", "ERROR")
+        return 10000000
 
 # --- [ MARKET HEALTH ] ---
 def analyze_market_health():
@@ -135,12 +163,24 @@ def analyze_bonde_setup(ticker, df):
     return {"status": "FAIL"}
 
 # --- [ EXECUTION ] ---
+def calculate_risk_based_qty(total_assets, curr_price, risk_pct=0.01, sl_pct=0.05, exchange_rate=1):
+    """
+    리스크 기반 포지션 사이징:
+    수량 = (총자산 * 리스크비율) / (주당 리스크 금액)
+    """
+    risk_amount = total_assets * risk_pct
+    risk_per_share = (curr_price * exchange_rate) * sl_pct
+    if risk_per_share <= 0: return 0
+    qty = int(risk_amount / risk_per_share)
+    return qty
+
 def execute_kis_market_order(ticker, qty, is_buy, token):
     if qty <= 0: return False
     is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ") or (ticker.isdigit() and len(ticker) == 6)
     base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/uapi/{'domestic-stock/v1/trading/order-cash' if is_kr else 'overseas-stock/v1/trading/order'}"
     body = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:], "ORD_QTY": str(qty)}
+    
     if is_kr:
         tr_id = ("VTTC0802U" if is_buy else "VTTC0801U") if KIS_MOCK_TRADING else ("TTTC0802U" if is_buy else "TTTC0801U")
         body.update({"PDNO": ticker.split('.')[0], "ORD_DVSN": "01", "ORD_UNPR": "0"})
@@ -153,13 +193,12 @@ def execute_kis_market_order(ticker, qty, is_buy, token):
         except: pass
         order_p = curr_p * (1.01 if is_buy else 0.99) if curr_p > 0 else 0
         body.update({"OVRS_EXCG_CD": "NASD", "PDNO": ticker, "ORD_OVRS_P": f"{order_p:.2f}", "ORD_DVSN": "00"})
+    
     headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": tr_id}
-    try:
-        res = requests.post(url, headers=headers, json=body, timeout=12)
-        if res.json().get('rt_cd') == '0':
-            log_combat(f"{'✅ 매수' if is_buy else '📉 매도'} 완료: {ticker} ({qty}주)")
-            return True
-    except: pass
+    res = call_kis_api("POST", url, headers, json_body=body)
+    if res and res.get('rt_cd') == '0':
+        log_combat(f"{'✅ 매수' if is_buy else '📉 매도'} 성공: {ticker} ({qty}주)")
+        return True
     return False
 
 def execute_kis_auto_cut(token):
@@ -211,13 +250,22 @@ def run_headless_cycle():
         hits = sorted(hits, key=lambda x: x['quality'], reverse=True)
         if hits:
             target = hits[0]
-            budget = (total_asst * ratio) / SLOTS_PER_REGION
-            if is_defense: budget *= 0.5
             curr_p = target['close']
-            if region == "US": qty = int(budget / (curr_p * 1350))
-            else: qty = int(budget / curr_p)
+            
+            # 리스크 기반 수량 계산 (자산의 1% 손실 제한)
+            ex_rate = EXCHANGE_RATE if region == "US" else 1
+            qty = calculate_risk_based_qty(total_asst, curr_p, RISK_PER_TRADE, STOP_LOSS_PCT, ex_rate)
+            
+            # 자산 배분 비율에 따른 최대 가용 예산 체크 (Safety Buffer)
+            max_budget = (total_asst * ratio) / SLOTS_PER_REGION
+            if is_defense: max_budget *= 0.5
+            
+            # 리스크 기반 수량이 예산을 초과하는지 확인 및 보정
+            if qty * curr_p * ex_rate > max_budget:
+                qty = int(max_budget / (curr_p * ex_rate))
+                
             if qty > 0:
-                log_combat(f"🎯 [{region}] 본데 타겟 포착: {target['ticker']} (수량: {qty}주, 비중:{ratio*100}%)")
+                log_combat(f"🎯 [{region}] 본데 타겟 포착: {target['ticker']} (수량: {qty}주, 리스크:{RISK_PER_TRADE*100}%)")
                 execute_kis_market_order(target['ticker'], qty, True, token)
         else: log_combat(f"🕵️ [{region}] 현재 조건에 부합하는 본데 셋업이 없습니다.")
     log_combat("✅ 사이클 종료")
