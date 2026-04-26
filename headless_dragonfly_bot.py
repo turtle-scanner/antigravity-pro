@@ -8,20 +8,19 @@ import yfinance as yf
 import pytz
 import re
 from datetime import datetime, timedelta
-import concurrent.futures
 
 # --- [ SUPREME CONFIG ] ---
 KIS_APP_KEY = os.getenv("KIS_APP_KEY", "")
 KIS_APP_SECRET = os.getenv("KIS_APP_SECRET", "")
-KIS_ACCOUNT_NO = os.getenv("KIS_ACCOUNT_NO", "")
+KIS_ACCOUNT_NO = os.getenv("KIS_ACCOUNT_NO", "").replace("-", "") # 하이픈 자동 제거
 KIS_MOCK_TRADING = os.getenv("KIS_MOCK_TRADING", "true").lower() == "true"
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # [ TACTICAL ALLOCATION ]
-US_RATIO = 0.7  # 미국 비중 70%
-KR_RATIO = 0.3  # 한국 비중 30%
-SLOTS_PER_REGION = 4  # 지역당 최대 4종목 보유
+US_RATIO = 0.7
+KR_RATIO = 0.3
+SLOTS_PER_REGION = 4
 
 # --- [ UTILS ] ---
 def send_telegram_msg(msg):
@@ -48,19 +47,36 @@ def get_kis_access_token():
     except Exception as e: log_combat(f"토큰 발급 실패: {str(e)}", "ERROR")
     return None
 
+# --- [ DATA FETCH ] ---
+def get_bulk_market_data(tickers, period="250d"):
+    if not tickers: return pd.DataFrame()
+    try:
+        data = yf.download(tickers, period=period, interval="1d", group_by='ticker', threads=True, progress=False)
+        return data
+    except: return pd.DataFrame()
+
+def get_ticker_data_from_bulk(bulk_df, ticker):
+    try:
+        if isinstance(bulk_df.columns, pd.MultiIndex):
+            if ticker in bulk_df.columns.levels[0]: return bulk_df[ticker].dropna()
+        else:
+            if ticker in bulk_df.columns: return bulk_df.dropna()
+    except: pass
+    return pd.DataFrame()
+
 # --- [ BALANCE & ASSET ALLOCATION ] ---
 def get_total_assets(token):
-    """실시간 잔고 조회 및 자산 가치(KRW 합산) 계산"""
     try:
-        # 1. 국내 잔고
         base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
         url_kr = f"{base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
         headers_kr = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTC8434R" if KIS_MOCK_TRADING else "TTTC8434R"}
         params_kr = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:], "AFHR_FLG": "N", "OFRT_BLAM_YN": "N", "PRCS_DVSN": "01", "UNPR_DVSN": "01", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""}
         res_kr = requests.get(url_kr, headers=headers_kr, params=params_kr, timeout=10)
-        kr_total = float(res_kr.json().get('output2', [{}])[0].get('tot_evlu_amt', 0)) if res_kr.status_code == 200 else 0
+        kr_total = 0
+        if res_kr.status_code == 200:
+            out2 = res_kr.json().get('output2', [])
+            if out2: kr_total = float(out2[0].get('tot_evlu_amt', 0))
         
-        # 2. 해외 잔고
         url_us = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
         headers_us = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTS3061R" if KIS_MOCK_TRADING else "TTTS3061R", "custtype": "P"}
         us_total_krw = 0
@@ -71,7 +87,7 @@ def get_total_assets(token):
                 us_total_krw += float(res_us.json().get('output2', {}).get('tot_asst_amt', 0))
         
         total = kr_total + us_total_krw
-        return total if total > 0 else 10000000 # 0원일 경우 기본값 1000만원 가정
+        return total if total > 0 else 10000000
     except: return 10000000
 
 # --- [ MARKET HEALTH ] ---
@@ -94,12 +110,13 @@ def analyze_market_health():
     except: pass
     return is_defense
 
-# --- [ STRATEGY & EXECUTION ] ---
+# --- [ STRATEGY ] ---
 def analyze_bonde_setup(ticker, df):
     try:
         if len(df) < 150: return {"status": "FAIL"}
         df['C1'] = df['Close'].shift(1); df['V1'] = df['Volume'].shift(1)
-        df['Pct'] = (df['Close'] / df['C1'] - 1) * 100; df['Gap'] = (df['Open'] / df['C1'] - 1) * 100
+        df['Pct'] = (df['Close'] / df['C1'] - 1) * 100
+        df['Gap'] = (df['Open'] / df['C1'] - 1) * 100
         df['SMA50'] = df['Close'].rolling(50).mean(); df['SMA200'] = df['Close'].rolling(200).mean()
         df['ADR20'] = ((df['High'] / df['Low'] - 1) * 100).rolling(20).mean()
         df['Range_Pos'] = (df['Close'] - df['Low']) / (df['High'] - df['Low'] + 1e-9)
@@ -117,6 +134,7 @@ def analyze_bonde_setup(ticker, df):
     except: pass
     return {"status": "FAIL"}
 
+# --- [ EXECUTION ] ---
 def execute_kis_market_order(ticker, qty, is_buy, token):
     if qty <= 0: return False
     is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ") or (ticker.isdigit() and len(ticker) == 6)
@@ -169,19 +187,18 @@ def execute_kis_auto_cut(token):
                 log_combat(f"📉 [손절] {ticker} 리스크 관리 집행 ({roi:.1f}%)"); execute_kis_market_order(ticker, qty, False, token)
     except: pass
 
-# --- [ MAIN ] ---
+# --- [ MAIN LOOP ] ---
 def run_headless_cycle():
     log_combat("📡 교전 사이클 개시")
     token = get_kis_access_token()
     if not token: return
     
-    total_asst = get_total_assets(token) # 전체 자산 확인
-    is_defense = analyze_market_health() # 시장 브리핑
-    execute_kis_auto_cut(token) # 리스크 관리
+    total_asst = get_total_assets(token)
+    is_defense = analyze_market_health()
+    execute_kis_auto_cut(token)
 
-    # 본데 전략 스캔 유니버스 (미국/한국 혼합)
     us_univ = ["NVDA", "TSLA", "AAPL", "MSFT", "AMD", "PLTR", "SMCI", "META", "AMZN", "GOOGL", "NFLX", "COIN"]
-    kr_univ = ["005930", "000660", "066570", "035420", "035720", "005380"] # 삼성전자, 하이닉스 등
+    kr_univ = ["005930", "000660", "066570", "035420", "035720", "005380"]
     
     for region, univ, ratio in [("US", us_univ, US_RATIO), ("KR", kr_univ, KR_RATIO)]:
         bulk_data = get_bulk_market_data(univ)
@@ -194,23 +211,15 @@ def run_headless_cycle():
         hits = sorted(hits, key=lambda x: x['quality'], reverse=True)
         if hits:
             target = hits[0]
-            # [ 포지션 사이칭 ] 해당 지역 할당 예산의 1/4(SLOTS) 투입
             budget = (total_asst * ratio) / SLOTS_PER_REGION
-            if is_defense: budget *= 0.5 # 방어 모드 시 비중 절반
-            
+            if is_defense: budget *= 0.5
             curr_p = target['close']
-            if region == "US": 
-                # USD 환율 1,350원 가정 (정밀화 가능)
-                qty = int(budget / (curr_p * 1350))
-            else:
-                qty = int(budget / curr_p)
-                
+            if region == "US": qty = int(budget / (curr_p * 1350))
+            else: qty = int(budget / curr_p)
             if qty > 0:
                 log_combat(f"🎯 [{region}] 본데 타겟 포착: {target['ticker']} (수량: {qty}주, 비중:{ratio*100}%)")
                 execute_kis_market_order(target['ticker'], qty, True, token)
-        else:
-            log_combat(f"🕵️ [{region}] 현재 조건에 부합하는 본데 셋업이 없습니다.")
-
+        else: log_combat(f"🕵️ [{region}] 현재 조건에 부합하는 본데 셋업이 없습니다.")
     log_combat("✅ 사이클 종료")
 
 if __name__ == "__main__":
