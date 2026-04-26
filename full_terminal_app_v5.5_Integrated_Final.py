@@ -738,7 +738,7 @@ def get_kis_balance(token, mock=None, acc_no=None):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
-    """해외 주식 잔고 현황 조회 (TTL 연장으로 사이드바 렉 방지)"""
+    """해외 주식 잔고 현황 조회 (데이터 구조 대응 및 필드 확장)"""
     ak, as_, an = get_user_kis_creds()
     target_acc = acc_no if acc_no else an
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
@@ -762,17 +762,38 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
             res = requests.get(url_61, headers=headers_61, params=params_61, timeout=10)
             if res.status_code == 200:
                 d = res.json()
-                o2 = d.get('output2', {})
-                if o2:
+                o2 = d.get('output2')
+                
+                # [ FIX ] KIS API에 따라 output2가 리스트([]) 또는 딕셔너리({})로 오기 때문에 통합 처리
+                if isinstance(o2, list) and len(o2) > 0:
+                    o2 = o2[0]
+                
+                if o2 and isinstance(o2, dict):
+                    # [ USD Evaluation ] 평가금액
                     total_usd = float(o2.get('frcr_evlu_amt2') or o2.get('tot_evlu_pamt') or 0)
-                    cash_usd = float(o2.get('frcr_dnca_amt') or o2.get('frcr_dncl_amt_2') or o2.get('frcr_drwg_psbl_amt_1') or 0)
+                    
+                    # [ USD Cash ] 외화 예수금 (다양한 필드 시도: frcr_dncl_amt_2, frcr_dnca_amt, frcr_dnca_amt_2 등)
+                    cash_usd = float(
+                        o2.get('frcr_dncl_amt_2') or 
+                        o2.get('frcr_dnca_amt') or 
+                        o2.get('frcr_dnca_amt_2') or 
+                        o2.get('frcr_drwg_psbl_amt_1') or 0
+                    )
+                    
+                    # [ KRW Total ] 총 자산 (원화 환산)
                     total_krw = float(o2.get('tot_evlu_pamt') or o2.get('tot_asst_amt') or 0)
-                    if total_usd + cash_usd == 0 and total_krw > 0:
-                        total_usd = total_krw / 1350 
-                    if total_usd + cash_usd > 0 or total_krw > 0:
+                    
+                    # 환율이 0으로 오거나 표시되지 않을 때를 위한 최소한의 방어 로직 (1350원 기준)
+                    if (total_usd + cash_usd) == 0 and total_krw > 0:
+                        total_usd = total_krw / 1350.0
+                    
+                    # 데이터가 유의미하게 잡히면 즉시 반환
+                    if (total_usd + cash_usd) > 0 or total_krw > 0:
                         return {"krw": total_krw, "usd_total": total_usd + cash_usd, "usd_cash": cash_usd}, d.get('output1', [])
-        except:    pass
+        except:
+            continue
     return best_data, best_holdings
+
 
 def execute_kis_auto_cut(token):
     """[ SUPREME RISK ENGINE ] 익절(+21%), 손절(-5%), 파워무브(고점-3%) 벌크 집행"""
