@@ -140,26 +140,67 @@ def analyze_market_health():
 
 # --- [ STRATEGY ] ---
 def analyze_bonde_setup(ticker, df):
+    """
+    본데(Bonde/Minervini) 스타일의 정석 전략:
+    1. Trend Template (상승 2단계 확인)
+    2. Relative Strength (시장 대비 강도)
+    3. Explosive Pivot (거래량 동반 돌파)
+    """
     try:
-        if len(df) < 150: return {"status": "FAIL"}
-        df['C1'] = df['Close'].shift(1); df['V1'] = df['Volume'].shift(1)
-        df['Pct'] = (df['Close'] / df['C1'] - 1) * 100
-        df['Gap'] = (df['Open'] / df['C1'] - 1) * 100
-        df['SMA50'] = df['Close'].rolling(50).mean(); df['SMA200'] = df['Close'].rolling(200).mean()
-        df['ADR20'] = ((df['High'] / df['Low'] - 1) * 100).rolling(20).mean()
-        df['Range_Pos'] = (df['Close'] - df['Low']) / (df['High'] - df['Low'] + 1e-9)
-        c, pct, gap, adr20, range_pos = df['Close'].iloc[-1], df['Pct'].iloc[-1], df['Gap'].iloc[-1], df['ADR20'].iloc[-1], df['Range_Pos'].iloc[-1]
-        v, p_v = df['Volume'].iloc[-1], df['V1'].iloc[-1]
-        is_stage2 = c > df['SMA50'].iloc[-1] > (df['SMA200'].iloc[-1] if not pd.isna(df['SMA200'].iloc[-1]) else 0)
-        is_liquid = (c * v) >= 1000000 
-        if not is_stage2 or not is_liquid: return {"status": "FAIL"}
-        vol_surge = v / (p_v + 1e-9)
-        is_ep = pct >= 4.0 and vol_surge >= 1.5 and gap >= 1.5 and range_pos >= 0.7
-        rs = ((c/df['Close'].iloc[-126])*0.4 + (c/df['Close'].iloc[-63])*0.4 + (c/df['Close'].iloc[-21])*0.2)*100
-        quality = (rs * 0.5) + (adr20 * 4) + (vol_surge * 2)
-        if rs >= 90: quality += 20
-        if is_ep: return {"status": "SUCCESS", "ticker": ticker, "type": "EP", "pct": round(pct, 2), "rs": round(rs, 1), "quality": round(quality, 1), "close": c}
-    except: pass
+        if len(df) < 250: return {"status": "FAIL"}
+        
+        # 기본 지표 산출
+        c = df['Close'].iloc[-1]
+        sma50 = df['Close'].rolling(50).mean().iloc[-1]
+        sma150 = df['Close'].rolling(150).mean().iloc[-1]
+        sma200 = df['Close'].rolling(200).mean().iloc[-1]
+        sma200_prev = df['Close'].rolling(200).mean().iloc[-20] # 1개월 전 200일선
+        
+        high_52w = df['High'].rolling(250).max().iloc[-1]
+        low_52w = df['Low'].rolling(250).min().iloc[-1]
+        
+        # 1. [Trend Template] 상승 2단계 조건 (미너비니 정석)
+        cond1 = c > sma150 > sma200                    # 주가 > 150 > 200
+        cond2 = sma200 > sma200_prev                    # 200일선 상승 추세
+        cond3 = sma50 > sma150 and sma50 > sma200      # 50일선이 150, 200일선 위
+        cond4 = c > sma50                               # 주가가 50일선 위
+        cond5 = c >= low_52w * 1.25                     # 신저가 대비 25% 이상 상승
+        cond6 = c >= high_52w * 0.75                    # 신고가 대비 -25% 이내 (매물 소화)
+        
+        is_stage2 = all([cond1, cond2, cond3, cond4, cond5, cond6])
+        if not is_stage2: return {"status": "FAIL"}
+
+        # 2. [Relative Strength] 상대 강도 점수 (RS)
+        # (최근 3개월 40% + 6개월 40% + 9개월 20% 가중치)
+        rs = ((c/df['Close'].iloc[-63])*0.4 + (c/df['Close'].iloc[-126])*0.4 + (c/df['Close'].iloc[-189])*0.2) * 100
+        if rs < 85: return {"status": "FAIL"} # 본데는 강한 놈만 잡습니다.
+
+        # 3. [Explosive Pivot] 돌파 확인
+        v = df['Volume'].iloc[-1]
+        v_ma20 = df['Volume'].rolling(20).mean().iloc[-1]
+        pct = (df['Close'] / df['Close'].shift(1).iloc[-1] - 1) * 100
+        vol_surge = v / v_ma20
+        
+        # 변동성 수축 후 돌파 확인 (Range Position)
+        range_pos = (df['Close'].iloc[-1] - df['Low'].iloc[-1]) / (df['High'].iloc[-1] - df['Low'].iloc[-1] + 1e-9)
+        
+        # 본데 EP 조건: 4% 이상 급등, 거래량 50% 이상 증가, 캔들 상단 마감
+        is_ep = pct >= 4.0 and vol_surge >= 1.5 and range_pos >= 0.7
+        
+        quality = (rs * 0.6) + (vol_surge * 10) + (pct * 2)
+        
+        if is_ep:
+            return {
+                "status": "SUCCESS", 
+                "ticker": ticker, 
+                "type": "BONDE_EP", 
+                "pct": round(pct, 2), 
+                "rs": round(rs, 1), 
+                "quality": round(quality, 1), 
+                "close": c
+            }
+    except Exception as e:
+        pass
     return {"status": "FAIL"}
 
 # --- [ EXECUTION ] ---
@@ -236,10 +277,22 @@ def run_headless_cycle():
     is_defense = analyze_market_health()
     execute_kis_auto_cut(token)
 
+    # [ DYNAMIC SLOT ALLOCATION ] 자산 규모에 따른 종목 수 결정
+    if total_asst <= 5000000:
+        slots_us, slots_kr = 1, 1  # 총 2종목
+    elif total_asst <= 10000000:
+        slots_us, slots_kr = 3, 1  # 총 4종목
+    elif total_asst <= 100000000:
+        slots_us, slots_kr = 6, 2  # 총 8종목
+    else:
+        slots_us, slots_kr = 8, 4  # 1억 초과 시 기본 12종목 (필요시 조절)
+
+    log_combat(f"📊 자산 규모별 슬롯 배정: 미국 {slots_us} / 한국 {slots_kr} (총 {slots_us + slots_kr}종목)")
+
     us_univ = ["NVDA", "TSLA", "AAPL", "MSFT", "AMD", "PLTR", "SMCI", "META", "AMZN", "GOOGL", "NFLX", "COIN"]
     kr_univ = ["005930", "000660", "066570", "035420", "035720", "005380"]
     
-    for region, univ, ratio in [("US", us_univ, US_RATIO), ("KR", kr_univ, KR_RATIO)]:
+    for region, univ, ratio, slots in [("US", us_univ, US_RATIO, slots_us), ("KR", kr_univ, KR_RATIO, slots_kr)]:
         bulk_data = get_bulk_market_data(univ)
         hits = []
         for ticker in univ:
@@ -252,20 +305,25 @@ def run_headless_cycle():
             target = hits[0]
             curr_p = target['close']
             
-            # 리스크 기반 수량 계산 (자산의 1% 손실 제한)
+            # 자산 배분 비율 및 배정된 슬롯 수에 따른 최대 가용 예산 체크
             ex_rate = EXCHANGE_RATE if region == "US" else 1
-            qty = calculate_risk_based_qty(total_asst, curr_p, RISK_PER_TRADE, STOP_LOSS_PCT, ex_rate)
-            
-            # 자산 배분 비율에 따른 최대 가용 예산 체크 (Safety Buffer)
-            max_budget = (total_asst * ratio) / SLOTS_PER_REGION
+            max_budget = (total_asst * ratio) / slots
             if is_defense: max_budget *= 0.5
-            
-            # 리스크 기반 수량이 예산을 초과하는지 확인 및 보정
-            if qty * curr_p * ex_rate > max_budget:
+
+            if total_asst < 10000000:
+                # [소액 모드] 1,000만원 미만: 리스크 관리 없이 예산 한도 내 최대 매수
                 qty = int(max_budget / (curr_p * ex_rate))
+                risk_info = "소액 모드 (예산 최대치)"
+            else:
+                # [프로 모드] 1,000만원 이상: 리스크 관리(1% 룰) 적용
+                qty = calculate_risk_based_qty(total_asst, curr_p, RISK_PER_TRADE, STOP_LOSS_PCT, ex_rate)
+                # 리스크 기반 수량이 예산을 초과하는지 확인 및 보정
+                if qty * curr_p * ex_rate > max_budget:
+                    qty = int(max_budget / (curr_p * ex_rate))
+                risk_info = f"리스크 관리 적용 ({RISK_PER_TRADE*100}%)"
                 
             if qty > 0:
-                log_combat(f"🎯 [{region}] 본데 타겟 포착: {target['ticker']} (수량: {qty}주, 리스크:{RISK_PER_TRADE*100}%)")
+                log_combat(f"🎯 [{region}] 본데 타겟 포착: {target['ticker']} (수량: {qty}주, {risk_info})")
                 execute_kis_market_order(target['ticker'], qty, True, token)
         else: log_combat(f"🕵️ [{region}] 현재 조건에 부합하는 본데 셋업이 없습니다.")
     log_combat("✅ 사이클 종료")
