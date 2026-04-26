@@ -2981,20 +2981,22 @@ elif page.startswith("8-b."):
         "ONeil": np.cumsum(np.random.normal(0.3, 1.0, 100)),
         "Weinstein": np.cumsum(np.random.normal(0.2, 0.5, 100)),
         "Buffett": np.cumsum(np.random.normal(0.1, 0.3, 100)),
+        "Hansam": np.cumsum(np.random.normal(0.35, 0.6, 100)),
         "Commander": np.cumsum(np.random.normal(0.45, 1.1, 100)) # 사령관 데이터 시뮬레이션
     }, index=days)
 
-    st.markdown("<div class='glass-card'>거장 5인 및 사령관의 누적 수익률 대결 추이</div>", unsafe_allow_html=True)
+    st.markdown("<div class='glass-card'>거장 6인 및 사령관의 누적 수익률 대결 추이</div>", unsafe_allow_html=True)
     chart_data = data.rename(columns={"ONeil": "O'Neil", "Commander": "🚩 사령관"})
     st.line_chart(chart_data)
 
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
+    m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
     m1.metric("Bonde", f"{data['Bonde'].iloc[-1]:.1f}%", "+2.1%")
     m2.metric("Minervini", f"{data['Minervini'].iloc[-1]:.1f}%", "+1.5%")
     m3.metric("O'Neil", f"{data['ONeil'].iloc[-1]:.1f}%", "+0.8%")
     m4.metric("Weinstein", f"{data['Weinstein'].iloc[-1]:.1f}%", "+0.3%")
     m5.metric("Buffett", f"{data['Buffett'].iloc[-1]:.1f}%", "+0.1%")
-    m6.metric("🚩 사령관", f"{data['Commander'].iloc[-1]:.1f}%", "+2.5%", delta_color="normal")
+    m6.metric("Hansam", f"{data['Hansam'].iloc[-1]:.1f}%", "+1.2%")
+    m7.metric("🚩 사령관", f"{data['Commander'].iloc[-1]:.1f}%", "+2.5%", delta_color="normal")
 
 elif page.startswith("8-c."):
     st.header("[ PORTFOLIO ] AI 요원 현재 보유 종목")
@@ -3005,7 +3007,8 @@ elif page.startswith("8-c."):
         {"요원": "마크 미너비니", "종목명": "HLB", "비중": "0%", "매수금액": "0원", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"},
         {"요원": "윌리엄 오닐", "종목명": "AAPL", "비중": "0%", "매수금액": "$0", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"},
         {"요원": "스탠 와인스태인", "종목명": "TSLA", "비중": "0%", "매수금액": "$0", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"},
-        {"요원": "워렌 버핏", "종목명": "삼성전자", "비중": "0%", "매수금액": "0원", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"}
+        {"요원": "워렌 버핏", "종목명": "삼성전자", "비중": "0%", "매수금액": "0원", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"},
+        {"요원": "한샘농사매매", "종목명": "NAVER", "비중": "0%", "매수금액": "0원", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"}
     ]
 
     st.dataframe(pd.DataFrame(portfolio_data), use_container_width=True, hide_index=True)
