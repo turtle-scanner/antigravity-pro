@@ -738,19 +738,17 @@ def get_kis_balance(token, mock=None, acc_no=None):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
-    """해외 주식 잔고 현황 조회 (Multi-TR Fallback 및 정밀 필드 매핑)"""
+    """해외 주식 잔고 현황 조회 (CTRP6504R 전용 예수금 조회 추가)"""
     ak, as_, an = get_user_kis_creds()
     target_acc = acc_no if acc_no else an
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
     use_mock = mock if mock is not None else get_kis_mock_status()
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     
-    # [ STRATEGY ] 가장 흔한 01, 02 접미사 우선 탐색
     suffixes = ["01", "02", target_acc[8:]] + ["03", "04", "05", "06"]
     best_data = {"krw": 0, "usd_total": 0, "usd_cash": 0}
     best_holdings = []
     
-    # [ MULTI-TR ] 계좌별 특성에 따라 잔고를 반환하는 TR이 다르므로 순차 시도
     tr_ids = ["TTTS3061R", "TTTS3012R", "TTTS3011R"]
     if use_mock: tr_ids = ["VTTS3061R", "VTTS3012R", "VTTS3011R"]
     
@@ -772,33 +770,33 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                     if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
                     
                     if o2 and isinstance(o2, dict):
-                        # [ USD Evaluation ]
                         total_usd = float(o2.get('frcr_evlu_amt2') or o2.get('tot_evlu_pamt') or 0)
-                        
-                        # [ USD Cash ] 외화 예수금 필드 정밀 매핑 (frcr_dncl_amt_2, frcr_drwg_psbl_amt_1 등)
-                        cash_usd = float(
-                            o2.get('frcr_dncl_amt_2') or 
-                            o2.get('frcr_dnca_amt') or 
-                            o2.get('frcr_drwg_psbl_amt_1') or 
-                            o2.get('frcr_dnca_amt_2') or 0
-                        )
-                        
-                        # [ KRW Total ]
+                        cash_usd = float(o2.get('frcr_dncl_amt_2') or o2.get('frcr_dnca_amt') or o2.get('frcr_drwg_psbl_amt_1') or 0)
                         total_krw = float(o2.get('tot_evlu_pamt') or o2.get('tot_asst_amt') or 0)
-                        if total_krw == 0:
-                            o3 = d.get('output3', {})
-                            total_krw = float(o3.get('evlu_amt_smtot_pamt') or o3.get('wdrw_psbl_tot_amt') or 0)
                         
-                        # 보수적 환율 변환 (데이터 부재 시)
+                        # [ ULTIMATE FALLBACK ] 달러 잔고가 여전히 0일 경우 전용 예수금 TR(CTRP6504R) 시도
+                        if cash_usd == 0:
+                            url_p = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
+                            h_p = headers.copy()
+                            h_p["tr_id"] = "VTRP6504R" if use_mock else "CTRP6504R"
+                            res_p = requests.get(url_p, headers=h_p, params=params, timeout=10)
+                            if res_p.status_code == 200:
+                                d_p = res_p.json()
+                                o2_p = d_p.get('output2')
+                                if isinstance(o2_p, list) and len(o2_p) > 0: o2_p = o2_p[0]
+                                if o2_p and isinstance(o2_p, dict):
+                                    cash_usd = float(o2_p.get('frcr_dnca_amt') or o2_p.get('frcr_dncl_amt_2') or 0)
+                                    if total_krw == 0: total_krw = float(o2_p.get('tot_evlu_pamt') or 0)
+
                         if (total_usd + cash_usd) == 0 and total_krw > 0:
                             total_usd = total_krw / 1350.0
                         
-                        # 유효 데이터 발견 시 즉시 반환
                         if (total_usd + cash_usd) > 0 or total_krw > 0:
                             return {"krw": total_krw, "usd_total": total_usd + cash_usd, "usd_cash": cash_usd}, d.get('output1', [])
             except: continue
             
     return best_data, best_holdings
+
 
 
 
