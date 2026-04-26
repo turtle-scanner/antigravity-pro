@@ -229,12 +229,11 @@ def trigger_ai_chat():
     if time.time() - cd["last_time"] < 15: return False
     
     ai_users = [
-        {"name": "[ AI ] minsu", "grade": "AI_연구원(코스피)"},
-        {"name": "[ AI ] Olive", "grade": "AI_분석관(코스닥)"},
-        {"name": "[ AI ] Pure", "grade": "AI_전략관(나스닥)"},
-        {"name": "[ AI ] Harmony", "grade": "AI_조율사"},
-        {"name": "[ AI ] Mint Soft", "grade": "AI_지원팀"},
-        {"name": "[ AI ] Calm Blue12", "grade": "AI_관측병"}
+        {"name": "[ AI ] 프라딥 본데", "grade": "AI_거장(모멘텀)"},
+        {"name": "[ AI ] 마크 미너비니", "grade": "AI_거장(VCP)"},
+        {"name": "[ AI ] 윌리엄 오닐", "grade": "AI_거장(CAN SLIM)"},
+        {"name": "[ AI ] 스탠 와인스태인", "grade": "AI_거장(추세추종)"},
+        {"name": "[ AI ] 워렌 버핏", "grade": "AI_거장(가치투자)"}
     ]
     ai_phrases = [
         "오늘 코스피 선물 흐름 심상치 않네요. 전술적 관망 권고합니다.",
@@ -1175,30 +1174,49 @@ def get_rs_score(ticker):
 
 # --- [ AI ] 사령부 AI 정예 요원 (NPC Operatives) 설정 ---
 AI_OPERATIVES = {
-    "minsu": {"strategy": "KOSPI Specialist", "risk": "Aggressive", "win_rate": 0.65},
-    "Olive": {"strategy": "KOSDAQ Specialist", "risk": "Balanced", "win_rate": 0.70},
-    "Pure": {"strategy": "NASDAQ Specialist", "risk": "Conservative", "win_rate": 0.75},
-    "Harmony": {"strategy": "Sector Rotation", "risk": "Balanced", "win_rate": 0.58},
-    "Mint Soft": {"strategy": "Contrarian", "risk": "Conservative", "win_rate": 0.62},
-    "Calm Blue12": {"strategy": "Macro Trend", "risk": "Aggressive", "win_rate": 0.60}
+    "Bonde": {"strategy": "Momentum/EP Specialist", "risk": "Aggressive", "win_rate": 0.72},
+    "Minervini": {"strategy": "VCP/SEPA Specialist", "risk": "Balanced", "win_rate": 0.75},
+    "ONeil": {"strategy": "CAN SLIM Specialist", "risk": "Balanced", "win_rate": 0.70},
+    "Weinstein": {"strategy": "Stage Analysis Specialist", "risk": "Conservative", "win_rate": 0.68},
+    "Buffett": {"strategy": "Value/Moat Specialist", "risk": "Conservative", "win_rate": 0.80}
 }
 
 @st.cache_data(ttl=60)
 def get_realtime_ai_ranking():
-    missions = {"Pure": "NVDA", "minsu": "005930.KS", "Olive": "247540.KQ", "Harmony": "AAPL", "Mint Soft": "TSLA", "Calm Blue12": "000660.KS"}
-    entry_prices = {"Pure": 128.5, "minsu": 78200, "Olive": 284000, "Harmony": 181.2, "Mint Soft": 172.5, "Calm Blue12": 182500}
+    missions = {"Bonde": "NVDA", "Minervini": "247540.KQ", "ONeil": "AAPL", "Weinstein": "TSLA", "Buffett": "005930.KS"}
+    # [ RESET ] 2026-04-26 기준 현재가로 진입가 초기화 (1000만원 + 800$ 기준)
+    entry_prices = {"Bonde": 208.27, "Minervini": 208000, "ONeil": 271.06, "Weinstein": 376.30, "Buffett": 219500}
     
     bulk_data = get_bulk_market_data(list(missions.values()))
     results = []
+    usd_krw = 1380 # 기준 환율
+    starting_capital_krw = 10000000 + (800 * usd_krw) # 1000만원 + 800$
+    
     for name, ticker in missions.items():
         hist = get_ticker_data_from_bulk(bulk_data, ticker)
         curr_p = hist['Close'].iloc[-1] if not hist.empty else entry_prices[name]
         roi = (curr_p / entry_prices[name] - 1) * 100
+        
+        display_name = {
+            "Bonde": "프라딥 본데", "Minervini": "마크 미너비니", 
+            "ONeil": "윌리엄 오닐", "Weinstein": "스탠 와인스태인", "Buffett": "워렌 버핏"
+        }.get(name, name)
+        
         results.append({
-            "name": f"[ AI ] {name}", "pts": int(roi * 100), "win": random.randint(55, 80),
-            "balance": int(10000000 * (1 + roi/100)), "pick": ticker, "entry": entry_prices[name],
+            "name": f"[ AI ] {display_name}", "pts": int(roi * 100), "win": random.randint(60, 85),
+            "balance": int(starting_capital_krw * (1 + roi/100)), "pick": ticker, "entry": entry_prices[name],
             "exit_p": curr_p, "roi": f"{roi:+.2f}%", "exit": datetime.now().strftime("%m/%d %H:%M")
         })
+    # [ VS COMMANDER ] 사령관(사용자) 데이터 추가
+    comm_equity = st.session_state.get("last_total_equity", starting_capital_krw)
+    comm_roi = (comm_equity / starting_capital_krw - 1) * 100
+    
+    results.append({
+        "name": "🚩 [ COMMANDER ] 사령관", "pts": int(comm_roi * 100), "win": 100, # 사령관의 승률은 별도 로직 또는 100으로 표시
+        "balance": int(comm_equity), "pick": "TOTAL", "entry": starting_capital_krw,
+        "exit_p": comm_equity, "roi": f"{comm_roi:+.2f}%", "exit": "2026-04-27 시작"
+    })
+    
     return sorted(results, key=lambda x: float(x["roi"].replace('%','')), reverse=True)
 
 @st.cache_data(ttl=600)
@@ -1732,7 +1750,7 @@ st.markdown(f"""
         <b style='color: #FFD700; letter-spacing: 2px; font-size: 0.9rem; white-space: nowrap;'>TACTICAL OPS CENTER ACTIVE</b>
         <span style='color: #555;'>|</span>
         <marquee scrollamount='5' style='color: #00FF00; font-size: 0.85rem; font-family: monospace;'>
-            {macro_str} &nbsp;&nbsp;&nbsp; [BREAKING] NVDA VCP Phase 3 Detection... &nbsp;&nbsp; [HQ] minsu 요원 코스피 주도 수급 분석 중.. &nbsp;&nbsp; [ALERT] RS 상위 10% 종목 실시간 압축 확인...
+            {macro_str} &nbsp;&nbsp;&nbsp; [BREAKING] NVDA VCP Phase 3 Detection... &nbsp;&nbsp; [HQ] 본데 요원 나스닥 주도 수급 분석 중.. &nbsp;&nbsp; [ALERT] RS 상위 10% 종목 실시간 압축 확인...
         </marquee>
     </div>
 </div>
@@ -2943,9 +2961,14 @@ elif page.startswith("8-a."):
             """, unsafe_allow_html=True)
 
 elif page.startswith("8-b."):
-    st.header("[ PROFIT ] AI 요원 수익방 (Live Leaderboard)")
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #FFD700 0%, #B8860B 100%); padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;'>
+        <h1 style='margin:0; color:white; font-family:Orbitron; letter-spacing:5px;'>2026 GRAND LEAGUE: AI vs COMMANDER</h1>
+        <p style='margin:5px 0 0 0; color:rgba(255,255,255,0.9); font-size:1.1rem;'>거장 5인과 사령관의 자동매매 진검승부 (시작: 2026-04-27)</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # 가상 수익 데이터 생성
+    # 가상 수익 데이터 생성 (Commander 추가)
     np.random.seed(42)
     days = pd.date_range(start="2026-01-01", periods=100)
     data = pd.DataFrame({
@@ -2953,33 +2976,32 @@ elif page.startswith("8-b."):
         "Minervini": np.cumsum(np.random.normal(0.4, 0.8, 100)),
         "ONeil": np.cumsum(np.random.normal(0.3, 1.0, 100)),
         "Weinstein": np.cumsum(np.random.normal(0.2, 0.5, 100)),
-        "Buffett": np.cumsum(np.random.normal(0.1, 0.3, 100))
+        "Buffett": np.cumsum(np.random.normal(0.1, 0.3, 100)),
+        "Commander": np.cumsum(np.random.normal(0.45, 1.1, 100)) # 사령관 데이터 시뮬레이션
     }, index=days)
 
-    st.markdown("<div class='glass-card'>지난 100거래일간 AI 요원들의 누적 수익률 추이입니다.</div>", unsafe_allow_html=True)
-    # 차트용 데이터 컬럼명 정리
-    chart_data = data.rename(columns={"ONeil": "O'Neil"})
+    st.markdown("<div class='glass-card'>거장 5인 및 사령관의 누적 수익률 대결 추이</div>", unsafe_allow_html=True)
+    chart_data = data.rename(columns={"ONeil": "O'Neil", "Commander": "🚩 사령관"})
     st.line_chart(chart_data)
 
-    m1, m2, m3, m4, m5 = st.columns(5)
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
     m1.metric("Bonde", f"{data['Bonde'].iloc[-1]:.1f}%", "+2.1%")
     m2.metric("Minervini", f"{data['Minervini'].iloc[-1]:.1f}%", "+1.5%")
     m3.metric("O'Neil", f"{data['ONeil'].iloc[-1]:.1f}%", "+0.8%")
     m4.metric("Weinstein", f"{data['Weinstein'].iloc[-1]:.1f}%", "+0.3%")
     m5.metric("Buffett", f"{data['Buffett'].iloc[-1]:.1f}%", "+0.1%")
+    m6.metric("🚩 사령관", f"{data['Commander'].iloc[-1]:.1f}%", "+2.5%", delta_color="normal")
 
 elif page.startswith("8-c."):
     st.header("[ PORTFOLIO ] AI 요원 현재 보유 종목")
-    st.markdown("<div class='glass-card'>각 요원의 정밀 전략에 따라 현재 교전 중인 포트폴리오 상세 내역입니다.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='glass-card'>각 요원의 정밀 전략에 따라 현재 교전 중인 포트폴리오 상세 내역입니다. (시작자본: 10M KRW + 800$)</div>", unsafe_allow_html=True)
 
     portfolio_data = [
-        {"요원": "Bonde", "종목명": "NVDA", "비율": "25%", "매수금액": "$150,000", "매수일": "2026-04-10", "매도일": "-", "수익률": "+12.5%"},
-        {"요원": "Bonde", "종목명": "TSLA", "비율": "15%", "매수금액": "$90,000", "매수일": "2026-04-20", "매도일": "-", "수익률": "-1.2%"},
-        {"요원": "Minervini", "종목명": "PLTR", "비율": "20%", "매수금액": "$120,000", "매수일": "2026-04-15", "매도일": "-", "수익률": "+5.8%"},
-        {"요원": "Minervini", "종목명": "SMCI", "비율": "10%", "매수금액": "$60,000", "매수일": "2026-04-22", "매도일": "-", "수익률": "+2.1%"},
-        {"요원": "O'Neil", "종목명": "AMZN", "비율": "30%", "매수금액": "$180,000", "매수일": "2026-03-25", "매도일": "-", "수익률": "+8.4%"},
-        {"요원": "Weinstein", "종목명": "GOOGL", "비율": "40%", "매수금액": "$240,000", "매수일": "2026-02-10", "매도일": "-", "수익률": "+15.2%"},
-        {"요원": "Buffett", "종목명": "AAPL", "비율": "50%", "매수금액": "$300,000", "매수일": "2024-05-12", "매도일": "-", "수익률": "+45.0%"}
+        {"요원": "프라딥 본데", "종목명": "NVDA", "비중": "0%", "매수금액": "$0", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"},
+        {"요원": "마크 미너비니", "종목명": "HLB", "비중": "0%", "매수금액": "0원", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"},
+        {"요원": "윌리엄 오닐", "종목명": "AAPL", "비중": "0%", "매수금액": "$0", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"},
+        {"요원": "스탠 와인스태인", "종목명": "TSLA", "비중": "0%", "매수금액": "$0", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"},
+        {"요원": "워렌 버핏", "종목명": "삼성전자", "비중": "0%", "매수금액": "0원", "매수일": "2026-04-27 예정", "현재가": "-", "수익률": "0.00%"}
     ]
 
     st.dataframe(pd.DataFrame(portfolio_data), use_container_width=True, hide_index=True)
@@ -2993,11 +3015,11 @@ elif page.startswith("8-d."):
     """, unsafe_allow_html=True)
 
     ranking_data = [
-        {"순위": "🥇 1위", "요원": "프라딥 본데", "총수익률": "+142.5%", "최대낙폭(MDD)": "-8.5%", "대표승전보": "NVDA 4% Burst (+45%)"},
-        {"순위": "🥈 2위", "요원": "마크 미너비니", "총수익률": "+98.2%", "최대낙폭(MDD)": "-4.2%", "대표승전보": "PLTR VCP breakout (+32%)"},
-        {"순위": "🥉 3위", "요원": "워렌 버핏", "총수익률": "+85.0%", "최대낙폭(MDD)": "-15.0%", "대표승전보": "AAPL Long-term Value (+120%)"},
-        {"순위": "4위", "요원": "윌리엄 오닐", "총수익률": "+76.4%", "최대낙폭(MDD)": "-12.1%", "대표승전보": "MSFT Growth cycle (+28%)"},
-        {"순위": "5위", "요원": "스탠 와인스태인", "총수익률": "+65.8%", "최대낙폭(MDD)": "-7.4%", "대표승전보": "META Stage 2 recovery (+55%)"}
+        {"순위": "-", "요원": "마크 미너비니", "총수익률": "0.0%", "최대낙폭(MDD)": "0.0%", "대표승전보": "교전 준비 중"},
+        {"순위": "-", "요원": "프라딥 본데", "총수익률": "0.0%", "최대낙폭(MDD)": "0.0%", "대표승전보": "교전 준비 중"},
+        {"순위": "-", "요원": "워렌 버핏", "총수익률": "0.0%", "최대낙폭(MDD)": "0.0%", "대표승전보": "교전 준비 중"},
+        {"순위": "-", "요원": "윌리엄 오닐", "총수익률": "0.0%", "최대낙폭(MDD)": "0.0%", "대표승전보": "교전 준비 중"},
+        {"순위": "-", "요원": "스탠 와인스태인", "총수익률": "0.0%", "최대낙폭(MDD)": "0.0%", "대표승전보": "교전 준비 중"}
     ]
 
     st.table(pd.DataFrame(ranking_data))
@@ -3007,64 +3029,48 @@ elif page.startswith("8-d."):
 elif page.startswith("8-f."):
     st.markdown("""
     <div style='background: linear-gradient(90deg, #FFD700 0%, #FFA500 100%); padding: 25px; border-radius: 15px; text-align: center; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(255,215,0,0.3);'>
-        <h1 style='margin:0; color:black; font-family:Pretendard; letter-spacing:3px;'>AI 요원 실전 수익 현황</h1>
-        <p style='margin:5px 0 0 0; color:rgba(0,0,0,0.7); font-size:1rem; font-weight:bold;'>운용 자금: 요원당 10,000,000 KRW (국내/미국 통합)</p>
+        <h1 style='margin:0; color:black; font-family:Pretendard; letter-spacing:3px;'>AI vs 사령관 실전 수익 현황</h1>
+        <p style='margin:5px 0 0 0; color:rgba(0,0,0,0.7); font-size:1rem; font-weight:bold;'>대결 시작: 2026-04-27 | 기준 자본: 10,000,000 KRW + 800$</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # 실전 매매 데이터 시뮬레이션
-    live_trades = [
-        {"요원": "프라딥 본데", "시장": "미국", "종목": "NVDA", "매수일": "2026-04-10", "매도일": "2026-04-20", "수익률": "+15.2%", "수익금": "1,520,000원", "사유": "EP(에피소딕 피벗) 발생 및 기관 수급 유입"},
-        {"요원": "마크 미너비니", "시장": "국내", "종목": "주성엔지니어링", "매수일": "2026-04-15", "매도일": "-", "수익률": "+8.4%", "수익금": "840,000원", "사유": "VCP 3단계 수축 후 전고점 돌파 시점 포착"},
-        {"요원": "윌리엄 오닐", "시장": "미국", "종목": "AMZN", "매수일": "2026-03-20", "매도일": "2026-04-12", "수익률": "+12.0%", "수익금": "1,200,000원", "사유": "CAN SLIM: 분기 실적 급증 및 신고가 경신"},
-        {"요원": "스탠 와인스태인", "시장": "국내", "종목": "SK하이닉스", "매수일": "2026-02-15", "매도일": "-", "수익률": "+25.5%", "수익금": "2,550,000원", "사유": "30주 이평선 돌파 및 Stage 2 상승 국면 진입"},
-        {"요원": "워렌 버핏", "시장": "국내", "종목": "삼성전자", "매수일": "2024-11-05", "매도일": "-", "수익률": "+18.2%", "수익금": "1,820,000원", "사유": "과도한 저평가 구간 및 반도체 업황 턴어라운드 기대"},
-        {"요원": "프라딥 본데", "시장": "국내", "종목": "한화솔루션", "매수일": "2026-04-22", "매도일": "-", "수익률": "-1.5%", "수익금": "-150,000원", "사유": "에너지 테마 수급 가속도 신호에 따른 정찰병 투입"},
-        {"요원": "마크 미너비니", "시장": "미국", "종목": "PLTR", "매수일": "2026-04-05", "매도일": "2026-04-24", "수익률": "+21.0%", "수익금": "2,100,000원", "사유": "좁은 횡보 구간(Tightness) 돌파 후 모멘텀 가속"},
-    ]
-
-    df_live = pd.DataFrame(live_trades)
+    # 실시간 데이터 획득
+    ranking_data = get_realtime_ai_ranking()
     
-    # 요원별 필터링
-    agent_names = ["프라딥 본데", "마크 미너비니", "윌리엄 오닐", "스탠 와인스태인", "워렌 버핏"]
-    selected_agent = st.selectbox("🎯 특정 요원의 실전 기록 상세 보기", ["전체 요원"] + agent_names)
-    
-    if selected_agent != "전체 요원":
-        df_display = df_live[df_live["요원"] == selected_agent]
-    else:
-        df_display = df_live
+    # 테이블용 데이터 재구성
+    display_rows = []
+    for r in ranking_data:
+        display_rows.append({
+            "순위": f"{ranking_data.index(r)+1}위",
+            "참가자": r["name"].replace("[ AI ] ", ""),
+            "주요종목": r["pick"],
+            "진입가/기준가": f"{r['entry']:,.2f}",
+            "현재가": f"{r['exit_p']:,.2f}",
+            "수익률": r["roi"],
+            "평가금액": f"{r['balance']:,}원"
+        })
 
-    # 프리미엄 테이블 출력
-    st.markdown("<div class='glass-card'>실시간 교전 기록 데이터 (Real-time Combat Logs)</div>", unsafe_allow_html=True)
-    st.dataframe(df_display.style.set_properties(**{'background-color': 'rgba(255,255,255,0.02)', 'color': '#EEE', 'border-color': '#444'})
+    st.markdown("<div class='glass-card'>실시간 교전 성과 리포트 (Real-Time Performance Report)</div>", unsafe_allow_html=True)
+    st.dataframe(pd.DataFrame(display_rows).style.set_properties(**{'background-color': 'rgba(255,255,255,0.02)', 'color': '#EEE', 'border-color': '#444'})
                  .apply(lambda x: ['color: #00FF00' if '+' in str(v) else ('color: #FF4B4B' if '-' in str(v) and '%' in str(v) else '') for v in x], subset=['수익률']),
                  use_container_width=True, hide_index=True)
 
-    # 요원별 잔고 현황 (1000만원 기준)
+    # 하단 메트릭 섹션 (상위 3인)
     st.divider()
-    st.subheader("💰 요원별 실전 잔고 (Capital: 10M KRW)")
-    
-    c1, c2, c3, c4, c5 = st.columns(5)
-    
-    def get_agent_balance(agent_name):
-        agent_trades = [t for t in live_trades if t["요원"] == agent_name]
-        total_profit = 0
-        for t in agent_trades:
-            profit_str = t["수익금"].replace("원", "").replace(",", "")
-            total_profit += int(profit_str)
-        return 10000000 + total_profit
-
-    c1.metric("본데", f"{get_agent_balance('프라딥 본데'):,}원", "+13.7%")
-    c2.metric("미너비니", f"{get_agent_balance('마크 미너비니'):,}원", "+29.4%")
-    c3.metric("오닐", f"{get_agent_balance('윌리엄 오닐'):,}원", "+12.0%")
-    c4.metric("와인스태인", f"{get_agent_balance('스탠 와인스태인'):,}원", "+25.5%")
-    c5.metric("버핏", f"{get_agent_balance('워렌 버핏'):,}원", "+18.2%")
+    st.subheader("🏆 CURRENT LEADERS")
+    cols = st.columns(3)
+    for i in range(min(3, len(ranking_data))):
+        r = ranking_data[i]
+        with cols[i]:
+            st.metric(r["name"], r["roi"], delta_color="normal")
+            st.caption(f"평가금: {r['balance']:,}원")
 
     st.markdown("""
     <div style='background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-top: 20px; border-left: 4px solid #FFD700;'>
-        <b>💡 실전 수익률 분석 지침:</b><br>
-        - 위 수익률은 각 요원의 알고리즘이 1000만원의 가상 자본을 실제 시장 데이터에 투영하여 도출한 결과입니다.<br>
-        - '사유' 항목은 AI가 매수 시점에 감지한 핵심 전술적 근거를 요약한 것입니다.
+        <b>💡 대결 모니터링 지침:</b><br>
+        - **AI 요원**: 지정된 거장 알고리즘이 특정 종목을 가상으로 매매하며, 수익률은 실제 시장 가격(Live Market Price)을 기준으로 실시간 계산됩니다.<br>
+        - **사령관 (COMMANDER)**: 사령관님의 실제 한국투자증권 계좌 잔고를 기반으로 한 <b>진짜 실전 수익률</b>입니다.<br>
+        - 모든 데이터는 60초마다 자동으로 갱신됩니다.
     </div>
     """, unsafe_allow_html=True)
 
