@@ -165,6 +165,46 @@ def get_tactical_advice(tic, rs, roe):
         advice.append(f"\nINFO: Bonde's Insight: {random.choice(quotes)}")
         return "\n".join(advice)
 
+# --- [ AI ] Tactical Coaching & Mental Reinforcement (Hourly) ---
+AI_QUOTES = [
+    "주식 시장에서 가장 큰 죄는 틀리는 것이 아니라, 틀린 채로 남아있는 것이다. (William O'Neil)",
+    "손절은 실패가 아니라, 다음 승리를 위한 보험료입니다. 기꺼이 지불하십시오. (Pradeep Bonde)",
+    "VCP의 끝은 언제나 고요합니다. 폭풍은 그 침묵 속에서 시작됩니다. 인내하십시오.",
+    "시장은 당신의 희망에 관심이 없습니다. 오직 수급과 추세에만 반응하십시오.",
+    "현금도 하나의 포지션입니다. 억지로 싸우려 하지 마십시오. (Jesse Livermore)",
+    "강한 놈이 더 강해집니다. RS 90+의 주도주에 모든 화력을 집중하십시오.",
+    "조급함은 사령관의 가장 큰 적입니다. 시스템의 원칙을 믿고 시장의 소음을 차단하십시오.",
+    "수익은 머리가 아니라 엉덩이에서 나옵니다. 원칙이 지켜지는 한 자리를 지키십시오."
+]
+
+def send_ai_tactical_coaching(token):
+    """[ TACTICAL ] 1시간마다 사령관님께 용기와 전술 브리핑 전송"""
+    last_coach = st.session_state.get("last_ai_coach_time", 0)
+    if time.time() - last_coach < 3600: return # 1시간 미경과 시 패스
+    
+    try:
+        # 시장 심리 및 지수 분석
+        score, vix, label = get_market_sentiment_v2()
+        macro = get_macro_indicators()
+        quote = random.choice(AI_QUOTES)
+        
+        brief = f"🛡️ [ AI 작전 참모 전술 브리핑 ]\n\n"
+        brief += f"👤 **Commander's Insight**:\n\"{quote}\"\n\n"
+        brief += f"📊 **Current Status**:\n- 시장 심리: {label} (Score: {score})\n- 공포 지수(VIX): {vix:.2f}\n- {macro}\n\n"
+        
+        # 지능형 코칭 메시지 생성
+        if vix > 25: 
+            brief += "⚠️ **참모 조언**: 시장의 공포가 극심합니다. 섣부른 물타기보다 손절선을 엄수하며 생존에 집중하십시오."
+        elif score > 70:
+            brief += "🚀 **참모 조언**: 시장의 열기가 뜨겁습니다. 추격 매수보다는 익절 라인을 높여 수익을 극대화하십시오."
+        else:
+            brief += "⚖️ **참모 조언**: 시장이 중립적 흐름을 보이고 있습니다. 본데의 '나노 타이니' 패턴이 나타날 때까지 인내하십시오."
+            
+        send_telegram_msg(brief)
+        st.session_state.last_ai_coach_time = time.time()
+        st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": "📢 AI 작전 참모의 전술 브리핑이 텔레그램으로 발송되었습니다.", "type": "INFO"})
+    except: pass
+
 def get_footer_quote():
     """시스템 하단에 표시할 대가들의 격언"""
     quotes = [
@@ -489,6 +529,38 @@ def get_macro_indicators():
         return f"[ USD/KRW ]: {rate:,.1f}원 | [ US 10Y ]: {yield10y:.2f}%"
     except: return "[ USD/KRW ]: 1400.0원 | [ US 10Y ]: 4.30%"
 
+@st.cache_data(ttl=300)
+def analyze_market_health():
+    """[ MARKET HEALTH ] 주요 지수(KOSPI, NASDAQ)의 50일 이동평균선 상회 여부 분석"""
+    indices = {"^KS11": "KOSPI", "^IXIC": "NASDAQ"}
+    health_report = {}
+    is_defense_mode = False
+    
+    try:
+        data = get_bulk_market_data(list(indices.keys()), period="150d")
+        if data.empty: return False, {}
+        
+        for sym, name in indices.items():
+            # 멀티인덱스 및 단일인덱스 대응
+            if isinstance(data.columns, pd.MultiIndex):
+                close_series = data['Close'][sym].dropna()
+            else:
+                close_series = data['Close'].dropna() if sym in data['Close'].columns else pd.Series()
+            
+            if len(close_series) >= 50:
+                curr_p = close_series.iloc[-1]
+                ma50 = close_series.rolling(50).mean().iloc[-1]
+                status = "HEALTHY" if curr_p > ma50 else "CAUTION"
+                if status == "CAUTION": is_defense_mode = True
+                health_report[sym] = {"name": name, "price": curr_p, "ma50": ma50, "status": status}
+            else:
+                health_report[sym] = {"name": name, "price": 0, "ma50": 0, "status": "DATA_ERROR"}
+    except Exception as e:
+        print(f"DEBUG: Market Health Error: {e}")
+        return False, {}
+        
+    return is_defense_mode, health_report
+
 @st.cache_data(ttl=3600)
 def get_macro_data():
     """실시간 환율 및 거시 지표 데이터 반환"""
@@ -552,8 +624,9 @@ def send_telegram_msg(msg):
     except:    pass
 
 @st.cache_data(ttl=3500, show_spinner=False)
-def get_kis_access_token(app_key, app_secret, mock=True):
+def get_kis_access_token(app_key, app_secret, mock=None):
     """한국투자증권 API 접근 토큰 발급 (1분 제한 방어 로직 포함)"""
+    use_mock = mock if mock is not None else get_kis_mock_status()
     # [ SAFETY ] KIS 1분당 1회 제한 방어
     last_req = st.session_state.get("last_token_req_time", 0)
     elapsed = time.time() - last_req
@@ -587,6 +660,38 @@ def get_kis_access_token(app_key, app_secret, mock=True):
         st.error(f"🌐 [NETWORK ERROR] KIS 서버 연결 실패: {str(e)}")
     
     return st.session_state.get("last_valid_token")
+
+def execute_panic_sell_all(token):
+    """[ EMERGENCY ] 비상 전량 매도 엔진 - 모든 포지션 즉시 시장가 정리"""
+    try:
+        u_an = st.session_state.get("u_an", KIS_ACCOUNT_NO)
+        is_live = st.session_state.get("u_is_live", False)
+        current_mock = not is_live
+        
+        # 1. 국내 주식 전량 매도
+        _, _, kr_holdings = get_kis_balance(token, mock=current_mock, acc_no=u_an)
+        for h in kr_holdings:
+            ticker = h.get('pdno')
+            qty = int(h.get('hldg_qty', 0))
+            if qty > 0:
+                # [ FIX ] .KS 접미사를 붙여 국내 주식임을 명시 (KOSDAQ도 KIS 주문 ID는 동일하게 처리 가능)
+                execute_kis_market_order(f"{ticker}.KS", qty, is_buy=False)
+        
+        # 2. 해외 주식 전량 매도
+        _, us_holdings = get_kis_overseas_balance(token, mock=current_mock, acc_no=u_an)
+        for h in us_holdings:
+            ticker = h.get('ovrs_pdno')
+            qty = int(h.get('hldg_qty', 0))
+            if qty > 0:
+                execute_kis_market_order(ticker, qty, is_buy=False)
+                
+        msg = "🚨 [ PANIC SELL ] 모든 함대가 시장가로 긴급 철수(현금화)를 완료했습니다. 현재 무포지션 상태입니다."
+        send_telegram_msg(msg)
+        st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": msg, "type": "ERROR"})
+        return True
+    except Exception as e:
+        st.error(f"❌ 비상 매도 중 오류 발생: {str(e)}")
+        return False
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_balance(token, mock=None, acc_no=None):
@@ -631,9 +736,9 @@ def get_kis_balance(token, mock=None, acc_no=None):
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
     """해외 주식 잔고 현황 조회 (TTL 연장으로 사이드바 렉 방지)"""
-    target_acc = acc_no if acc_no else KIS_ACCOUNT_NO
+    target_acc = acc_no if acc_no else get_current_acc_no()
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
-    use_mock = mock if mock is not None else KIS_MOCK_TRADING
+    use_mock = mock if mock is not None else get_kis_mock_status()
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     
     suffixes = [target_acc[8:], "01", "02", "03", "04", "05", "06"]
@@ -674,8 +779,18 @@ def execute_kis_auto_cut(token):
         if not all_h: return False
         
         # [ OPTIMIZE ] 보유 종목 전체 데이터 벌크 수집
-        tickers = [h.get('pdno') or h.get('ovrs_pdno') for h in all_h]
-        bulk_data = get_bulk_market_data(tickers, period="5d")
+        tickers = []
+        for h in all_h:
+            tic = h.get('pdno') or h.get('ovrs_pdno')
+            if tic:
+                # [ FIX ] 국내 주식(숫자 6자리)인 경우 yfinance용 접미사 추가
+                if tic.isdigit() and len(tic) == 6:
+                    tickers.append(f"{tic}.KS")
+                    tickers.append(f"{tic}.KQ") # 둘 다 시도하거나 정확한 구분 필요
+                else:
+                    tickers.append(tic)
+        
+        bulk_data = get_bulk_market_data(list(set(tickers)), period="5d")
         
         for h in all_h:
             ticker = h.get('pdno') or h.get('ovrs_pdno')
@@ -712,7 +827,8 @@ def get_kis_current_price(ticker, token):
     try:
         is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
         symbol = ticker.split('.')[0]
-        base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+        use_mock = get_kis_mock_status()
+        base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
         
         if is_kr:
             url = f"{base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
@@ -780,20 +896,28 @@ def get_ticker_roe(ticker):
 
 def execute_kis_market_order(ticker, qty, is_buy=True):
     """시장가 주문 실행 엔진 (KIS API 연동)"""
-    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+    use_mock = get_kis_mock_status()
+    token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, use_mock)
     if not token: return False
     
-    is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
-    base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+    # 변수 초기화 (UnboundLocalError 방지)
+    url = ""
+    tr_id = ""
+    body = {}
+    
+    # [ FIX ] 티커가 숫자 6자리인 경우 자동으로 국내 주식으로 판단
+    is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ") or (ticker.isdigit() and len(ticker) == 6)
+    base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     
     if is_kr:
         url = f"{base_url}/uapi/domestic-stock/v1/trading/order-cash"
-        tr_id = ("VTTC0802U" if is_buy else "VTTC0801U") if KIS_MOCK_TRADING else ("TTTC0802U" if is_buy else "TTTC0801U")
+        tr_id = ("VTTC0802U" if is_buy else "VTTC0801U") if use_mock else ("TTTC0802U" if is_buy else "TTTC0801U")
         body = {
             "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
             "PDNO": ticker.split('.')[0], "ORD_DVSN": "01", "ORD_QTY": str(qty), "ORD_UNPR": "0"
         }
     else:
+        url = f"{base_url}/uapi/overseas-stock/v1/trading/order"
         exchange_code = "NASD" 
         try:
             info = yf.Ticker(ticker).info
@@ -802,7 +926,7 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
             elif 'ASE' in ex_name or 'AMERICAN' in ex_name: exchange_code = "AMEX"
         except:    pass
         
-        tr_id = ("VTTW0801U" if is_buy else "VTTW0802U") if KIS_MOCK_TRADING else ("TTTW0801U" if is_buy else "TTTW0802U")
+        tr_id = ("VTTW0801U" if is_buy else "VTTW0802U") if use_mock else ("TTTW0801U" if is_buy else "TTTW0802U")
         
         body = {
             "CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": KIS_ACCOUNT_NO[8:],
@@ -1699,6 +1823,36 @@ st.markdown(f"""<div style='background: rgba(0,0,0,0.4); border: 1px solid {c_co
 </div>
 </div>""", unsafe_allow_html=True)
 
+# --- [ NEW ] [ TACTICAL RADAR & EMERGENCY EXIT ] ---
+st.markdown("<h3 style='color: #FFD700; margin-top: 20px;'>📡 TACTICAL RADAR & EMERGENCY EXIT</h3>", unsafe_allow_html=True)
+c_rad1, c_rad2 = st.columns([2, 1])
+
+with c_rad1:
+    is_defense, health = analyze_market_health()
+    h_html = ""
+    for idx_name, h in health.items():
+        color = "#00FF00" if h['status'] == "HEALTHY" else "#FF3131"
+        h_html += f"<span style='color:{color}; font-weight:bold; margin-right:15px;'>{idx_name}: {h['status']} ({h['price']/h['ma50']-1:+.2f}%)</span>"
+    
+    st.markdown(f"""
+    <div class='glass-card' style='padding: 15px; border-left: 5px solid {"#00FF00" if not is_defense else "#FF3131"};'>
+        <p style='margin:0; color:#888; font-size:0.8rem;'>MARKET HEALTH (vs 50MA)</p>
+        <div style='margin-top:5px;'>{h_html}</div>
+        <p style='margin-top:10px; font-size:0.85rem; color:{"#00FF00" if not is_defense else "#FF3131"};'>
+            <b>시스템 권고:</b> {"🚀 공격적 교전 가능 (Bullish)" if not is_defense else "🛡️ 방어적 퇴각 권고 (Bearish)"}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c_rad2:
+    st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
+    if st.button("🚨 PANIC SELL ALL (즉시 철수)", use_container_width=True, type="primary"):
+        st.session_state.page = "7-p. [ EMERGENCY ] 비상 탈출 버튼"
+        st.rerun()
+
+st.divider()
+
+
 # --- [ DOCTRINE ] 본데 전술 지혜 레이더 ---
 BONDE_WISDOM = [
     {
@@ -2448,7 +2602,8 @@ elif page.startswith("7-c."):
         if st.button("⚡ 즉시 1회 자동 교전 사이클 실행") or auto_trigger:
             if auto_trigger: st.session_state.last_auto_run_time = time.time()
             with st.status("⚔️ 자동 교전 사이클 시작...", expanded=True) as status:
-                token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+                # 0. AI 참모 브리핑 (1시간 주기)
+                send_ai_tactical_coaching(token)
                 
                 # 1. 리스크 관리 (기존 포지션 익절/손절)
                 st.write("🛡️ 리스크 관리 엔진 가동 (익절/손절 체크)...")
@@ -2468,7 +2623,17 @@ elif page.startswith("7-c."):
                 _, _, kr_holdings = get_kis_balance(token, mock=current_mock, acc_no=u_an)
                 over_data, us_holdings = get_kis_overseas_balance(token, mock=current_mock, acc_no=u_an)
                 owned_count = len(kr_holdings) + len(us_holdings)
-                owned_tickers = [h.get('pdno') for h in kr_holdings] + [h.get('ovrs_pdno') for h in us_holdings]
+                
+                # [ FIX ] 티커 일관성 유지 (KR 종목 접미사 처리)
+                owned_tickers = []
+                for h in kr_holdings:
+                    tic = h.get('pdno', '')
+                    # 종목명이나 다른 정보를 통해 .KS/.KQ 구분 (여기서는 resolve_ticker 활용 권장)
+                    # 일단 스캔 유니버스와 비교를 위해 접미사 붙임
+                    owned_tickers.append(tic + ".KS")
+                    owned_tickers.append(tic + ".KQ")
+                for h in us_holdings:
+                    owned_tickers.append(h.get('ovrs_pdno', ''))
                 
                 available_slots = 4 - owned_count
                 if available_slots <= 0:
@@ -2489,10 +2654,18 @@ elif page.startswith("7-c."):
                     # 품질(Quality) 높은 순으로 정렬
                     potential_hits = sorted(potential_hits, key=lambda x: x.get('quality', 0), reverse=True)
                     
+                    # [ BREADTH GUARD ] 지수 건강도 체크 및 방어 모드 적용
+                    is_defense, health_info = analyze_market_health()
+                    defense_factor = 0.5 if is_defense else 1.0
+                    
+                    if is_defense:
+                        st.warning("🛡️ [ DEFENSE MODE ] 지수가 50일선 아래에 있습니다. 매수 비중을 50%로 축소하여 교전을 수행합니다.")
+                        send_telegram_msg("🛡️ [ SYSTEM ALERT ] 시장 지수가 50일선 아래로 이탈했습니다. 시스템이 자동으로 '방어 모드'로 전환하여 매수 비중을 50%로 축소합니다.")
+                    
                     # 환율 정보 및 자산 확인
                     usd_krw, _ = get_macro_data()
                     total_equity = st.session_state.get("last_total_equity", 10000000)
-                    target_krw = total_equity * 0.25 # 종목당 25% 분산
+                    target_krw = total_equity * 0.25 * defense_factor # 방어 모드 시 비중 축소
                     
                     executed_count = 0
                     for res in potential_hits:
@@ -2552,6 +2725,65 @@ elif page.startswith("7-i."):
     st.session_state.cfg_stop_loss_pct_val = st.slider("기계적 손절 임계값(%)", -10.0, -1.0, st.session_state.get("cfg_stop_loss_pct_val", -5.0), 0.5, key="stop_loss_slider")
     if st.button("설정 저장 및 사령부 적용"):
         st.success("✅ 시스템 설정이 서버에 영구 반영되었습니다.")
+    
+    st.divider()
+    st.subheader("📡 텔레그램 통신 테스트")
+    if st.button("🚀 테스트 메시지 전송 (연결 확인)"):
+        send_telegram_msg("🔔 [TEST] 사령부와 텔레그램 통신 라인이 성공적으로 확보되었습니다. 준비 완료!")
+        st.info("텔레그램 앱에서 메시지 수신 여부를 확인하십시오.")
+
+elif page.startswith("7-p."):
+    st.markdown("""
+    <div style='background: rgba(255, 0, 0, 0.2); border: 2px solid #FF3131; padding: 30px; border-radius: 15px; text-align: center;'>
+        <h1 style='color: #FF3131; margin-bottom: 10px;'>🚨 EMERGENCY PANIC SELL 🚨</h1>
+        <p style='color: white; font-size: 1.1rem;'>이 버튼은 시장의 급격한 붕괴나 비상 사태 발생 시 모든 주식을 즉시 <b>시장가로 전량 매도</b>하는 최후의 수단입니다.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.warning("⚠️ 주의: 이 작업은 되돌릴 수 없으며, 모든 보유 종목이 즉시 매도 처리됩니다.")
+    
+    confirm_panic = st.checkbox("나는 위험을 인지했으며, 현재 모든 포지션을 즉시 정리하기를 원합니다.")
+    
+    if confirm_panic:
+        if st.button("🔥 [ DANGER ] 모든 포지션 즉시 시장가 전량 매도", use_container_width=True):
+            with st.spinner("⚔️ 함대 전체 긴급 퇴각 및 현금화 집행 중..."):
+                token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+                if execute_panic_sell_all(token):
+                    st.balloons()
+                    st.error("🚨 전량 매도 작전이 완료되었습니다. 텔레그램 보고서를 확인하십시오.")
+                else:
+                    st.error("❌ 일부 종목 매도 중 오류가 발생했습니다. 수동 확인이 필요합니다.")
+
+elif page.startswith("7-q."):
+    st.header("📡 [ BREADTH ] 마켓 브레스 감시 시스템")
+    st.markdown("<div class='glass-card'>글로벌 주요 지수의 50일 이동평균선 이탈 여부를 실시간 관측합니다.</div>", unsafe_allow_html=True)
+    
+    is_defense, health = analyze_market_health()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("🇰🇷 KOSPI Index")
+        if "^KS11" in health:
+            h = health["^KS11"]
+            diff = (h['price'] / h['ma50'] - 1) * 100
+            st.metric("현재가 vs 50일선", f"{h['price']:,.2f}", f"{diff:+.2f}%", delta_color="normal")
+            status_color = "#39FF14" if h['status'] == "HEALTHY" else "#FF3131"
+            st.markdown(f"<div style='text-align:center; padding:10px; border-radius:10px; background:{status_color}33; color:{status_color}; border:1px solid {status_color}; font-weight:bold;'>{h['status']}</div>", unsafe_allow_html=True)
+            
+    with col2:
+        st.subheader("🇺🇸 NASDAQ Index")
+        if "^IXIC" in health:
+            h = health["^IXIC"]
+            diff = (h['price'] / h['ma50'] - 1) * 100
+            st.metric("현재가 vs 50일선", f"{h['price']:,.2f}", f"{diff:+.2f}%", delta_color="normal")
+            status_color = "#39FF14" if h['status'] == "HEALTHY" else "#FF3131"
+            st.markdown(f"<div style='text-align:center; padding:10px; border-radius:10px; background:{status_color}33; color:{status_color}; border:1px solid {status_color}; font-weight:bold;'>{h['status']}</div>", unsafe_allow_html=True)
+
+    st.divider()
+    if is_defense:
+        st.error("🛡️ 현재 시장은 '방어 모드' 발동 구간입니다. 시스템이 자동으로 매수 비중을 조절합니다.")
+    else:
+        st.success("🚀 현재 시장은 '공격 모드' 구간입니다. 정석적인 비중으로 교전을 수행합니다.")
 
 elif page.startswith("7-j."):
     st.markdown("""
