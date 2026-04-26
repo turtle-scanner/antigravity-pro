@@ -934,10 +934,21 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
         
         tr_id = ("VTTW0801U" if is_buy else "VTTW0802U") if use_mock else ("TTTW0801U" if is_buy else "TTTW0802U")
         
+        # [ FIX ] 해외 주식은 시장가(01)가 모든 거래소에서 지원되지 않으므로, 현재가 기반 지정가(00) 주문 수행
+        curr_p = 0
+        try:
+            p_data = yf.download(ticker, period="1d", interval="1m")
+            if not p_data.empty:
+                curr_p = p_data['Close'].iloc[-1]
+        except: pass
+        
+        # 매수 시에는 현재가 + 1%, 매도 시에는 현재가 - 1%로 지정가 주문 (시장가 효과)
+        order_p = curr_p * (1.01 if is_buy else 0.99) if curr_p > 0 else 0
+        
         body = {
             "CANO": an[:8], "ACNT_PRDT_CD": an[8:],
             "OVRS_EXCG_CD": exchange_code, "PDNO": ticker, "ORD_QTY": str(qty), 
-            "ORD_OVRS_P": "0", "ORD_DVSN": "00" 
+            "ORD_OVRS_P": f"{order_p:.2f}", "ORD_DVSN": "00" 
         }
 
     headers = {
@@ -952,6 +963,7 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
             log_type = "SUCCESS"
             msg = f"{'✅ 매수' if is_buy else '📉 매도'} 완료: {ticker} ({qty}주)"
             st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": msg, "type": log_type})
+            send_telegram_msg(f"🔔 [교전 보고] {msg}")
             return True
         else:
             err_msg = res_data.get('msg1', 'API 통신 오류')
@@ -960,6 +972,7 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
             
             log_msg = f"⚠️ {ticker} 주문 실패: {err_msg}"
             st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": log_msg, "type": "ERROR"})
+            send_telegram_msg(f"🚨 [교전 실패] {log_msg}")
             return False
     except Exception as e:
         st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": f"❌ 시스템 오류: {str(e)}", "type": "ERROR"})

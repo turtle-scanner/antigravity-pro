@@ -774,7 +774,7 @@ with st.sidebar:
     st.markdown("<div style='text-align: center;'><p style='color:#00FF00; font-size:1.5rem; font-weight:900; margin-bottom:0;'>[ SYSTEM ] StockDragonfly v9.9</p><small style='color:#666;'>ELITE TRADING TERMINAL</small></div>", unsafe_allow_html=True)
     
     # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge)
-    sentiment_score, _ = get_market_sentiment_score()
+    sentiment_score, _, _ = get_market_sentiment_score()
     s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
     st.markdown(f"""
     <div class='glass-card' style='padding: 15px; margin-bottom: 20px; border-top: 3px solid {s_color};'>
@@ -3359,7 +3359,7 @@ elif page.startswith("7-e."):
                 ai_prices[t] = float(ai_data[t].iloc[-1]) if t in ai_data.columns else 0
         except: pass
 
-        sentiment_score, _ = get_market_sentiment_score()
+        sentiment_score, _, _ = get_market_sentiment_score()
         market_multiplier = (sentiment_score / 50.0)
 
         for name, info in AI_OPERATIVES.items():
@@ -3462,7 +3462,7 @@ elif page.startswith("7-f."):
         </div></div>
         """, unsafe_allow_html=True)
     with c_feel2:
-        sentiment_score, curr_vix = get_market_sentiment_score()
+        sentiment_score, curr_vix, _ = get_market_sentiment_score()
         s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
         
         with st.popover(f"[ STATUS ] 탐욕 지수 판독: {sentiment_score}", use_container_width=True):
