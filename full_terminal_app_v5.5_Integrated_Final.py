@@ -749,7 +749,7 @@ def get_kis_balance(token, mock=None, acc_no=None):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
-    """해외 주식 잔고 및 달러 현황 조회 (MTS 동기화 v5.0)"""
+    """해외 주식 잔고 및 달러 현황 조회 (진단 강화 v5.1)"""
     ak, as_, an = get_user_kis_creds()
     target_acc = acc_no if acc_no else an
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
@@ -757,7 +757,6 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     use_mock = mock if mock is not None else get_kis_mock_status()
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     
-    # [ TACTICAL ] MTS '주문가능달러' 필드(ovrs_ord_psbl_amt)를 최우선 수색
     USD_CASH_FIELDS = [
         'ovrs_ord_psbl_amt', 'ord_psbl_frcr_amt', 'frcr_ord_psbl_amt', 'frcr_dncl_amt_2', 
         'frcr_dnca_amt', 'psbl_frcr_amt', 'frcr_ord_psbl_amt1', 'ovrs_prec_amt', 
@@ -829,8 +828,11 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                         res = requests.get(url, headers=headers, params=params, timeout=10)
                         if res.status_code == 200:
                             d = res.json()
-                            st.session_state["debug_kis_overseas_last_raw"] = d
-                            if d.get('rt_cd') != '0': continue
+                            # [ DIAGNOSTIC ] 모든 응답 기록
+                            st.session_state[f"last_raw_{tr_id}"] = d
+                            if d.get('rt_cd') != '0':
+                                st.session_state[f"last_error_{tr_id}"] = d.get('msg1')
+                                continue
                                 
                             cash_usd = find_in_obj(d, USD_CASH_FIELDS)
                             eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
@@ -845,7 +847,11 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                                 
                                 if cash_usd > 1.0 and len(best_holdings) > 0:
                                     return best_data, best_holdings
-                    except: continue
+                        else:
+                            st.session_state[f"last_http_error_{tr_id}"] = res.status_code
+                    except Exception as e:
+                        st.session_state[f"last_exc_{tr_id}"] = str(e)
+                        continue
     return best_data, best_holdings
 
 
