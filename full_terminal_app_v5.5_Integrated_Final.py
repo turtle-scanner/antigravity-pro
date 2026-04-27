@@ -794,6 +794,8 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                     if res != 0: return res
         return 0
 
+    exchanges = ["NASD", "NYSE", "AMEX"]
+    
     for suffix in list(dict.fromkeys(suffixes)):
         if not suffix: continue
         for div_code in div_codes:
@@ -802,39 +804,50 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                 url_path = "/uapi/overseas-stock/v1/trading/inquire-psbl-order" if is_psbl else "/uapi/overseas-stock/v1/trading/inquire-balance"
                 url = f"{base_url}{url_path}"
                 
-                headers = {
-                    "Content-Type": "application/json", "authorization": f"Bearer {token}",
-                    "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"
-                }
-                params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": ""}
-                if is_psbl: params["TR_CRCY_CD"] = "USD"
-                else: params["WCRC_FRCR_DVS_CD"] = div_code
+                # 3031R은 거래소별로 결과가 다를 수 있음
+                target_exchanges = exchanges if is_psbl else [None]
                 
-                try:
-                    res = requests.get(url, headers=headers, params=params, timeout=10)
-                    if res.status_code == 200:
-                        d = res.json()
-                        
-                        # [ SUPER ROBUST SEARCH ] 전체 응답에서 달러/KRW 필드 수색
-                        cash_usd = find_in_obj(d, USD_CASH_FIELDS)
-                        eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
-                        total_krw = find_in_obj(d, KRW_TOTAL_FIELDS)
-                        
-                        # KRW만 있는 경우 환율Fallback (단, cash_usd가 0일 때만)
-                        if div_code == "01" and cash_usd == 0 and total_krw > 0:
-                            cash_usd = (total_krw / 1400.0) 
+                for excg in target_exchanges:
+                    headers = {
+                        "Content-Type": "application/json", "authorization": f"Bearer {token}",
+                        "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"
+                    }
+                    params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": ""}
+                    if is_psbl: 
+                        params["TR_CRCY_CD"] = "USD"
+                        if excg: params["OVRS_EXCG_CD"] = excg
+                    else: 
+                        params["WCRC_FRCR_DVS_CD"] = div_code
+                    
+                    try:
+                        res = requests.get(url, headers=headers, params=params, timeout=10)
+                        if res.status_code == 200:
+                            d = res.json()
+                            
+                            # [ SUPER ROBUST SEARCH ] 전체 응답에서 달러/KRW 필드 수색
+                            cash_usd = find_in_obj(d, USD_CASH_FIELDS)
+                            eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
+                            total_krw = find_in_obj(d, KRW_TOTAL_FIELDS)
+                            
+                            # [ DEBUG LOGGING ] 세션 상태에 저장 (진단용)
+                            if cash_usd > 0:
+                                st.session_state[f"debug_kis_{tr_id}_{excg}"] = d
 
-                        if (eval_usd + cash_usd) > 0 or total_krw > 0:
-                            # [ FIX ] 무조건 리턴하지 않고, 달러 잔고가 있는 결과를 우선적으로 수집
-                            if cash_usd > best_data["usd_cash"]:
-                                o1 = d.get('output') or d.get('output1')
-                                best_data = {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}
-                                best_holdings = (o1 if isinstance(o1, list) else [])
-                                
-                                # 달러 잔고가 충분히(1달러 이상) 발견되면 즉시 리턴 (최적 결과)
-                                if cash_usd > 1.0:
-                                    return best_data, best_holdings
-                except: continue
+                            # KRW만 있는 경우 환율Fallback (단, cash_usd가 0일 때만)
+                            if div_code == "01" and cash_usd == 0 and total_krw > 0:
+                                cash_usd = (total_krw / 1400.0) 
+
+                            if (eval_usd + cash_usd) > 0 or total_krw > 0:
+                                # [ FIX ] 무조건 리턴하지 않고, 달러 잔고가 있는 결과를 우선적으로 수집
+                                if cash_usd >= best_data["usd_cash"]:
+                                    o1 = d.get('output') or d.get('output1')
+                                    best_data = {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}
+                                    best_holdings = (o1 if isinstance(o1, list) else [])
+                                    
+                                    # 달러 잔고가 충분히(1달러 이상) 발견되면 즉시 리턴 (최적 결과)
+                                    if cash_usd > 1.0:
+                                        return best_data, best_holdings
+                    except: continue
             
             # [ FALLBACK ] NATN_CD="000" 시도 (일부 통합계좌 대응)
             for tr_id in ["TTTS3031R", "TTTS3061R"]:
@@ -1736,6 +1749,17 @@ with st.sidebar:
                 <small style='color:{mode_color}; font-weight:bold;'>CONNECTION: {'REAL SERVER' if is_live else 'MOCK SERVER'}</small>
             </div>
         """, unsafe_allow_html=True)
+
+        with st.sidebar.expander("🛠️ API DEEP DIAGNOSTIC"):
+            if st.button("RUN DIAGNOSTIC SCAN"):
+                st.write("🔍 Scanning KIS response for USD fields...")
+                # 최근 저장된 디버그 데이터 출력
+                debug_keys = [k for k in st.session_state.keys() if k.startswith("debug_kis_")]
+                if debug_keys:
+                    for k in debug_keys:
+                        st.json(st.session_state[k])
+                else:
+                    st.warning("No USD data found in recent requests. Try Refreshing first.")
 
         # [ SIDEBAR BALANCE INFO ]
         try:
