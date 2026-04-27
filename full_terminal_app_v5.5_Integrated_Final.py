@@ -825,8 +825,15 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                             cash_usd = (total_krw / 1400.0) 
 
                         if (eval_usd + cash_usd) > 0 or total_krw > 0:
-                            o1 = d.get('output') or d.get('output1')
-                            return {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}, (o1 if isinstance(o1, list) else [])
+                            # [ FIX ] 무조건 리턴하지 않고, 달러 잔고가 있는 결과를 우선적으로 수집
+                            if cash_usd > best_data["usd_cash"]:
+                                o1 = d.get('output') or d.get('output1')
+                                best_data = {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}
+                                best_holdings = (o1 if isinstance(o1, list) else [])
+                                
+                                # 달러 잔고가 충분히(1달러 이상) 발견되면 즉시 리턴 (최적 결과)
+                                if cash_usd > 1.0:
+                                    return best_data, best_holdings
                 except: continue
             
             # [ FALLBACK ] NATN_CD="000" 시도 (일부 통합계좌 대응)
@@ -1764,6 +1771,9 @@ with st.sidebar:
                 </div>
             """, unsafe_allow_html=True)
             if st.sidebar.button("🔄 잔고 동기화(Refresh)", use_container_width=True):
+                # [ FIX ] 세션 상태의 토큰 요청 시간까지 초기화하여 즉시 재발급 강제
+                st.session_state.last_token_req_time = 0
+                st.session_state.last_valid_token = None
                 get_kis_access_token.clear()
                 get_kis_balance.clear()
                 get_kis_overseas_balance.clear()
