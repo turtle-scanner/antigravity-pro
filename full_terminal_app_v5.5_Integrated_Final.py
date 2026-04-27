@@ -1781,14 +1781,18 @@ with st.sidebar:
                         <small style='color:#666;'>(Cash: ${o_cash_usd:,.2f})</small>
                     </div>
                 </div>
+                <div style='text-align:right; margin-top:2px;'>
+                    <span style='font-size:0.6rem; color:#555;'>Dragonfly v5.5-Integrated (Tactical v5.0)</span>
+                </div>
             """, unsafe_allow_html=True)
             if st.sidebar.button("🔄 잔고 동기화(Refresh)", use_container_width=True):
-                # [ FIX ] 세션 상태의 토큰 요청 시간까지 초기화하여 즉시 재발급 강제
+                # [ FIX ] 모든 캐시 및 세션 데이터 초기화로 강제 갱신
                 st.session_state.last_token_req_time = 0
                 st.session_state.last_valid_token = None
                 get_kis_access_token.clear()
                 get_kis_balance.clear()
                 get_kis_overseas_balance.clear()
+                st.cache_data.clear()
                 st.rerun()
 
             if st.sidebar.button("☢️ NUCLEAR REFRESH", use_container_width=True, type="primary"):
@@ -1797,7 +1801,7 @@ with st.sidebar:
                 st.rerun()
         except Exception as e:
             st.sidebar.error(f"❌ AUTH/API ERROR: {str(e)}")
-            st.sidebar.caption("인증 세션 또는 키 설정을 확인하십시오.")
+            st.sidebar.caption("Tactical v5.0 반영 여부를 확인하십시오.")
     # 일반 회원에게는 표시하지 않음 (완전 은닉)
     pass
 
