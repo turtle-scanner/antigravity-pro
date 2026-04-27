@@ -589,7 +589,12 @@ ACC_PRESETS = {
 }
 
 def get_kis_mock_status():
-    return st.session_state.get("kis_mock_mode", st.secrets.get("KIS_MOCK_TRADING", False))
+    """한국투자증권 모의투자 여부 판단 (사이드바 토글 우선)"""
+    # [ FIX ] 사이드바 토글 키인 is_live_mode를 직접 참조하여 상태 불일치 해결
+    if "is_live_mode" in st.session_state:
+        return not st.session_state.is_live_mode
+    # 세션 상태가 없으면 secrets 또는 기본값(True: 안전을 위해 모의투자 우선)
+    return st.secrets.get("KIS_MOCK_TRADING", True)
 
 def get_current_acc_no():
     # 세션 상태에 계좌 정보가 없으면 기본 위탁(종합) 사용
@@ -1746,6 +1751,14 @@ with st.sidebar:
         st.session_state.kis_mock_mode = not is_live
         st.sidebar.caption(f"📡 연결 키: {u_ak[:5]}*** (개인설정 {'적용됨' if 'kis_credentials' in users.get(st.session_state.current_user, {}) else '기본값'})")
         st.sidebar.caption(f"💳 계좌번호: {u_an[:8]}-** (현재 {'실전' if is_live else '모의'})")
+        
+        # [ DEBUG ] 현재 접속 모드 명시적 표시
+        mode_color = "#FF4B4B" if is_live else "#00FF00"
+        st.sidebar.markdown(f"""
+            <div style='text-align:center; padding:5px; border-radius:5px; background:{mode_color}22; border:1px solid {mode_color}55; margin-bottom:10px;'>
+                <small style='color:{mode_color}; font-weight:bold;'>CONNECTION: {'REAL SERVER' if is_live else 'MOCK SERVER'}</small>
+            </div>
+        """, unsafe_allow_html=True)
 
         # [ SIDEBAR BALANCE INFO ]
         try:
