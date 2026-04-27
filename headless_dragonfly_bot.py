@@ -107,7 +107,10 @@ def get_total_assets(token):
             params_us = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""}
             res_us = call_kis_api("GET", url_us, headers_us, params=params_us)
             if res_us:
-                us_total_krw += float(res_us.get('output2', {}).get('tot_asst_amt', 0))
+                o2 = res_us.get('output2')
+                if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
+                if o2:
+                    us_total_krw += float(o2.get('tot_asst_amt') or o2.get('tot_evlu_pamt') or 0)
         
         total = kr_total + us_total_krw
         if total <= 0:
@@ -251,7 +254,10 @@ def execute_kis_auto_cut(token):
         for suffix in ["01", "02"]:
             params = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""}
             res = requests.get(url, headers=headers, params=params, timeout=10)
-            if res.status_code == 200: holdings += res.json().get('output1', [])
+            if res.status_code == 200: 
+                d = res.json()
+                o1 = d.get('output1', [])
+                if isinstance(o1, list): holdings += o1
         if not holdings: return
         tickers = [h.get('ovrs_pdno') for h in holdings if h.get('ovrs_pdno')]
         bulk_data = get_bulk_market_data(tickers, period="5d")

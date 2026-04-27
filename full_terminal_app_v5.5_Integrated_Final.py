@@ -723,9 +723,14 @@ def get_kis_balance(token, mock=None, acc_no=None):
             res = requests.get(url, headers=headers, params=params, timeout=15)
             if res.status_code == 200:
                 data = res.json()
-                if data.get('output2'):
-                    cash = float(data['output2'][0].get('dnca_tot_amt', 0))
-                    total_eval = float(data['output2'][0].get('tot_evlu_amt', 0))
+                o2 = data.get('output2')
+                if isinstance(o2, list) and len(o2) > 0:
+                    o2 = o2[0]
+                
+                if o2 and isinstance(o2, dict):
+                    # [ FIX ] 단순 예수금이 아닌 '주문가능금액'을 우선적으로 가져옴 (사용자 80만원 일치화)
+                    cash = float(o2.get('ord_psbl_cash') or o2.get('prvs_rcdl_exca_amt') or o2.get('dnca_tot_amt') or 0)
+                    total_eval = float(o2.get('tot_evlu_amt') or o2.get('nass_amt') or cash)
                     holdings = data.get('output1', [])
                     return total_eval, cash, holdings
             elif res.status_code == 500:
@@ -749,16 +754,23 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     best_data = {"krw": 0, "usd_total": 0, "usd_cash": 0}
     best_holdings = []
     
+    # [ TACTICAL ] 지원되는 모든 달러 현금 필드 매핑 (주문가능달러, 예수금, 외화예수금 등)
+    USD_CASH_FIELDS = [
+        'frcr_ord_psbl_amt', 'frcr_dncl_amt_2', 'frcr_dnca_amt', 'frcr_drwg_psbl_amt_1', 
+        'frcr_dnca_amt_2', 'psbl_frcr_amt', 'ovrs_ord_psbl_amt', 'frcr_evlu_amt2',
+        'frcr_ord_psbl_amt1', 'ovrs_prec_amt'
+    ]
+    USD_EVAL_FIELDS = ['frcr_evlu_amt2', 'ovrs_tot_evlu_amt', 'tot_evlu_pamt_2']
+    KRW_TOTAL_FIELDS = ['tot_evlu_pamt', 'tot_asst_amt', 'evlu_amt_smtot_pamt', 'wdrw_psbl_tot_amt']
+
     div_codes = ["02", "01"]
-    # [ MULTI-TR ] 잔고(3061R), 상세(3012R), 체결(3011R), 주문가능액(3031R) 전수 조사
-    tr_ids = ["TTTS3061R", "TTTS3012R", "TTTS3011R", "TTTS3031R"]
-    if use_mock: tr_ids = ["VTTS3061R", "VTTS3012R", "VTTS3011R", "VTTS3031R"]
+    tr_ids = ["TTTS3031R", "TTTS3061R", "TTTS3012R", "TTTS3011R"]
+    if use_mock: tr_ids = ["VTTS3031R", "VTTS3061R", "VTTS3012R", "VTTS3011R"]
     
     for suffix in list(dict.fromkeys(suffixes)):
         if not suffix: continue
         for div_code in div_codes:
             for tr_id in tr_ids:
-                # 주문가능액 조회(3031R)는 URL이 다를 수 있음
                 is_psbl = "3031R" in tr_id
                 url_path = "/uapi/overseas-stock/v1/trading/inquire-psbl-order" if is_psbl else "/uapi/overseas-stock/v1/trading/inquire-balance"
                 url = f"{base_url}{url_path}"
@@ -767,48 +779,78 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                     "Content-Type": "application/json", "authorization": f"Bearer {token}",
                     "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"
                 }
-                params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": div_code, "NATN_CD": "840", "TR_PACC_CD": ""}
+                # 3031R은 NATN_CD와 TR_PACC_CD만 필요할 수 있음
+                params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": ""}
+                if not is_psbl: params["WCRC_FRCR_DVS_CD"] = div_code
                 
                 try:
                     res = requests.get(url, headers=headers, params=params, timeout=10)
                     if res.status_code == 200:
                         d = res.json()
-                        o1, o2, o3 = d.get('output', d.get('output1')), d.get('output2'), d.get('output3')
-                        if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
-                        if not o2 and isinstance(o1, dict) and is_psbl: o2 = o1 # 3031R은 output에 정보가 있는 경우가 많음
+                        # [ DATA EXTRACTION ] 다양한 출력 구조 대응
+                        o1 = d.get('output') or d.get('output1')
+                        o2 = d.get('output2')
+                        o3 = d.get('output3')
                         
-                        if o2 and isinstance(o2, dict):
-                            # [ 현금 필드 매핑 ]
-                            cash_usd = float(
-                                o2.get('frcr_dncl_amt_2') or o2.get('frcr_dnca_amt') or 
-                                o2.get('frcr_drwg_psbl_amt_1') or o2.get('frcr_dnca_amt_2') or 
-                                o2.get('frcr_ord_psbl_amt') or o2.get('frcr_dncl_amt_1') or 0
-                            )
-                            total_eval_usd = float(o2.get('frcr_evlu_amt2') or o2.get('tot_evlu_pamt') or 0)
-                            total_krw = float(o2.get('tot_evlu_pamt') or o2.get('tot_asst_amt') or 0)
+                        # 리스트인 경우 첫 번째 항목 사용
+                        if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
+                        if isinstance(o1, list) and len(o1) > 0 and not is_psbl: pass # output1은 보통 홀딩스 리스트
+                        
+                        # 3031R이나 다른 단일 객체 응답 처리
+                        target_obj = o2 if (o2 and isinstance(o2, dict)) else (o1 if isinstance(o1, dict) else {})
+                        
+                        if target_obj:
+                            cash_usd = 0
+                            for f in USD_CASH_FIELDS:
+                                val = target_obj.get(f)
+                                if val is not None and str(val).strip() != "":
+                                    try: 
+                                        cash_usd = float(val)
+                                        if cash_usd != 0: break
+                                    except: continue
                             
-                            # [ output3 추가 필드 ]
+                            eval_usd = 0
+                            for f in USD_EVAL_FIELDS:
+                                val = target_obj.get(f)
+                                if val is not None and str(val).strip() != "":
+                                    try:
+                                        eval_usd = float(val)
+                                        if eval_usd != 0: break
+                                    except: continue
+                            
+                            total_krw = 0
+                            for f in KRW_TOTAL_FIELDS:
+                                val = target_obj.get(f)
+                                if val is not None and str(val).strip() != "":
+                                    try:
+                                        total_krw = float(val)
+                                        if total_krw != 0: break
+                                    except: continue
+                            
+                            # 추가 필드 (output3 등)
                             if o3 and isinstance(o3, dict):
-                                if total_krw == 0: total_krw = float(o3.get('evlu_amt_smtot_pamt') or o3.get('wdrw_psbl_tot_amt') or 0)
-                                if cash_usd == 0: cash_usd = float(o3.get('frcr_evlu_amt2') or 0)
+                                if cash_usd == 0:
+                                    for f in USD_CASH_FIELDS:
+                                        v = o3.get(f)
+                                        if v: 
+                                            try: cash_usd = float(v); break
+                                            except: pass
+                                if total_krw == 0:
+                                    for f in KRW_TOTAL_FIELDS:
+                                        v = o3.get(f)
+                                        if v:
+                                            try: total_krw = float(v); break
+                                            except: pass
 
-                            # [ ULTIMATE FALLBACK ]
+                            # [ SPECIAL CASE ] 환율 수동 계산 (KRW만 있고 USD가 0인 경우)
                             if div_code == "01" and cash_usd == 0 and total_krw > 0:
                                 cash_usd = (total_krw / 1400.0) 
-                            
-                            # [ SPECIAL CASE ] CTRP6504R
-                            if cash_usd == 0:
-                                url_p = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
-                                h_p = headers.copy()
-                                h_p["tr_id"] = "VTRP6504R" if use_mock else "CTRP6504R"
-                                res_p = requests.get(url_p, headers=h_p, params=params, timeout=10)
-                                if res_p.status_code == 200:
-                                    o2_p = res_p.json().get('output2')
-                                    if isinstance(o2_p, list) and len(o2_p) > 0: o2_p = o2_p[0]
-                                    if o2_p: cash_usd = float(o2_p.get('frcr_dnca_amt') or o2_p.get('frcr_dncl_amt_2') or cash_usd)
 
-                            if (total_eval_usd + cash_usd) > 0 or total_krw > 0:
-                                return {"krw": total_krw, "usd_total": total_eval_usd + cash_usd, "usd_cash": cash_usd}, d.get('output1', [])
+                            if (eval_usd + cash_usd) > 0 or total_krw > 0:
+                                return {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}, (o1 if isinstance(o1, list) else [])
+                except: continue
+            
+    return best_data, best_holdings
                 except: continue
             
     return best_data, best_holdings
