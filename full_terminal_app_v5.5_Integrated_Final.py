@@ -773,6 +773,27 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     tr_ids = ["TTTS3031R", "TTTS3061R", "TTTS3012R", "TTTS3011R"]
     if use_mock: tr_ids = ["VTTS3031R", "VTTS3061R", "VTTS3012R", "VTTS3011R"]
     
+    def robust_float(val):
+        try: return float(val) if val is not None and str(val).strip() != "" else 0
+        except: return 0
+
+    def find_in_obj(obj, fields):
+        if not obj: return 0
+        if isinstance(obj, list):
+            for item in obj:
+                res = find_in_obj(item, fields)
+                if res != 0: return res
+            return 0
+        if isinstance(obj, dict):
+            for f in fields:
+                val = robust_float(obj.get(f))
+                if val != 0: return val
+            for v in obj.values():
+                if isinstance(v, (dict, list)):
+                    res = find_in_obj(v, fields)
+                    if res != 0: return res
+        return 0
+
     for suffix in list(dict.fromkeys(suffixes)):
         if not suffix: continue
         for div_code in div_codes:
@@ -785,75 +806,27 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                     "Content-Type": "application/json", "authorization": f"Bearer {token}",
                     "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"
                 }
-                # 3031R은 NATN_CD와 TR_PACC_CD만 필요할 수 있음
                 params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": ""}
-                if not is_psbl: params["WCRC_FRCR_DVS_CD"] = div_code
+                if is_psbl: params["TR_CRCY_CD"] = "USD"
+                else: params["WCRC_FRCR_DVS_CD"] = div_code
                 
                 try:
                     res = requests.get(url, headers=headers, params=params, timeout=10)
                     if res.status_code == 200:
                         d = res.json()
-                        # [ DATA EXTRACTION ] 다양한 출력 구조 대응
-                        o1 = d.get('output') or d.get('output1')
-                        o2 = d.get('output2')
-                        o3 = d.get('output3')
                         
-                        # 리스트인 경우 첫 번째 항목 사용
-                        if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
-                        if isinstance(o1, list) and len(o1) > 0 and not is_psbl: pass # output1은 보통 홀딩스 리스트
+                        # [ SUPER ROBUST SEARCH ] 전체 응답에서 달러/KRW 필드 수색
+                        cash_usd = find_in_obj(d, USD_CASH_FIELDS)
+                        eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
+                        total_krw = find_in_obj(d, KRW_TOTAL_FIELDS)
                         
-                        # 3031R이나 다른 단일 객체 응답 처리
-                        target_obj = o2 if (o2 and isinstance(o2, dict)) else (o1 if isinstance(o1, dict) else {})
-                        
-                        if target_obj:
-                            cash_usd = 0
-                            for f in USD_CASH_FIELDS:
-                                val = target_obj.get(f)
-                                if val is not None and str(val).strip() != "":
-                                    try: 
-                                        cash_usd = float(val)
-                                        if cash_usd != 0: break
-                                    except: continue
-                            
-                            eval_usd = 0
-                            for f in USD_EVAL_FIELDS:
-                                val = target_obj.get(f)
-                                if val is not None and str(val).strip() != "":
-                                    try:
-                                        eval_usd = float(val)
-                                        if eval_usd != 0: break
-                                    except: continue
-                            
-                            total_krw = 0
-                            for f in KRW_TOTAL_FIELDS:
-                                val = target_obj.get(f)
-                                if val is not None and str(val).strip() != "":
-                                    try:
-                                        total_krw = float(val)
-                                        if total_krw != 0: break
-                                    except: continue
-                            
-                            # 추가 필드 (output3 등)
-                            if o3 and isinstance(o3, dict):
-                                if cash_usd == 0:
-                                    for f in USD_CASH_FIELDS:
-                                        v = o3.get(f)
-                                        if v: 
-                                            try: cash_usd = float(v); break
-                                            except: pass
-                                if total_krw == 0:
-                                    for f in KRW_TOTAL_FIELDS:
-                                        v = o3.get(f)
-                                        if v:
-                                            try: total_krw = float(v); break
-                                            except: pass
+                        # KRW만 있는 경우 환율Fallback (단, cash_usd가 0일 때만)
+                        if div_code == "01" and cash_usd == 0 and total_krw > 0:
+                            cash_usd = (total_krw / 1400.0) 
 
-                            # [ SPECIAL CASE ] 환율 수동 계산 (KRW만 있고 USD가 0인 경우)
-                            if div_code == "01" and cash_usd == 0 and total_krw > 0:
-                                cash_usd = (total_krw / 1400.0) 
-
-                            if (eval_usd + cash_usd) > 0 or total_krw > 0:
-                                return {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}, (o1 if isinstance(o1, list) else [])
+                        if (eval_usd + cash_usd) > 0 or total_krw > 0:
+                            o1 = d.get('output') or d.get('output1')
+                            return {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}, (o1 if isinstance(o1, list) else [])
                 except: continue
             
             # [ FALLBACK ] NATN_CD="000" 시도 (일부 통합계좌 대응)
@@ -865,12 +838,9 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                     res = requests.get(url, headers=headers, params=params, timeout=10)
                     if res.status_code == 200:
                         d = res.json()
-                        o2 = d.get('output2') or d.get('output')
-                        if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
-                        if o2 and isinstance(o2, dict):
-                            cash_usd = float(o2.get('frcr_ord_psbl_amt') or o2.get('frcr_dncl_amt_2') or 0)
-                            if cash_usd > 0:
-                                return {"krw": 0, "usd_total": cash_usd, "usd_cash": cash_usd}, []
+                        cash_usd = find_in_obj(d, USD_CASH_FIELDS)
+                        if cash_usd > 0:
+                            return {"krw": 0, "usd_total": cash_usd, "usd_cash": cash_usd}, []
                 except: continue
             
     return best_data, best_holdings
