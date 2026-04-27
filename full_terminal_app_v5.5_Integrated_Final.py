@@ -628,42 +628,57 @@ def get_kis_domestic_balance():
     return 0
 
 def get_kis_overseas_balance():
-    """해외 주식 실시간 잔고 조회 (01, 02번 계좌 통합 스캔)"""
+    """해외 주식 실시간 잔고 조회 (통합 스캐닝 엔진 v2.0)"""
     ak, as_, an, is_mock = get_user_kis_creds()
     token = get_kis_access_token()
     if not token or not an: return 0.0
     
     base_url = "https://openapivts.koreainvestment.com:29443" if is_mock else "https://openapi.koreainvestment.com:9443"
-    url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
     
-    total_usd = 0.0
-    # 해외 주식은 보통 01번 또는 02번 상품 코드를 사용하므로 둘 다 확인
-    for suffix in ["01", "02"]:
-        headers = {
+    # 전략 1: 실시간 잔고 조회 (CTRP6504R) - 많은 MTS 사용자들이 사용하는 경로
+    try:
+        url_real = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
+        headers_real = {
             "Content-Type": "application/json", "authorization": f"Bearer {token}",
-            "appkey": ak, "appsecret": as_, "tr_id": "VTTS3061R" if is_mock else "TTTS3061R"
+            "appkey": ak, "appsecret": as_, "tr_id": "CTRP6504R"
         }
-        params = {
-            "CANO": an[:8], "ACNT_PRDT_CD": suffix,
-            "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""
+        params_real = {
+            "CANO": an[:8], "ACNT_PRDT_CD": an[8:] if len(an)>8 else "01",
+            "WCRC_FRCR_DVSN_CD": "02", "NATN_CD": "840", "TR_P_DVSN_CD": "01"
         }
+        res = requests.get(url_real, headers=headers_real, params=params_real, timeout=5)
+        d = res.json()
+        if d.get('rt_cd') == '0':
+            o2 = d.get('output2', {})
+            # 가능한 모든 외화 필드 체크
+            for f in ['frcr_dncl_amt_2', 'frcr_evlu_amt2', 'frcr_pchs_amt', 'frcr_evlu_amt']:
+                val = float(o2.get(f, 0))
+                if val > 0: return val
+    except: pass
+
+    # 전략 2: 일반 해외 잔고 조회 (TTTS3061R) - 상품코드 01, 02 순회
+    for suffix in ["01", "02"]:
         try:
-            res = requests.get(url, headers=headers, params=params, timeout=7)
-            data = res.json()
-            if data.get('rt_cd') == '0':
-                output2 = data.get('output2', {})
-                if isinstance(output2, list) and len(output2) > 0: output2 = output2[0]
-                
-                # 여러 필드 중 값이 있는 것을 우선적으로 선택 (예수금, 평가금 등)
-                usd_val = float(output2.get('frcr_dncl_amt_2', 0)) # 외화예수금
-                if usd_val == 0: usd_val = float(output2.get('frcr_evlu_amt2', 0)) # 외화평가금액
-                
-                if usd_val > 0:
-                    total_usd = usd_val
-                    break # 값을 찾으면 중단
+            url_bal = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+            headers_bal = {
+                "Content-Type": "application/json", "authorization": f"Bearer {token}",
+                "appkey": ak, "appsecret": as_, "tr_id": "VTTS3061R" if is_mock else "TTTS3061R"
+            }
+            params_bal = {
+                "CANO": an[:8], "ACNT_PRDT_CD": suffix,
+                "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""
+            }
+            res = requests.get(url_bal, headers=headers_bal, params=params_bal, timeout=5)
+            d = res.json()
+            if d.get('rt_cd') == '0':
+                o2 = d.get('output2', {})
+                if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
+                for f in ['frcr_dncl_amt_2', 'frcr_evlu_amt2', 'frcr_pchs_amt', 'frcr_dncl_amt']:
+                    val = float(o2.get(f, 0))
+                    if val > 0: return val
         except: continue
         
-    return total_usd
+    return 0.0
 
 # --- [ UI ] CSS & Background (Lightweight High-Performance) ---
 st.markdown("""
@@ -1022,38 +1037,46 @@ with st.sidebar:
 
     # [ VIP ] KIS 실시간 통합 잔고 대시보드
     ak, _, an, is_mock = get_user_kis_creds()
-    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#FFD700; margin-top:10px;'>[ ASSET ] KIS 실시간 계좌 정보</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#FFD700; margin-top:10px;'>[ ASSET ] KIS 실시간 통합 잔고</p>", unsafe_allow_html=True)
     
     try:
         kr_bal = get_kis_domestic_balance()
         ov_bal = get_kis_overseas_balance()
+        rate, _ = get_macro_data() # 실시간 환율 페치
         
-        # 계좌 번호 마스킹 처리 (앞 4자리 + **** + 뒤 2자리)
+        # 통합증거금 기반 실질 매수 파워 계산
+        total_usd_power = ov_bal + (kr_bal / rate)
+        
         masked_an = f"{an[:4]}-****-{an[-2:]}" if len(an) >= 8 else an
         
         st.markdown(f"""
         <div class='glass-card' style='padding: 15px; border-left: 4px solid #FFD700; background: rgba(255,215,0,0.05);'>
             <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,215,0,0.2); padding-bottom: 8px;'>
-                <span style='color: #FFD700; font-size: 0.75rem; font-weight: 800;'>한국투자증권</span>
+                <span style='color: #FFD700; font-size: 0.75rem; font-weight: 800;'>한국투자증권 (통합증거금)</span>
                 <span style='color: #888; font-size: 0.7rem;'>{masked_an}</span>
             </div>
             <div style='margin-bottom: 10px;'>
-                <small style='color: #AAA;'>국내 예수금 (KRW)</small>
-                <h3 style='color: #FFF; margin: 0; font-size: 1.3rem;'>{kr_bal:,.0f} <span style='font-size:0.8rem;'>원</span></h3>
+                <small style='color: #AAA;'>보유 원화 (KRW)</small>
+                <h3 style='color: #FFF; margin: 0; font-size: 1.2rem;'>{kr_bal:,.0f} <span style='font-size:0.7rem;'>원</span></h3>
             </div>
-            <div>
-                <small style='color: #AAA;'>해외 예수금 (USD)</small>
-                <h3 style='color: #FFD700; margin: 0; font-size: 1.5rem;'>$ {ov_bal:,.2f}</h3>
+            <div style='margin-bottom: 15px;'>
+                <small style='color: #AAA;'>보유 외화 (USD Cash)</small>
+                <h3 style='color: #888; margin: 0; font-size: 1.1rem;'>$ {ov_bal:,.2f}</h3>
+            </div>
+            <div style='padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1);'>
+                <small style='color: #00FFFF; font-weight: 800;'>[ TOTAL POWER ] 미주 매수 가능액</small>
+                <h2 style='color: #00FFFF; margin: 0; font-size: 1.8rem;'>$ {total_usd_power:,.2f}</h2>
+                <p style='font-size: 0.65rem; color: #555; margin-top: 5px;'>* 실시간 환율 {rate:,.1f}원 기준 환산</p>
             </div>
             <div style='margin-top: 12px; display: flex; align-items: center; gap: 5px;'>
-                <span style='color: #00FF00; font-size: 0.65rem;'>● API 접속됨</span>
+                <span style='color: #00FF00; font-size: 0.65rem;'>● 전술 엔진 정상</span>
                 <span style='color: #555; font-size: 0.65rem;'>|</span>
-                <span style='color: {"#FF4B4B" if is_mock else "#00FFFF"}; font-size: 0.65rem;'>{"모의투자" if is_mock else "실전매매"}</span>
+                <span style='color: {"#FF4B4B" if is_mock else "#00FFFF"}; font-size: 0.65rem;'>{"모의" if is_mock else "실전"}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
     except Exception as e:
-        st.error(f"[ ERROR ] 계좌 엔진 연결 실패")
+        st.error(f"[ ERROR ] 계좌 데이터 연동 지연")
 
     # [ PRO ] 글로벌 마켓 세션 클락 (Sidebar Clock System)
     now_utc = datetime.utcnow()
