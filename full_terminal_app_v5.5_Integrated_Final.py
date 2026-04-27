@@ -1042,12 +1042,12 @@ with st.sidebar:
     try:
         kr_bal = get_kis_domestic_balance()
         ov_bal = get_kis_overseas_balance()
-        rate, _ = get_macro_data() # 실시간 환율 페치
+        rate, _ = get_macro_data() 
         
         # 통합증거금 기반 실질 매수 파워 계산
-        total_usd_power = ov_bal + (kr_bal / rate)
+        total_usd_power = ov_bal + (kr_bal / rate) if rate > 0 else ov_bal
         
-        masked_an = f"{an[:4]}-****-{an[-2:]}" if len(an) >= 8 else an
+        masked_an = f"{an[:4]}-****-{an[-2:]}" if len(an) >= 8 else "계좌 정보 없음"
         
         st.markdown(f"""
         <div class='glass-card' style='padding: 15px; border-left: 4px solid #FFD700; background: rgba(255,215,0,0.05);'>
@@ -1076,7 +1076,7 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
     except Exception as e:
-        st.error(f"[ ERROR ] 계좌 데이터 연동 지연")
+        st.info("💡 KIS 계좌 데이터를 불러오는 중입니다... (잠시만 기다려 주세요)")
 
     # [ PRO ] 글로벌 마켓 세션 클락 (Sidebar Clock System)
     now_utc = datetime.utcnow()
