@@ -638,7 +638,8 @@ def get_kis_access_token(app_key, app_secret, mock=None):
         return st.session_state.get("last_valid_token")
 
 
-    base_url = "https://openapivts.koreainvestment.com:29443" if mock else "https://openapi.koreainvestment.com:9443"
+    use_mock = mock if mock is not None else get_kis_mock_status()
+    base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/oauth2/tokenP"
     headers = {"content-type": "application/json"}
     body = {"grant_type": "client_credentials", "appkey": app_key, "appsecret": app_secret}
@@ -1712,21 +1713,20 @@ with st.sidebar:
     curr_grade = users.get(st.session_state.current_user, {}).get("grade", "회원")
     is_admin = curr_grade in ["관리자", "방장"]
 
+    # [ QUICK TEST BUY ]
+    st.sidebar.divider()
+    st.sidebar.subheader("🚀 QUICK TEST BUY")
+    c_t1, c_t2 = st.sidebar.columns([3, 1])
+    with c_t1: test_ticker = st.sidebar.text_input("Ticker", value="005930", key="test_buy_ticker", label_visibility="collapsed")
+    with c_t2: test_qty = st.sidebar.number_input("Qty", value=1, min_value=1, key="test_buy_qty", label_visibility="collapsed")
+    if st.sidebar.button("BUY 1 SHARE NOW", use_container_width=True):
+         if execute_kis_market_order(test_ticker, int(test_qty), is_buy=True):
+             st.sidebar.success(f"✅ Order sent for {test_ticker}")
+         else:
+             st.sidebar.error(f"❌ Order failed for {test_ticker}")
+
     # [ SECURITY ] 계좌 컨트롤 섹션은 사령부 관리자(관리자, 방장)만 접근 가능하도록 수정
     if is_admin:
-        # [ QUICK TEST BUY ]
-        st.sidebar.divider()
-        st.sidebar.subheader("🚀 QUICK TEST BUY")
-        c_t1, c_t2 = st.sidebar.columns([3, 1])
-        with c_t1: test_ticker = st.text_input("Ticker", value="005930", key="test_buy_ticker", label_visibility="collapsed")
-        with c_t2: test_qty = st.number_input("Qty", value=1, min_value=1, key="test_buy_qty", label_visibility="collapsed")
-        if st.sidebar.button("BUY 1 SHARE NOW", use_container_width=True):
-             if execute_kis_market_order(test_ticker, int(test_qty), is_buy=True):
-                 st.sidebar.success(f"✅ Order sent for {test_ticker}")
-             else:
-                 st.sidebar.error(f"❌ Order failed for {test_ticker}")
-        
-        st.sidebar.divider()
         st.sidebar.markdown("### ⚙️ ACCOUNT CONTROL (ADMIN ONLY)")
         
         # [ NEW ] 계좌 데이터 탭 주입
@@ -2783,11 +2783,9 @@ elif page.startswith("7-c."):
                 target_universe = get_bonde_top_50() + get_nasdaq_200()
                 
                 # 현재 보유 종목 리스트 및 슬롯 확인
-                u_ak = st.session_state.get("u_ak", KIS_APP_KEY)
-                u_as = st.session_state.get("u_as", KIS_APP_SECRET)
-                u_an = st.session_state.get("u_an", KIS_ACCOUNT_NO)
-                is_live = st.session_state.get("u_is_live", False)
-                current_mock = not is_live
+                # [ FIX ] 현재 세션 설정 및 개인화 키 로드
+                u_ak, u_as, u_an = get_user_kis_creds()
+                current_mock = get_kis_mock_status()
                 
                 _, _, kr_holdings = get_kis_balance(token, mock=current_mock, acc_no=u_an)
                 over_data, us_holdings = get_kis_overseas_balance(token, mock=current_mock, acc_no=u_an)
@@ -2994,7 +2992,9 @@ elif page.startswith("7-j."):
         if st.button("⚡ 즉시 CMO 교전 실행"):
 
             with st.status("⚔️ CMO 전술 사이클 가동...", expanded=True) as status:
-                token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
+                ak, as_, an = get_user_kis_creds()
+                use_mock = get_kis_mock_status()
+                token = get_kis_access_token(ak, as_, use_mock)
                 
                 # 1. 공통 리스크 관리 (-3% 손절 등)
                 st.write("🛡️ 전술적 리스크 관리(Stop-Loss) 점검...")
@@ -3005,7 +3005,7 @@ elif page.startswith("7-j."):
                     st.write(f"🔍 {ticker} 분석 중...")
                     # 실제 OHLCV 데이터 획득 (국내/해외 구분)
                     is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
-                    df = get_kis_ohlcv(ticker, token) if is_kr else get_kis_overseas_ohlcv(ticker, token)
+                    df = get_kis_ohlcv(ticker, token, mock=use_mock) if is_kr else get_kis_overseas_ohlcv(ticker, token, mock=use_mock)
                     
                     if not df.empty and len(df) >= 20:
                         df = calculate_cmo(df, period=20)
@@ -3027,8 +3027,10 @@ elif page.startswith("7-j."):
         # [ VISUALIZATION ] CMO 전술 차트 (마지막 종목 기준)
         if "cmo_tickers" in locals() and cmo_tickers:
             t = cmo_tickers[0]
-            token = get_kis_access_token(KIS_APP_KEY, KIS_APP_SECRET, KIS_MOCK_TRADING)
-            df = get_kis_ohlcv(t, token) if t.endswith(".KS") or t.endswith(".KQ") else get_kis_overseas_ohlcv(t, token)
+            ak, as_, an = get_user_kis_creds()
+            use_mock = get_kis_mock_status()
+            token = get_kis_access_token(ak, as_, use_mock)
+            df = get_kis_ohlcv(t, token, mock=use_mock) if t.endswith(".KS") or t.endswith(".KQ") else get_kis_overseas_ohlcv(t, token, mock=use_mock)
             if not df.empty and len(df) >= 20:
                 df = calculate_cmo(df)
                 fig = go.Figure()
