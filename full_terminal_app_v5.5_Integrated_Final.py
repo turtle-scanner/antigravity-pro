@@ -770,8 +770,8 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     KRW_TOTAL_FIELDS = ['tot_evlu_pamt', 'tot_asst_amt', 'evlu_amt_smtot_pamt', 'wdrw_psbl_tot_amt']
 
     div_codes = ["02", "01"]
-    tr_ids = ["TTTS3031R", "TTTS3061R", "TTTS3012R", "TTTS3011R"]
-    if use_mock: tr_ids = ["VTTS3031R", "VTTS3061R", "VTTS3012R", "VTTS3011R"]
+    tr_ids = ["TTTS3031R", "TTTS3061R", "TTTS3012R", "TTTS3011R", "TTTC8434R"]
+    if use_mock: tr_ids = ["VTTS3031R", "VTTS3061R", "VTTS3012R", "VTTS3011R", "VTTC8434R"]
     
     def robust_float(val):
         try: return float(val) if val is not None and str(val).strip() != "" else 0
@@ -1727,15 +1727,21 @@ with st.sidebar:
         # [ NEW ] 계좌 데이터 탭 주입
         selected_acc = st.sidebar.selectbox(
             "교전 계좌 선택", 
-            list(ACC_PRESETS.keys()), 
+            list(ACC_PRESETS.keys()) + ["직접 입력"], 
             index=list(ACC_PRESETS.keys()).index(st.session_state.get("selected_acc_name", "위탁(종합)")),
             key="selected_acc_name"
         )
-        # 계좌 변경 시 전역 변수 변경 및 즉시 업데이트 효과를 위해 세션 상태 강제 반영
-        KIS_ACCOUNT_NO = ACC_PRESETS[selected_acc]
+        
+        if selected_acc == "직접 입력":
+            u_an_manual = st.sidebar.text_input("계좌번호 (10자리)", value=st.session_state.get("u_an_manual", "4654671301"))
+            st.session_state.u_an_manual = u_an_manual
+            KIS_ACCOUNT_NO = u_an_manual
+        else:
+            KIS_ACCOUNT_NO = ACC_PRESETS[selected_acc]
         
         # [ NEW ] 개인화된 키 로드
         u_ak, u_as, u_an = get_user_kis_creds()
+        if selected_acc == "직접 입력": u_an = u_an_manual
         
         is_live = st.sidebar.toggle("🚨 실전 매매 모드 (LIVE)", value=st.session_state.get("is_live_mode", not KIS_MOCK_TRADING), key="is_live_mode")
         st.session_state.kis_mock_mode = not is_live
@@ -1801,6 +1807,11 @@ with st.sidebar:
                 get_kis_access_token.clear()
                 get_kis_balance.clear()
                 get_kis_overseas_balance.clear()
+                st.rerun()
+
+            if st.sidebar.button("☢️ NUCLEAR REFRESH", use_container_width=True, type="primary"):
+                st.session_state.clear()
+                st.cache_data.clear()
                 st.rerun()
         except Exception as e:
             st.sidebar.error(f"❌ AUTH/API ERROR: {str(e)}")
