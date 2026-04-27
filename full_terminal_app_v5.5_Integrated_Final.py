@@ -738,7 +738,7 @@ def get_kis_balance(token, mock=None, acc_no=None):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
-    """해외 주식 잔고 현황 조회 (원화/외화 이중 수색 및 자산 역산)"""
+    """해외 주식 잔고 현황 조회 (TTTS3031R 주문가능액 조회 및 output3 강화)"""
     ak, as_, an = get_user_kis_creds()
     target_acc = acc_no if acc_no else an
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
@@ -749,16 +749,20 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     best_data = {"krw": 0, "usd_total": 0, "usd_cash": 0}
     best_holdings = []
     
-    # [ STRATEGY ] 02(외화) 뿐만 아니라 01(원화) 조회를 통해 통합증거금 내의 달러 가치를 추적
     div_codes = ["02", "01"]
-    tr_ids = ["TTTS3061R", "TTTS3012R", "TTTS3011R"]
-    if use_mock: tr_ids = ["VTTS3061R", "VTTS3012R", "VTTS3011R"]
+    # [ MULTI-TR ] 잔고(3061R), 상세(3012R), 체결(3011R), 주문가능액(3031R) 전수 조사
+    tr_ids = ["TTTS3061R", "TTTS3012R", "TTTS3011R", "TTTS3031R"]
+    if use_mock: tr_ids = ["VTTS3061R", "VTTS3012R", "VTTS3011R", "VTTS3031R"]
     
     for suffix in list(dict.fromkeys(suffixes)):
         if not suffix: continue
         for div_code in div_codes:
             for tr_id in tr_ids:
-                url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+                # 주문가능액 조회(3031R)는 URL이 다를 수 있음
+                is_psbl = "3031R" in tr_id
+                url_path = "/uapi/overseas-stock/v1/trading/inquire-psbl-order" if is_psbl else "/uapi/overseas-stock/v1/trading/inquire-balance"
+                url = f"{base_url}{url_path}"
+                
                 headers = {
                     "Content-Type": "application/json", "authorization": f"Bearer {token}",
                     "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"
@@ -769,25 +773,30 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                     res = requests.get(url, headers=headers, params=params, timeout=10)
                     if res.status_code == 200:
                         d = res.json()
-                        o2 = d.get('output2')
+                        o1, o2, o3 = d.get('output', d.get('output1')), d.get('output2'), d.get('output3')
                         if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
+                        if not o2 and isinstance(o1, dict) and is_psbl: o2 = o1 # 3031R은 output에 정보가 있는 경우가 많음
                         
                         if o2 and isinstance(o2, dict):
-                            # [ 현금 수색 ] 가능한 모든 필드 전수 조사
+                            # [ 현금 필드 매핑 ]
                             cash_usd = float(
                                 o2.get('frcr_dncl_amt_2') or o2.get('frcr_dnca_amt') or 
                                 o2.get('frcr_drwg_psbl_amt_1') or o2.get('frcr_dnca_amt_2') or 
-                                o2.get('frcr_dncl_amt_1') or 0
+                                o2.get('frcr_ord_psbl_amt') or o2.get('frcr_dncl_amt_1') or 0
                             )
                             total_eval_usd = float(o2.get('frcr_evlu_amt2') or o2.get('tot_evlu_pamt') or 0)
                             total_krw = float(o2.get('tot_evlu_pamt') or o2.get('tot_asst_amt') or 0)
                             
-                            # [ ULTIMATE FALLBACK ] 달러가 0인데 총 자산(원화)이 잡힐 경우 환율로 역산
+                            # [ output3 추가 필드 ]
+                            if o3 and isinstance(o3, dict):
+                                if total_krw == 0: total_krw = float(o3.get('evlu_amt_smtot_pamt') or o3.get('wdrw_psbl_tot_amt') or 0)
+                                if cash_usd == 0: cash_usd = float(o3.get('frcr_evlu_amt2') or 0)
+
+                            # [ ULTIMATE FALLBACK ]
                             if div_code == "01" and cash_usd == 0 and total_krw > 0:
-                                # 국내 잔고(r_total)를 제외한 나머지를 해외 달러로 간주
                                 cash_usd = (total_krw / 1400.0) 
                             
-                            # [ SPECIAL CASE ] 전용 예수금 조회 (CTRP6504R)
+                            # [ SPECIAL CASE ] CTRP6504R
                             if cash_usd == 0:
                                 url_p = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
                                 h_p = headers.copy()
@@ -803,6 +812,7 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                 except: continue
             
     return best_data, best_holdings
+
 
 
 
