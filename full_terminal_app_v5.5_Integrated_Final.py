@@ -1798,57 +1798,56 @@ with st.sidebar:
 
     pass
 
-            # [ SIDEBAR BALANCE INFO ]
-            try:
-                # [ FIX ] 실전 모드 스위치(is_live) 값을 직접 사용하여 모드 혼동 방지
-                current_mock = not is_live
-                token = get_kis_access_token(u_ak, u_as, current_mock)
+    # [ SIDEBAR BALANCE INFO ]
+    try:
+        current_mock = not is_live
+        token = get_kis_access_token(u_ak, u_as, current_mock)
 
-                # 독립적 호출 에러 격리
-                r_total, r_cash = 0, 0
-                try: r_total, r_cash, _ = get_kis_balance(token, mock=current_mock)
-                except:    pass
-                
-                o_total_krw, o_total_usd, o_cash_usd = 0, 0, 0
-                try:
-                    over_data, _ = get_kis_overseas_balance(token, mock=current_mock)
-                    o_total_krw = over_data.get("krw", 0)
-                    o_total_usd = over_data.get("usd_total", 0)
-                    o_cash_usd = over_data.get("usd_cash", 0)
-                except:    pass
-                
-                full_b = r_total + o_total_krw
-                st.session_state.last_total_equity = full_b
-                
-                st.sidebar.markdown(f"""
-                    <div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:5px; border:1px solid #FFD70033;'>
-                        <p style='margin:0; font-size:0.7rem; color:#AAA;'>COMMANDER EQUITY ({'LIVE' if is_live else 'MOCK'})</p>
-                        <b style='color:#FFD700; font-size:1.1rem;'>{full_b:,.0f} KRW</b><br>
-                        <div style='margin-top:5px; border-top:1px solid rgba(255,255,255,0.05); padding-top:5px;'>
-                            <small style='color:#CCC;'>KR: {r_total:,.0f} 원</small><br>
-                            <small style='color:var(--neon-blue);'>US: ${o_total_usd:,.2f}</small> 
-                            <small style='color:#666;'>(Cash: ${o_cash_usd:,.2f})</small>
-                        </div>
-                    </div>
-                    <div style='text-align:right; margin-top:2px;'>
-                        <span style='font-size:0.6rem; color:#555;'>Dragonfly v5.5-Integrated (Tactical v5.0)</span>
-                    </div>
-                """, unsafe_allow_html=True)
-                if st.sidebar.button("🔄 잔고 동기화(Refresh)", use_container_width=True):
-                    st.session_state.last_token_req_time = 0
-                    st.session_state.last_valid_token = None
-                    get_kis_access_token.clear()
-                    get_kis_balance.clear()
-                    get_kis_overseas_balance.clear()
-                    st.cache_data.clear()
-                    st.rerun()
+        r_total, r_cash = 0, 0
+        try: r_total, r_cash, _ = get_kis_balance(token, mock=current_mock)
+        except: pass
+        
+        o_total_krw, o_total_usd, o_cash_usd = 0, 0, 0
+        try:
+            over_data, _ = get_kis_overseas_balance(token, mock=current_mock)
+            o_total_krw = over_data.get("krw", 0)
+            o_total_usd = over_data.get("usd_total", 0)
+            o_cash_usd = over_data.get("usd_cash", 0)
+        except: pass
+        
+        full_b = r_total + o_total_krw
+        st.session_state.last_total_equity = full_b
+        
+        st.sidebar.markdown(f"""
+            <div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:5px; border:1px solid #FFD70033;'>
+                <p style='margin:0; font-size:0.7rem; color:#AAA;'>COMMANDER EQUITY ({'LIVE' if is_live else 'MOCK'})</p>
+                <b style='color:#FFD700; font-size:1.1rem;'>{full_b:,.0f} KRW</b><br>
+                <div style='margin-top:5px; border-top:1px solid rgba(255,255,255,0.05); padding-top:5px;'>
+                    <small style='color:#CCC;'>KR: {r_total:,.0f} 원</small><br>
+                    <small style='color:var(--neon-blue);'>US: ${o_total_usd:,.2f}</small> 
+                    <small style='color:#666;'>(Cash: ${o_cash_usd:,.2f})</small>
+                </div>
+            </div>
+            <div style='text-align:right; margin-top:2px;'>
+                <span style='font-size:0.6rem; color:#555;'>Dragonfly v5.5-Integrated (Tactical v5.0)</span>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        if st.sidebar.button("🔄 잔고 동기화(Refresh)", use_container_width=True):
+            st.session_state.last_token_req_time = 0
+            st.session_state.last_valid_token = None
+            get_kis_access_token.clear()
+            get_kis_balance.clear()
+            get_kis_overseas_balance.clear()
+            st.cache_data.clear()
+            st.rerun()
 
-                if st.sidebar.button("☢️ NUCLEAR REFRESH", use_container_width=True, type="primary"):
-                    st.session_state.clear()
-                    st.cache_data.clear()
-                    st.rerun()
-            except Exception as e:
-                st.sidebar.error(f"❌ AUTH/API ERROR: {str(e)}")
+        if st.sidebar.button("☢️ NUCLEAR REFRESH", use_container_width=True, type="primary"):
+            st.session_state.clear()
+            st.cache_data.clear()
+            st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"❌ BALANCE ERROR: {str(e)}")
     pass
 
 
