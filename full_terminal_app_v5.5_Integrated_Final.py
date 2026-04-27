@@ -630,16 +630,6 @@ def send_telegram_msg(msg):
         requests.get(url, params=params, timeout=15)
     except:    pass
 
-def get_user_kis_creds():
-    """Secrets 또는 로컬 설정에서 KIS 인증 정보를 안전하게 로드"""
-    try:
-        ak = st.secrets.get("KIS_APP_KEY", "")
-        as_ = st.secrets.get("KIS_APP_SECRET", "")
-        an = st.secrets.get("KIS_ACCOUNT_NO", "4654671301")
-        return ak, as_, an
-    except:
-        return "", "", "4654671301"
-
 @st.cache_data(ttl=3500, show_spinner=False)
 def get_kis_access_token(app_key, app_secret, mock=None):
     """한국투자증권 API 접근 토큰 발급 (1분 제한 방어 로직 포함)"""
@@ -1774,9 +1764,9 @@ with st.sidebar:
         if selected_acc == "직접 입력":
             u_an_manual = st.sidebar.text_input("계좌번호 (10자리)", value=st.session_state.get("u_an_manual", "4654671301"))
             st.session_state.u_an_manual = u_an_manual
-            KIS_ACCOUNT_NO = u_an_manual
+            u_an = u_an_manual
         else:
-            KIS_ACCOUNT_NO = ACC_PRESETS[selected_acc]
+            u_an = ACC_PRESETS[selected_acc]
         
         # [ NEW ] 개인화된 키 로드
         u_ak, u_as, u_an = get_user_kis_creds()
@@ -1784,7 +1774,7 @@ with st.sidebar:
         
         is_live = st.sidebar.toggle("🚨 실전 매매 모드 (LIVE)", value=st.session_state.get("is_live_mode", not KIS_MOCK_TRADING), key="is_live_mode")
         st.session_state.kis_mock_mode = not is_live
-        st.sidebar.caption(f"📡 연결 키: {u_ak[:5]}*** (개인설정 {'적용됨' if 'kis_credentials' in users.get(st.session_state.current_user, {}) else '기본값'})")
+        st.sidebar.caption(f"📡 연결 키: {u_ak[:5]}***")
         st.sidebar.caption(f"💳 계좌번호: {u_an[:8]}-** (현재 {'실전' if is_live else '모의'})")
         
         # [ DEBUG ] 현재 접속 모드 명시적 표시
@@ -1806,24 +1796,24 @@ with st.sidebar:
                 else:
                     st.warning("No USD data found in recent requests. Try Refreshing first.")
 
-    pass
-
     # [ SIDEBAR BALANCE INFO ]
     try:
+        # [ FIX ] 실전 모드 스위치(is_live) 값을 직접 사용하여 모드 혼동 방지
         current_mock = not is_live
         token = get_kis_access_token(u_ak, u_as, current_mock)
 
+        # 독립적 호출 에러 격리
         r_total, r_cash = 0, 0
-        try: r_total, r_cash, _ = get_kis_balance(token, mock=current_mock)
-        except: pass
+        try: r_total, r_cash, _ = get_kis_balance(token, mock=current_mock, acc_no=u_an)
+        except:    pass
         
         o_total_krw, o_total_usd, o_cash_usd = 0, 0, 0
         try:
-            over_data, _ = get_kis_overseas_balance(token, mock=current_mock)
+            over_data, _ = get_kis_overseas_balance(token, mock=current_mock, acc_no=u_an)
             o_total_krw = over_data.get("krw", 0)
             o_total_usd = over_data.get("usd_total", 0)
             o_cash_usd = over_data.get("usd_cash", 0)
-        except: pass
+        except:    pass
         
         full_b = r_total + o_total_krw
         st.session_state.last_total_equity = full_b
@@ -1842,7 +1832,6 @@ with st.sidebar:
                 <span style='font-size:0.6rem; color:#555;'>Dragonfly v5.5-Integrated (Tactical v5.0)</span>
             </div>
         """, unsafe_allow_html=True)
-        
         if st.sidebar.button("🔄 잔고 동기화(Refresh)", use_container_width=True):
             st.session_state.last_token_req_time = 0
             st.session_state.last_valid_token = None
@@ -1858,7 +1847,19 @@ with st.sidebar:
             st.rerun()
     except Exception as e:
         st.sidebar.error(f"❌ BALANCE ERROR: {str(e)}")
-    pass
+
+    st.sidebar.divider()
+    
+    for zone, missions in ZONE_CONFIG.items():
+        # [ SECURITY ] 구역별 접근 권한 필터링
+        if "ADMIN" in str(missions) and not is_admin: continue
+        if "AUTO" in zone and curr_grade not in ["방장", "관리자", "정회원", "준회원"]: continue
+        
+        with st.expander(zone, expanded=(st.session_state.get("page") in missions)):
+            for m in missions:
+                if st.button(m, key=f"nav_{m}", use_container_width=True):
+                    st.session_state.page = m
+                    st.rerun()
 
 
     st.sidebar.divider()
