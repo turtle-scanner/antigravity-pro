@@ -734,7 +734,7 @@ def get_kis_balance(token, mock=None, acc_no=None):
                     o2 = o2[0]
                 
                 if o2 and isinstance(o2, dict):
-                    # [ FIX ] 단순 예수금이 아닌 '주문가능금액'을 우선적으로 가져옴 (사용자 80만원 일치화)
+                    # [ FIX ] 단순 예수금이 아닌 '주문가능금액'을 우선적으로 가져옴
                     cash = float(o2.get('ord_psbl_cash') or o2.get('prvs_rcdl_exca_amt') or o2.get('dnca_tot_amt') or 0)
                     total_eval = float(o2.get('tot_evlu_amt') or o2.get('nass_amt') or cash)
                     holdings = data.get('output1', [])
@@ -749,32 +749,27 @@ def get_kis_balance(token, mock=None, acc_no=None):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
-    """해외 주식 잔고 현황 조회 (TTTS3031R 주문가능액 조회 및 output3 강화)"""
+    """해외 주식 잔고 및 달러 현금 현황 조회 (통합계좌 및 다양한 TR 대응 강화)"""
     ak, as_, an = get_user_kis_creds()
     target_acc = acc_no if acc_no else an
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
+    
     use_mock = mock if mock is not None else get_kis_mock_status()
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
-    
-    suffixes = ["01", "02", target_acc[8:]] + ["03", "04", "05", "06"]
-    best_data = {"krw": 0, "usd_total": 0, "usd_cash": 0}
-    best_holdings = []
     
     # [ TACTICAL ] 지원되는 모든 달러 현금 필드 매핑 (주문가능달러, 예수금, 외화예수금 등)
     USD_CASH_FIELDS = [
         'frcr_ord_psbl_amt', 'frcr_dncl_amt_2', 'frcr_dnca_amt', 'frcr_drwg_psbl_amt_1', 
         'frcr_dnca_amt_2', 'psbl_frcr_amt', 'ovrs_ord_psbl_amt', 'frcr_evlu_amt2',
-        'frcr_ord_psbl_amt1', 'ovrs_prec_amt'
+        'frcr_ord_psbl_amt1', 'ovrs_prec_amt', 'frcr_dncl_amt'
     ]
-    USD_EVAL_FIELDS = ['frcr_evlu_amt2', 'ovrs_tot_evlu_amt', 'tot_evlu_pamt_2']
-    KRW_TOTAL_FIELDS = ['tot_evlu_pamt', 'tot_asst_amt', 'evlu_amt_smtot_pamt', 'wdrw_psbl_tot_amt']
+    USD_EVAL_FIELDS = ['frcr_evlu_amt2', 'ovrs_tot_evlu_amt', 'tot_evlu_pamt_2', 'evlu_amt_smtot']
+    KRW_TOTAL_FIELDS = ['tot_evlu_pamt', 'tot_asst_amt', 'evlu_amt_smtot_pamt', 'wdrw_psbl_tot_amt', 'tot_evlu_amt']
 
-    div_codes = ["02", "01"]
-    tr_ids = ["TTTS3031R", "TTTS3061R", "TTTS3012R", "TTTS3011R", "TTTC8434R"]
-    if use_mock: tr_ids = ["VTTS3031R", "VTTS3061R", "VTTS3012R", "VTTS3011R", "VTTC8434R"]
-    
     def robust_float(val):
-        try: return float(val) if val is not None and str(val).strip() != "" else 0
+        try:
+            if val is None or str(val).strip() == "": return 0
+            return float(str(val).replace(',', ''))
         except: return 0
 
     def find_in_obj(obj, fields):
@@ -794,78 +789,83 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                     if res != 0: return res
         return 0
 
-    exchanges = ["NASD", "NYSE", "AMEX"]
+    best_data = {"krw": 0, "usd_total": 0, "usd_cash": 0}
+    best_holdings = []
     
-    for suffix in list(dict.fromkeys(suffixes)):
-        if not suffix: continue
-        for div_code in div_codes:
-            for tr_id in tr_ids:
+    suffixes = ["01", "02", target_acc[8:]] + ["03", "04", "05", "06"]
+    suffixes = list(dict.fromkeys([s for s in suffixes if s]))
+    
+    # 1. 일반 해외 잔고 및 주문가능액 조회
+    tr_ids = ["TTTS3031R", "TTTS3061R", "TTTS3012R", "TTTS3011R"]
+    if use_mock: tr_ids = ["V" + t[1:] for t in tr_ids]
+    
+    exchanges = ["NASD", "NYSE", "AMEX", "NAS", "NYS", "AMS"]
+    
+    for suffix in suffixes:
+        for tr_id in tr_ids:
+            is_psbl = "3031R" in tr_id or "3011R" in tr_id
+            url_path = "/uapi/overseas-stock/v1/trading/inquire-psbl-order" if is_psbl else "/uapi/overseas-stock/v1/trading/inquire-balance"
+            url = f"{base_url}{url_path}"
+            
+            target_exchanges = exchanges if is_psbl else [None]
+            
+            for excg in target_exchanges:
+                headers = {
+                    "Content-Type": "application/json", "authorization": f"Bearer {token}",
+                    "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"
+                }
+                params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": ""}
+                if is_psbl: 
+                    params["TR_CRCY_CD"] = "USD"
+                    if excg: params["OVRS_EXCG_CD"] = excg
+                else: 
+                    params["WCRC_FRCR_DVS_CD"] = "02"
+                
+                try:
+                    res = requests.get(url, headers=headers, params=params, timeout=10)
+                    if res.status_code == 200:
+                        d = res.json()
+                        if d.get('rt_cd') != '0': continue
+                            
+                        cash_usd = find_in_obj(d, USD_CASH_FIELDS)
+                        eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
+                        total_krw = find_in_obj(d, KRW_TOTAL_FIELDS)
+                        
+                        if cash_usd > 0 or eval_usd > 0:
+                            st.session_state[f"debug_kis_{tr_id}_{excg}"] = d
+                            
+                        if (eval_usd + cash_usd) > best_data["usd_total"] or cash_usd > best_data["usd_cash"]:
+                            o1 = d.get('output') or d.get('output1')
+                            best_data = {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}
+                            best_holdings = (o1 if isinstance(o1, list) else [])
+                            
+                            if cash_usd > 10.0 and len(best_holdings) > 0:
+                                return best_data, best_holdings
+                except: continue
+
+    # 2. [ FALLBACK ] 통합증거금 계좌 대응 (NATN_CD="000")
+    if best_data["usd_total"] == 0:
+        for suffix in suffixes:
+            for tr_id in ["TTTS3031R", "TTTS3061R"]:
+                if use_mock: tr_id = "V" + tr_id[1:]
                 is_psbl = "3031R" in tr_id
                 url_path = "/uapi/overseas-stock/v1/trading/inquire-psbl-order" if is_psbl else "/uapi/overseas-stock/v1/trading/inquire-balance"
                 url = f"{base_url}{url_path}"
                 
-                # 3031R은 거래소별로 결과가 다를 수 있음
-                target_exchanges = exchanges if is_psbl else [None]
-                
-                for excg in target_exchanges:
-                    headers = {
-                        "Content-Type": "application/json", "authorization": f"Bearer {token}",
-                        "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"
-                    }
-                    params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": ""}
-                    if is_psbl: 
-                        params["TR_CRCY_CD"] = "USD"
-                        if excg: params["OVRS_EXCG_CD"] = excg
-                    else: 
-                        params["WCRC_FRCR_DVS_CD"] = div_code
-                    
-                    try:
-                        res = requests.get(url, headers=headers, params=params, timeout=10)
-                        if res.status_code == 200:
-                            d = res.json()
-                            
-                            # [ SUPER ROBUST SEARCH ] 전체 응답에서 달러/KRW 필드 수색
-                            cash_usd = find_in_obj(d, USD_CASH_FIELDS)
-                            eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
-                            total_krw = find_in_obj(d, KRW_TOTAL_FIELDS)
-                            
-                            # [ DEBUG LOGGING ] 세션 상태에 저장 (진단용)
-                            if cash_usd > 0:
-                                st.session_state[f"debug_kis_{tr_id}_{excg}"] = d
-
-                            # KRW만 있는 경우 환율Fallback (단, cash_usd가 0일 때만)
-                            if div_code == "01" and cash_usd == 0 and total_krw > 0:
-                                cash_usd = (total_krw / 1400.0) 
-
-                            if (eval_usd + cash_usd) > 0 or total_krw > 0:
-                                # [ FIX ] 무조건 리턴하지 않고, 달러 잔고가 있는 결과를 우선적으로 수집
-                                if cash_usd >= best_data["usd_cash"]:
-                                    o1 = d.get('output') or d.get('output1')
-                                    best_data = {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}
-                                    best_holdings = (o1 if isinstance(o1, list) else [])
-                                    
-                                    # 달러 잔고가 충분히(1달러 이상) 발견되면 즉시 리턴 (최적 결과)
-                                    if cash_usd > 1.0:
-                                        return best_data, best_holdings
-                    except: continue
-            
-            # [ FALLBACK ] NATN_CD="000" 시도 (일부 통합계좌 대응)
-            for tr_id in ["TTTS3031R", "TTTS3061R"]:
-                if use_mock: tr_id = "V" + tr_id[1:]
                 headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"}
                 params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "000", "TR_PACC_CD": ""}
+                if is_psbl: params["TR_CRCY_CD"] = "USD"
+                
                 try:
                     res = requests.get(url, headers=headers, params=params, timeout=10)
                     if res.status_code == 200:
                         d = res.json()
                         cash_usd = find_in_obj(d, USD_CASH_FIELDS)
-                        if cash_usd > 0:
-                            return {"krw": 0, "usd_total": cash_usd, "usd_cash": cash_usd}, []
+                        eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
+                        if cash_usd > 0 or eval_usd > 0:
+                            return {"krw": find_in_obj(d, KRW_TOTAL_FIELDS), "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}, (d.get('output1', []) if isinstance(d.get('output1'), list) else [])
                 except: continue
-            
-    return best_data, best_holdings
-                except: continue
-            
+    
     return best_data, best_holdings
 
 
