@@ -828,8 +828,22 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                         res = requests.get(url, headers=headers, params=params, timeout=10)
                         if res.status_code == 200:
                             d = res.json()
-                            # [ DIAGNOSTIC ] 모든 응답 기록
+                            # [ DIAGNOSTIC ] 모든 응답 기록 및 숫자 필드 스캔
                             st.session_state[f"last_raw_{tr_id}"] = d
+                            
+                            # 응답 내의 모든 숫자형 필드를 별도로 수집 (MTS 금액 매칭용)
+                            found_metrics = {}
+                            def scan_metrics(obj):
+                                if isinstance(obj, dict):
+                                    for k, v in obj.items():
+                                        f_val = robust_float(v)
+                                        if f_val != 0: found_metrics[k] = f_val
+                                        scan_metrics(v)
+                                elif isinstance(obj, list):
+                                    for item in obj: scan_metrics(item)
+                            scan_metrics(d)
+                            st.session_state[f"metrics_{tr_id}"] = found_metrics
+
                             if d.get('rt_cd') != '0':
                                 st.session_state[f"last_error_{tr_id}"] = d.get('msg1')
                                 continue
