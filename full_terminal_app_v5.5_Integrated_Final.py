@@ -628,30 +628,42 @@ def get_kis_domestic_balance():
     return 0
 
 def get_kis_overseas_balance():
-    """해외 주식 실시간 잔고 조회 (USD)"""
+    """해외 주식 실시간 잔고 조회 (01, 02번 계좌 통합 스캔)"""
     ak, as_, an, is_mock = get_user_kis_creds()
     token = get_kis_access_token()
     if not token or not an: return 0.0
     
     base_url = "https://openapivts.koreainvestment.com:29443" if is_mock else "https://openapi.koreainvestment.com:9443"
     url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
-    headers = {
-        "Content-Type": "application/json", "authorization": f"Bearer {token}",
-        "appkey": ak, "appsecret": as_, "tr_id": "VTTS3061R" if is_mock else "TTTS3061R"
-    }
-    params = {
-        "CANO": an[:8], "ACNT_PRDT_CD": an[8:] if len(an)>8 else "01",
-        "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""
-    }
-    try:
-        res = requests.get(url, headers=headers, params=params, timeout=7)
-        data = res.json()
-        if data.get('rt_cd') == '0':
-            output2 = data.get('output2', {})
-            if isinstance(output2, list) and len(output2) > 0: output2 = output2[0]
-            return float(output2.get('frcr_dncl_amt_2', 0))
-    except: pass
-    return 0.0
+    
+    total_usd = 0.0
+    # 해외 주식은 보통 01번 또는 02번 상품 코드를 사용하므로 둘 다 확인
+    for suffix in ["01", "02"]:
+        headers = {
+            "Content-Type": "application/json", "authorization": f"Bearer {token}",
+            "appkey": ak, "appsecret": as_, "tr_id": "VTTS3061R" if is_mock else "TTTS3061R"
+        }
+        params = {
+            "CANO": an[:8], "ACNT_PRDT_CD": suffix,
+            "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""
+        }
+        try:
+            res = requests.get(url, headers=headers, params=params, timeout=7)
+            data = res.json()
+            if data.get('rt_cd') == '0':
+                output2 = data.get('output2', {})
+                if isinstance(output2, list) and len(output2) > 0: output2 = output2[0]
+                
+                # 여러 필드 중 값이 있는 것을 우선적으로 선택 (예수금, 평가금 등)
+                usd_val = float(output2.get('frcr_dncl_amt_2', 0)) # 외화예수금
+                if usd_val == 0: usd_val = float(output2.get('frcr_evlu_amt2', 0)) # 외화평가금액
+                
+                if usd_val > 0:
+                    total_usd = usd_val
+                    break # 값을 찾으면 중단
+        except: continue
+        
+    return total_usd
 
 # --- [ UI ] CSS & Background (Lightweight High-Performance) ---
 st.markdown("""
