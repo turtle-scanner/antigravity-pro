@@ -749,7 +749,7 @@ def get_kis_balance(token, mock=None, acc_no=None):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
-    """해외 주식 잔고 및 달러 현금 현황 조회 (통합계좌 및 다양한 TR 대응 강화)"""
+    """해외 주식 잔고 및 달러 현금 현황 조회 (최강 수색 모드 v2.1)"""
     ak, as_, an = get_user_kis_creds()
     target_acc = acc_no if acc_no else an
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
@@ -761,9 +761,14 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     USD_CASH_FIELDS = [
         'frcr_ord_psbl_amt', 'frcr_dncl_amt_2', 'frcr_dnca_amt', 'frcr_drwg_psbl_amt_1', 
         'frcr_dnca_amt_2', 'psbl_frcr_amt', 'ovrs_ord_psbl_amt', 'frcr_evlu_amt2',
-        'frcr_ord_psbl_amt1', 'ovrs_prec_amt', 'frcr_dncl_amt'
+        'frcr_ord_psbl_amt1', 'ovrs_prec_amt', 'frcr_dncl_amt', 'frcr_dncl_amt_1',
+        'ord_psbl_frcr_amt', 'frcr_psbl_amt', 'frcr_dnca_amt1'
     ]
-    USD_EVAL_FIELDS = ['frcr_evlu_amt2', 'ovrs_tot_evlu_amt', 'tot_evlu_pamt_2', 'evlu_amt_smtot']
+    # 사용자가 언급한 frcr_buy_amt_smtl(매수원가)도 참고용으로 포함
+    USD_EVAL_FIELDS = [
+        'frcr_evlu_amt2', 'ovrs_tot_evlu_amt', 'tot_evlu_pamt_2', 'evlu_amt_smtot', 
+        'frcr_buy_amt_smtl', 'tot_evlu_amt', 'evlu_amt_smtot_2'
+    ]
     KRW_TOTAL_FIELDS = ['tot_evlu_pamt', 'tot_asst_amt', 'evlu_amt_smtot_pamt', 'wdrw_psbl_tot_amt', 'tot_evlu_amt']
 
     def robust_float(val):
@@ -795,12 +800,12 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     suffixes = ["01", "02", target_acc[8:]] + ["03", "04", "05", "06"]
     suffixes = list(dict.fromkeys([s for s in suffixes if s]))
     
-    # 1. 일반 해외 잔고 및 주문가능액 조회
     tr_ids = ["TTTS3031R", "TTTS3061R", "TTTS3012R", "TTTS3011R"]
     if use_mock: tr_ids = ["V" + t[1:] for t in tr_ids]
     
     exchanges = ["NASD", "NYSE", "AMEX", "NAS", "NYS", "AMS"]
     
+    # 1. 일반 해외 잔고 및 주문가능액 조회 (NATN_CD=840)
     for suffix in suffixes:
         for tr_id in tr_ids:
             is_psbl = "3031R" in tr_id or "3011R" in tr_id
@@ -825,21 +830,21 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                     res = requests.get(url, headers=headers, params=params, timeout=10)
                     if res.status_code == 200:
                         d = res.json()
+                        # [ DIAGNOSTIC ] 모든 응답을 세션에 임시 저장 (진단용)
+                        st.session_state["debug_kis_overseas_last_raw"] = d
+                        
                         if d.get('rt_cd') != '0': continue
                             
                         cash_usd = find_in_obj(d, USD_CASH_FIELDS)
                         eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
                         total_krw = find_in_obj(d, KRW_TOTAL_FIELDS)
                         
-                        if cash_usd > 0 or eval_usd > 0:
-                            st.session_state[f"debug_kis_{tr_id}_{excg}"] = d
-                            
                         if (eval_usd + cash_usd) > best_data["usd_total"] or cash_usd > best_data["usd_cash"]:
                             o1 = d.get('output') or d.get('output1')
                             best_data = {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}
                             best_holdings = (o1 if isinstance(o1, list) else [])
                             
-                            if cash_usd > 10.0 and len(best_holdings) > 0:
+                            if cash_usd > 1.0 and len(best_holdings) > 0:
                                 return best_data, best_holdings
                 except: continue
 
@@ -854,12 +859,16 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                 
                 headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"}
                 params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "000", "TR_PACC_CD": ""}
-                if is_psbl: params["TR_CRCY_CD"] = "USD"
+                if is_psbl: 
+                    params["TR_CRCY_CD"] = "USD"
+                else:
+                    params["WCRC_FRCR_DVS_CD"] = "02"
                 
                 try:
                     res = requests.get(url, headers=headers, params=params, timeout=10)
                     if res.status_code == 200:
                         d = res.json()
+                        st.session_state["debug_kis_overseas_fallback_raw"] = d
                         cash_usd = find_in_obj(d, USD_CASH_FIELDS)
                         eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
                         if cash_usd > 0 or eval_usd > 0:
