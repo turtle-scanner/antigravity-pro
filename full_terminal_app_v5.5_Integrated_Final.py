@@ -1773,85 +1773,85 @@ with st.sidebar:
                 else:
                     st.warning("No USD data found in recent requests. Try Refreshing first.")
 
-        # [ SIDEBAR BALANCE INFO ]
-        try:
-            current_mock = not is_live
-            token = get_kis_access_token(u_ak, u_as, current_mock)
+            # [ TACTICAL DIAGNOSTIC ] KIS API 정밀 진단 사령부 (최상단 독립 배치)
+            st.sidebar.divider()
+            with st.sidebar.expander("🛠️ KIS API 정밀 진단(Admin)", expanded=False):
+                st.write("MTS 금액($467.65)과 일치하는 필드를 찾으십시오.")
+                if st.button("[ RUN DIAGNOSTIC SCAN ]", use_container_width=True):
+                    st.cache_data.clear()
+                    st.rerun()
+                
+                # 스캔된 모든 숫자 지표 노출
+                metrics_found = False
+                for k in st.session_state.keys():
+                    if k.startswith("metrics_"):
+                        metrics_found = True
+                        st.info(f"📍 TR ID: {k.replace('metrics_', '')}")
+                        st.json(st.session_state[k])
+                
+                if not metrics_found:
+                    st.warning("아직 스캔된 데이터가 없습니다. [잔고 동기화]를 먼저 눌러주십시오.")
+                
+                st.divider()
+                st.write("상세 에러 로그:")
+                for k in st.session_state.keys():
+                    if k.startswith("last_error_"):
+                        st.error(f"❌ {k}: {st.session_state[k]}")
+                    if k.startswith("last_exc_"):
+                        st.warning(f"⚠️ {k}: {st.session_state[k]}")
 
-            
-            # 독립적 호출 에러 격리
-            r_total, r_cash = 0, 0
-            try: r_total, r_cash, _ = get_kis_balance(token, mock=current_mock)
-            except:    pass
-            
-            o_total_krw, o_total_usd, o_cash_usd = 0, 0, 0
+            # [ SIDEBAR BALANCE INFO ]
             try:
-                over_data, _ = get_kis_overseas_balance(token, mock=current_mock)
-                o_total_krw = over_data.get("krw", 0)
-                o_total_usd = over_data.get("usd_total", 0)
-                o_cash_usd = over_data.get("usd_cash", 0)
-            except:    pass
-            
-            full_b = r_total + o_total_krw
-            st.session_state.last_total_equity = full_b
-            
-            st.sidebar.markdown(f"""
-                <div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:5px; border:1px solid #FFD70033;'>
-                    <p style='margin:0; font-size:0.7rem; color:#AAA;'>COMMANDER EQUITY ({'LIVE' if is_live else 'MOCK'})</p>
-                    <b style='color:#FFD700; font-size:1.1rem;'>{full_b:,.0f} KRW</b><br>
-                    <div style='margin-top:5px; border-top:1px solid rgba(255,255,255,0.05); padding-top:5px;'>
-                        <small style='color:#CCC;'>KR: {r_total:,.0f} 원</small><br>
-                        <small style='color:var(--neon-blue);'>US: ${o_total_usd:,.2f}</small> 
-                        <small style='color:#666;'>(Cash: ${o_cash_usd:,.2f})</small>
-                    </div>
-                </div>
-                <div style='text-align:right; margin-top:2px;'>
-                    <span style='font-size:0.6rem; color:#555;'>Dragonfly v5.5-Integrated (Tactical v5.0)</span>
-                </div>
-            """, unsafe_allow_html=True)
-            if st.sidebar.button("🔄 잔고 동기화(Refresh)", use_container_width=True):
-                # [ FIX ] 모든 캐시 및 세션 데이터 초기화로 강제 갱신
-                st.session_state.last_token_req_time = 0
-                st.session_state.last_valid_token = None
-                get_kis_access_token.clear()
-                get_kis_balance.clear()
-                get_kis_overseas_balance.clear()
-                st.cache_data.clear()
-                st.rerun()
+                current_mock = not is_live
+                token = get_kis_access_token(u_ak, u_as, current_mock)
 
-            if st.sidebar.button("☢️ NUCLEAR REFRESH", use_container_width=True, type="primary"):
-                st.session_state.clear()
-                st.cache_data.clear()
-                st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"❌ AUTH/API ERROR: {str(e)}")
-            st.sidebar.caption("Tactical v5.0 반영 여부를 확인하십시오.")
-    # [ TACTICAL DIAGNOSTIC ] KIS API 정밀 진단 사령부
-    with st.sidebar.expander("🛠️ KIS API 정밀 진단(Admin)", expanded=False):
-        st.write("MTS 금액($467.65)과 일치하는 필드를 찾으십시오.")
-        if st.button("[ RUN DIAGNOSTIC SCAN ]", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-        
-        # 스캔된 모든 숫자 지표 노출
-        metrics_found = False
-        for k in st.session_state.keys():
-            if k.startswith("metrics_"):
-                metrics_found = True
-                st.info(f"📍 TR ID: {k.replace('metrics_', '')}")
-                st.json(st.session_state[k])
-        
-        if not metrics_found:
-            st.warning("아직 스캔된 데이터가 없습니다. [잔고 동기화]를 먼저 눌러주십시오.")
-        
-        st.divider()
-        st.write("상세 에러 로그:")
-        for k in st.session_state.keys():
-            if k.startswith("last_error_"):
-                st.error(f"❌ {k}: {st.session_state[k]}")
-            if k.startswith("last_exc_"):
-                st.warning(f"⚠️ {k}: {st.session_state[k]}")
-    
+                # 독립적 호출 에러 격리
+                r_total, r_cash = 0, 0
+                try: r_total, r_cash, _ = get_kis_balance(token, mock=current_mock)
+                except:    pass
+                
+                o_total_krw, o_total_usd, o_cash_usd = 0, 0, 0
+                try:
+                    over_data, _ = get_kis_overseas_balance(token, mock=current_mock)
+                    o_total_krw = over_data.get("krw", 0)
+                    o_total_usd = over_data.get("usd_total", 0)
+                    o_cash_usd = over_data.get("usd_cash", 0)
+                except:    pass
+                
+                full_b = r_total + o_total_krw
+                st.session_state.last_total_equity = full_b
+                
+                st.sidebar.markdown(f"""
+                    <div style='background:rgba(255,215,0,0.1); padding:10px; border-radius:5px; border:1px solid #FFD70033;'>
+                        <p style='margin:0; font-size:0.7rem; color:#AAA;'>COMMANDER EQUITY ({'LIVE' if is_live else 'MOCK'})</p>
+                        <b style='color:#FFD700; font-size:1.1rem;'>{full_b:,.0f} KRW</b><br>
+                        <div style='margin-top:5px; border-top:1px solid rgba(255,255,255,0.05); padding-top:5px;'>
+                            <small style='color:#CCC;'>KR: {r_total:,.0f} 원</small><br>
+                            <small style='color:var(--neon-blue);'>US: ${o_total_usd:,.2f}</small> 
+                            <small style='color:#666;'>(Cash: ${o_cash_usd:,.2f})</small>
+                        </div>
+                    </div>
+                    <div style='text-align:right; margin-top:2px;'>
+                        <span style='font-size:0.6rem; color:#555;'>Dragonfly v5.5-Integrated (Tactical v5.0)</span>
+                    </div>
+                """, unsafe_allow_html=True)
+                if st.sidebar.button("🔄 잔고 동기화(Refresh)", use_container_width=True):
+                    # [ FIX ] 모든 캐시 및 세션 데이터 초기화로 강제 갱신
+                    st.session_state.last_token_req_time = 0
+                    st.session_state.last_valid_token = None
+                    get_kis_access_token.clear()
+                    get_kis_balance.clear()
+                    get_kis_overseas_balance.clear()
+                    st.cache_data.clear()
+                    st.rerun()
+
+                if st.sidebar.button("☢️ NUCLEAR REFRESH", use_container_width=True, type="primary"):
+                    st.session_state.clear()
+                    st.cache_data.clear()
+                    st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"❌ AUTH/API ERROR: {str(e)}")
+                st.sidebar.caption("Tactical v5.0 반영 여부를 확인하십시오.")
     pass
 
 
