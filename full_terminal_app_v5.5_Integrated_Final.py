@@ -749,7 +749,7 @@ def get_kis_balance(token, mock=None, acc_no=None):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
-    """해외 주식 잔고 및 달러 현황 조회 (통합증거금 특화 v3.0)"""
+    """해외 주식 잔고 및 달러 현황 조회 (MTS 동기화 v5.0)"""
     ak, as_, an = get_user_kis_creds()
     target_acc = acc_no if acc_no else an
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
@@ -757,9 +757,9 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     use_mock = mock if mock is not None else get_kis_mock_status()
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     
-    # [ TACTICAL ] 통합증거금 계좌는 실제 달러가 없어도 '주문가능외화금액'이 중요함
+    # [ TACTICAL ] MTS '주문가능달러' 필드(ovrs_ord_psbl_amt)를 최우선 수색
     USD_CASH_FIELDS = [
-        'ord_psbl_frcr_amt', 'ovrs_ord_psbl_amt', 'frcr_ord_psbl_amt', 'frcr_dncl_amt_2', 
+        'ovrs_ord_psbl_amt', 'ord_psbl_frcr_amt', 'frcr_ord_psbl_amt', 'frcr_dncl_amt_2', 
         'frcr_dnca_amt', 'psbl_frcr_amt', 'frcr_ord_psbl_amt1', 'ovrs_prec_amt', 
         'frcr_dncl_amt', 'frcr_dncl_amt_1', 'frcr_psbl_amt', 'frcr_dnca_amt1'
     ]
@@ -798,8 +798,7 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     suffixes = ["01", "02", target_acc[8:]] + ["03", "04", "05", "06"]
     suffixes = list(dict.fromkeys([s for s in suffixes if s]))
     
-    # [ STRATEGY ] 통합증거금은 000(통합)과 840(미국)을 모두 수색
-    natn_codes = ["840", "000"]
+    natn_codes = ["000", "840"]
     tr_ids = ["TTTS3031R", "TTTS3061R", "TTTS3012R", "TTTS3011R"]
     if use_mock: tr_ids = ["V" + t[1:] for t in tr_ids]
     
@@ -837,7 +836,6 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                             eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
                             total_krw = find_in_obj(d, KRW_TOTAL_FIELDS)
                             
-                            # 통합증거금의 경우 평가금액이 usd_total에 합산되어야 함
                             current_usd_total = eval_usd + cash_usd if eval_usd > 0 else cash_usd
                             
                             if current_usd_total > best_data["usd_total"] or cash_usd > best_data["usd_cash"]:
@@ -845,11 +843,9 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                                 best_data = {"krw": total_krw, "usd_total": current_usd_total, "usd_cash": cash_usd}
                                 best_holdings = (o1 if isinstance(o1, list) else [])
                                 
-                                # 데이터가 충분히 발견되면 즉시 리턴 (속도 최적화)
                                 if cash_usd > 1.0 and len(best_holdings) > 0:
                                     return best_data, best_holdings
                     except: continue
-    
     return best_data, best_holdings
 
 
@@ -983,13 +979,15 @@ def get_ticker_roe(ticker):
     except: return 0
 
 def execute_kis_market_order(ticker, qty, is_buy=True):
-    """시장가 주문 실행 엔진 (통합증거금 및 모의투자 완벽 대응 v4.0)"""
+    """시장가 주문 실행 엔진 (통합증거금 및 속도 제한 완벽 대응 v5.0)"""
     ak, as_, an = get_user_kis_creds()
     use_mock = get_kis_mock_status()
     token = get_kis_access_token(ak, as_, use_mock)
     if not token: return False
     
-    # 변수 초기화
+    # [ ACTION ] 초당 거래건수 초과 방지를 위한 미세 지연 (Throttling)
+    time.sleep(0.2)
+    
     url = ""
     tr_id = ""
     body = {}
@@ -1006,7 +1004,6 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
         }
     else:
         url = f"{base_url}/uapi/overseas-stock/v1/trading/order"
-        # [ FIX ] 모의투자와 실전의 거래소 코드가 다름
         exchange_code = "NASD" if not use_mock else "NAS"
         try:
             info = yf.Ticker(ticker).info
@@ -1015,14 +1012,11 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
             elif 'ASE' in ex_name or 'AMERICAN' in ex_name: exchange_code = "AMEX" if not use_mock else "AMS"
         except: pass
         
-        # [ STRATEGY ] 통합증거금 신청 계좌는 TTTT 계열 TR ID 사용 필수
         if use_mock:
             tr_id = "VTTW0801U" if is_buy else "VTTW0802U"
         else:
-            # 사령관님 요청에 따라 통합증거금 전용 TR ID로 전환
-            tr_id = "TTTT1002U" if is_buy else "TTTT1006U"
+            tr_id = "TTTT1002U" if is_buy else "TTTT1006U" # 통합증거금 전용
         
-        # 현재가 기반 지정가 주문 (시장가 효과)
         curr_p = get_kis_current_price(ticker, token)
         if curr_p <= 0:
             try:
@@ -1037,7 +1031,6 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
             "OVRS_EXCG_CD": exchange_code, "PDNO": ticker, "ORD_QTY": str(qty), 
             "ORD_OVRS_P": f"{order_p:.2f}", "ORD_DVSN": "00"
         }
-        # 통합증거금 매도 시 필수 필드 추가
         if not is_buy and tr_id == "TTTT1006U":
             body["SLL_TYPE"] = "00" 
 
