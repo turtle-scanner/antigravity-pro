@@ -630,6 +630,16 @@ def send_telegram_msg(msg):
         requests.get(url, params=params, timeout=15)
     except:    pass
 
+def get_user_kis_creds():
+    """Secrets 또는 로컬 설정에서 KIS 인증 정보를 안전하게 로드"""
+    try:
+        ak = st.secrets.get("KIS_APP_KEY", "")
+        as_ = st.secrets.get("KIS_APP_SECRET", "")
+        an = st.secrets.get("KIS_ACCOUNT_NO", "4654671301")
+        return ak, as_, an
+    except:
+        return "", "", "4654671301"
+
 @st.cache_data(ttl=3500, show_spinner=False)
 def get_kis_access_token(app_key, app_secret, mock=None):
     """한국투자증권 API 접근 토큰 발급 (1분 제한 방어 로직 포함)"""
