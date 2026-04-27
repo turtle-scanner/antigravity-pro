@@ -1034,8 +1034,12 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
         
         body = {
             "CANO": an[:8], "ACNT_PRDT_CD": an[8:],
-            "OVRS_EXCG_CD": exchange_code, "PDNO": ticker, "ORD_QTY": str(qty), 
-            "ORD_OVRS_P": f"{order_p:.2f}", "ORD_DVSN": "00"
+            "OVRS_EXCG_CD": exchange_code, 
+            "PDNO": ticker.split('.')[0].upper(), # 순수 심볼 대문자화
+            "ORD_QTY": str(qty), 
+            "ORD_OVRS_P": f"{order_p:.2f}", 
+            "ORD_DVSN": "00",
+            "MGN_DVSN": "01" # 통합증거금 필수 증거금 구분 (01: 일반)
         }
         if not is_buy and tr_id == "TTTT1006U":
             body["SLL_TYPE"] = "00" 
