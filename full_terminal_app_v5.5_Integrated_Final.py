@@ -983,18 +983,17 @@ def get_ticker_roe(ticker):
     except: return 0
 
 def execute_kis_market_order(ticker, qty, is_buy=True):
-    """시장가 주문 실행 엔진 (KIS API 연동)"""
+    """시장가 주문 실행 엔진 (통합증거금 및 모의투자 완벽 대응 v4.0)"""
     ak, as_, an = get_user_kis_creds()
     use_mock = get_kis_mock_status()
     token = get_kis_access_token(ak, as_, use_mock)
     if not token: return False
     
-    # 변수 초기화 (UnboundLocalError 방지)
+    # 변수 초기화
     url = ""
     tr_id = ""
     body = {}
     
-    # [ FIX ] 티커가 숫자 6자리인 경우 자동으로 국내 주식으로 판단
     is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ") or (ticker.isdigit() and len(ticker) == 6)
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     
@@ -1007,32 +1006,40 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
         }
     else:
         url = f"{base_url}/uapi/overseas-stock/v1/trading/order"
-        exchange_code = "NASD" 
+        # [ FIX ] 모의투자와 실전의 거래소 코드가 다름
+        exchange_code = "NASD" if not use_mock else "NAS"
         try:
             info = yf.Ticker(ticker).info
             ex_name = info.get('exchange', '').upper()
-            if 'NYE' in ex_name or 'NEW YORK' in ex_name: exchange_code = "NYSE"
-            elif 'ASE' in ex_name or 'AMERICAN' in ex_name: exchange_code = "AMEX"
-        except:    pass
-        
-        tr_id = ("VTTW0801U" if is_buy else "VTTW0802U") if use_mock else ("TTTW0801U" if is_buy else "TTTW0802U")
-        
-        # [ FIX ] 해외 주식은 시장가(01)가 모든 거래소에서 지원되지 않으므로, 현재가 기반 지정가(00) 주문 수행
-        curr_p = 0
-        try:
-            p_data = yf.download(ticker, period="1d", interval="1m")
-            if not p_data.empty:
-                curr_p = p_data['Close'].iloc[-1]
+            if 'NYE' in ex_name or 'NEW YORK' in ex_name: exchange_code = "NYSE" if not use_mock else "NYS"
+            elif 'ASE' in ex_name or 'AMERICAN' in ex_name: exchange_code = "AMEX" if not use_mock else "AMS"
         except: pass
         
-        # 매수 시에는 현재가 + 1%, 매도 시에는 현재가 - 1%로 지정가 주문 (시장가 효과)
+        # [ STRATEGY ] 통합증거금 신청 계좌는 TTTT 계열 TR ID 사용 필수
+        if use_mock:
+            tr_id = "VTTW0801U" if is_buy else "VTTW0802U"
+        else:
+            # 사령관님 요청에 따라 통합증거금 전용 TR ID로 전환
+            tr_id = "TTTT1002U" if is_buy else "TTTT1006U"
+        
+        # 현재가 기반 지정가 주문 (시장가 효과)
+        curr_p = get_kis_current_price(ticker, token)
+        if curr_p <= 0:
+            try:
+                p_data = yf.download(ticker, period="1d", interval="1m")
+                if not p_data.empty: curr_p = p_data['Close'].iloc[-1]
+            except: pass
+            
         order_p = curr_p * (1.01 if is_buy else 0.99) if curr_p > 0 else 0
         
         body = {
             "CANO": an[:8], "ACNT_PRDT_CD": an[8:],
             "OVRS_EXCG_CD": exchange_code, "PDNO": ticker, "ORD_QTY": str(qty), 
-            "ORD_OVRS_P": f"{order_p:.2f}", "ORD_DVSN": "00" 
+            "ORD_OVRS_P": f"{order_p:.2f}", "ORD_DVSN": "00"
         }
+        # 통합증거금 매도 시 필수 필드 추가
+        if not is_buy and tr_id == "TTTT1006U":
+            body["SLL_TYPE"] = "00" 
 
     headers = {
         "Content-Type": "application/json", "authorization": f"Bearer {token}",
@@ -1049,13 +1056,11 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
             send_telegram_msg(f"🔔 [교전 보고] {msg}")
             return True
         else:
-            err_msg = res_data.get('msg1', 'API 통신 오류')
-            if "잔고" in err_msg or "부족" in err_msg or "balance" in err_msg.lower():
-                err_msg = "🚨 계좌 잔액(증거금)이 부족하여 매수 불가"
-            
-            log_msg = f"⚠️ {ticker} 주문 실패: {err_msg}"
-            st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": log_msg, "type": "ERROR"})
-            send_telegram_msg(f"🚨 [교전 실패] {log_msg}")
+            err_msg = res_data.get('msg1', 'Unknown Error')
+            st.session_state.combat_logs.append({
+                "time": datetime.now().strftime("%H:%M:%S"), 
+                "msg": f"❌ {ticker} 주문 실패: {err_msg}", "type": "ERROR"
+            })
             return False
     except Exception as e:
         st.session_state.combat_logs.append({"time": datetime.now().strftime("%H:%M:%S"), "msg": f"❌ 시스템 오류: {str(e)}", "type": "ERROR"})
