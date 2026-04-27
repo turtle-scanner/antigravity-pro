@@ -1726,7 +1726,30 @@ with st.sidebar:
          else:
              st.sidebar.error(f"❌ Order failed for {test_ticker}")
 
-    # [ SECURITY ] 계좌 컨트롤 섹션은 사령부 관리자(관리자, 방장)만 접근 가능하도록 수정
+    # [ TACTICAL DIAGNOSTIC ] KIS API 정밀 진단 사령부 (절대 최상단 강제 노출)
+    with st.sidebar.expander("🛠️ KIS API 정밀 진단 (FORCE)", expanded=True):
+        st.write("MTS 금액($467.65) 필드 찾기")
+        if st.button("[ RUN DIAGNOSTIC SCAN ]", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+        
+        metrics_found = False
+        for k in st.session_state.keys():
+            if k.startswith("metrics_"):
+                metrics_found = True
+                st.info(f"📍 TR: {k.replace('metrics_', '')}")
+                st.json(st.session_state[k])
+        
+        if not metrics_found:
+            st.warning("아직 데이터가 없습니다. [잔고 동기화]를 먼저 눌러주십시오.")
+        
+        for k in st.session_state.keys():
+            if k.startswith("last_error_"):
+                st.error(f"❌ {k}: {st.session_state[k]}")
+
+    st.sidebar.divider()
+
+    # [ SECURITY ] 계좌 컨트롤 섹션
     if is_admin:
         st.sidebar.markdown("### ⚙️ ACCOUNT CONTROL (ADMIN ONLY)")
         
@@ -1773,32 +1796,7 @@ with st.sidebar:
                 else:
                     st.warning("No USD data found in recent requests. Try Refreshing first.")
 
-            # [ TACTICAL DIAGNOSTIC ] KIS API 정밀 진단 사령부 (최상단 독립 배치)
-            st.sidebar.divider()
-            with st.sidebar.expander("🛠️ KIS API 정밀 진단(Admin)", expanded=False):
-                st.write("MTS 금액($467.65)과 일치하는 필드를 찾으십시오.")
-                if st.button("[ RUN DIAGNOSTIC SCAN ]", use_container_width=True):
-                    st.cache_data.clear()
-                    st.rerun()
-                
-                # 스캔된 모든 숫자 지표 노출
-                metrics_found = False
-                for k in st.session_state.keys():
-                    if k.startswith("metrics_"):
-                        metrics_found = True
-                        st.info(f"📍 TR ID: {k.replace('metrics_', '')}")
-                        st.json(st.session_state[k])
-                
-                if not metrics_found:
-                    st.warning("아직 스캔된 데이터가 없습니다. [잔고 동기화]를 먼저 눌러주십시오.")
-                
-                st.divider()
-                st.write("상세 에러 로그:")
-                for k in st.session_state.keys():
-                    if k.startswith("last_error_"):
-                        st.error(f"❌ {k}: {st.session_state[k]}")
-                    if k.startswith("last_exc_"):
-                        st.warning(f"⚠️ {k}: {st.session_state[k]}")
+    pass
 
             # [ SIDEBAR BALANCE INFO ]
             try:
