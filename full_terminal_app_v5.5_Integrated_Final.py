@@ -850,6 +850,23 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
                                 return {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}, (o1 if isinstance(o1, list) else [])
                 except: continue
             
+            # [ FALLBACK ] NATN_CD="000" 시도 (일부 통합계좌 대응)
+            for tr_id in ["TTTS3031R", "TTTS3061R"]:
+                if use_mock: tr_id = "V" + tr_id[1:]
+                headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"}
+                params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "000", "TR_PACC_CD": ""}
+                try:
+                    res = requests.get(url, headers=headers, params=params, timeout=10)
+                    if res.status_code == 200:
+                        d = res.json()
+                        o2 = d.get('output2') or d.get('output')
+                        if isinstance(o2, list) and len(o2) > 0: o2 = o2[0]
+                        if o2 and isinstance(o2, dict):
+                            cash_usd = float(o2.get('frcr_ord_psbl_amt') or o2.get('frcr_dncl_amt_2') or 0)
+                            if cash_usd > 0:
+                                return {"krw": 0, "usd_total": cash_usd, "usd_cash": cash_usd}, []
+                except: continue
+            
     return best_data, best_holdings
                 except: continue
             
@@ -1697,6 +1714,18 @@ with st.sidebar:
 
     # [ SECURITY ] 계좌 컨트롤 섹션은 사령부 관리자(관리자, 방장)만 접근 가능하도록 수정
     if is_admin:
+        # [ QUICK TEST BUY ]
+        st.sidebar.divider()
+        st.sidebar.subheader("🚀 QUICK TEST BUY")
+        c_t1, c_t2 = st.sidebar.columns([3, 1])
+        with c_t1: test_ticker = st.text_input("Ticker", value="005930", key="test_buy_ticker", label_visibility="collapsed")
+        with c_t2: test_qty = st.number_input("Qty", value=1, min_value=1, key="test_buy_qty", label_visibility="collapsed")
+        if st.sidebar.button("BUY 1 SHARE NOW", use_container_width=True):
+             if execute_kis_market_order(test_ticker, int(test_qty), is_buy=True):
+                 st.sidebar.success(f"✅ Order sent for {test_ticker}")
+             else:
+                 st.sidebar.error(f"❌ Order failed for {test_ticker}")
+        
         st.sidebar.divider()
         st.sidebar.markdown("### ⚙️ ACCOUNT CONTROL (ADMIN ONLY)")
         
@@ -1756,8 +1785,9 @@ with st.sidebar:
                 get_kis_balance.clear()
                 get_kis_overseas_balance.clear()
                 st.rerun()
-        except:
-            st.sidebar.caption("인증 세션 확인 중..")
+        except Exception as e:
+            st.sidebar.error(f"❌ AUTH/API ERROR: {str(e)}")
+            st.sidebar.caption("인증 세션 또는 키 설정을 확인하십시오.")
     # 일반 회원에게는 표시하지 않음 (완전 은닉)
     pass
 
