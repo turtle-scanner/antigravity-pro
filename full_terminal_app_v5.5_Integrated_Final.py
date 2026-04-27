@@ -1802,6 +1802,7 @@ with st.sidebar:
 
             # [ SIDEBAR BALANCE INFO ]
             try:
+                # [ FIX ] 실전 모드 스위치(is_live) 값을 직접 사용하여 모드 혼동 방지
                 current_mock = not is_live
                 token = get_kis_access_token(u_ak, u_as, current_mock)
 
@@ -1836,7 +1837,6 @@ with st.sidebar:
                     </div>
                 """, unsafe_allow_html=True)
                 if st.sidebar.button("🔄 잔고 동기화(Refresh)", use_container_width=True):
-                    # [ FIX ] 모든 캐시 및 세션 데이터 초기화로 강제 갱신
                     st.session_state.last_token_req_time = 0
                     st.session_state.last_valid_token = None
                     get_kis_access_token.clear()
@@ -1851,7 +1851,6 @@ with st.sidebar:
                     st.rerun()
             except Exception as e:
                 st.sidebar.error(f"❌ AUTH/API ERROR: {str(e)}")
-                st.sidebar.caption("Tactical v5.0 반영 여부를 확인하십시오.")
     pass
 
 
