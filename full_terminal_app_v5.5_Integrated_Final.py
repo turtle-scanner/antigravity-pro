@@ -466,8 +466,9 @@ def get_user_kis_creds():
     """st.secrets에서 KIS 인증 정보를 안전하게 추출"""
     ak = st.secrets.get("KIS_APP_KEY", "")
     as_ = st.secrets.get("KIS_APP_SECRET", "")
-    an = st.secrets.get("KIS_ACCOUNT_NO", "")
-    return ak, as_, an
+    an = st.secrets.get("KIS_ACCOUNT_NO", "").replace("-", "")
+    is_mock = str(st.secrets.get("KIS_MOCK_TRADING", "false")).lower() == "true"
+    return ak, as_, an, is_mock
 
 def get_stock_name(ticker):
     """티커로부터 한글/영문 종목명 획득"""
@@ -504,14 +505,15 @@ def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
 
 def get_kis_access_token():
     """KIS 인증 토큰 발급 (캐싱 및 안정성 강화)"""
-    ak, as_, _ = get_user_kis_creds()
+    ak, as_, _, is_mock = get_user_kis_creds()
     if not ak or not as_: return None
     
     # 세션 스테이트를 활용한 토큰 재사용 (API 호출 최소화)
     if st.session_state.get("kis_token") and st.session_state.get("token_expiry", 0) > time.time():
         return st.session_state.kis_token
         
-    url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP"
+    base_url = "https://openapivts.koreainvestment.com:29443" if is_mock else "https://openapi.koreainvestment.com:9443"
+    url = f"{base_url}/oauth2/tokenP"
     payload = {"grant_type": "client_credentials", "appkey": ak, "appsecret": as_}
     try:
         res = requests.post(url, json=payload, timeout=7)
@@ -526,7 +528,7 @@ def get_kis_access_token():
 
 def execute_kis_market_order(ticker, qty, is_buy=True):
     """[ BONDE ENGINE ] 국내/해외 통합 시장가 주문 (통합증거금 및 본데 전술 대응)"""
-    ak, as_, an = get_user_kis_creds()
+    ak, as_, an, is_mock = get_user_kis_creds()
     token = get_kis_access_token()
     if not token or not an: return False
     
@@ -535,7 +537,7 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
     
     # 국내/해외 티커 판별
     is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ") or (ticker.isdigit() and len(ticker) == 6)
-    base_url = "https://openapi.koreainvestment.com:9443"
+    base_url = "https://openapivts.koreainvestment.com:29443" if is_mock else "https://openapi.koreainvestment.com:9443"
     
     url = ""
     tr_id = ""
@@ -601,42 +603,55 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
         st.error(f"❌ 시스템 오류: {str(e)}")
         return False
 
-def get_kis_overseas_balance():
-    """[ v5.1 Platinum Scanner ] MTS 잔고($467.65) 정밀 추적 엔진"""
-    ak, as_, an = get_user_kis_creds()
+def get_kis_domestic_balance():
+    """국내 주식 예수금(D+2) 조회"""
+    ak, as_, an, is_mock = get_user_kis_creds()
     token = get_kis_access_token()
-    if not token or not an: return 0.0
+    if not token or not an: return 0
     
-    url = "https://openapi.koreainvestment.com:9443/uapi/overseas-stock/v1/trading/inquire-present-balance"
+    base_url = "https://openapivts.koreainvestment.com:29443" if is_mock else "https://openapi.koreainvestment.com:9443"
+    url = f"{base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
     headers = {
-        "Content-Type": "application/json",
-        "authorization": f"Bearer {token}",
-        "appkey": ak, "appsecret": as_,
-        "tr_id": "CTRP6504R" # 해외 실시간 잔고 조회
+        "Content-Type": "application/json", "authorization": f"Bearer {token}",
+        "appkey": ak, "appsecret": as_, "tr_id": "VTTC8434R" if is_mock else "TTTC8434R"
     }
     params = {
-        "CANO": an[:8], "ACNT_PRDT_CD": an[8:],
-        "WCRC_FRCR_DVSN_CD": "02", "NATN_CD": "840", "TR_P_DVSN_CD": "01"
+        "CANO": an[:8], "ACNT_PRDT_CD": an[8:] if len(an)>8 else "01",
+        "AFHR_FLG": "N", "OFRT_BLAM_YN": "N", "PRCS_DVSN": "01", "UNPR_DVSN": "01", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""
     }
-    
     try:
         res = requests.get(url, headers=headers, params=params, timeout=7)
         data = res.json()
-        
-        # [ ANALYSIS ] MTS 일치를 위한 무차별 필드 스캐닝
-        output2 = data.get("output2", {})
-        # 1. 외화예수금(frcr_evlu_amt2) - 가장 유력한 $467.65 후보
-        val = float(output2.get("frcr_evlu_amt2", 0))
-        if val > 0: return val
-        
-        # 2. 외화미결제금액 포함 예수금(frcr_dncl_amt_2)
-        val = float(output2.get("frcr_dncl_amt_2", 0))
-        if val > 0: return val
-        
-        # 3. 실시간 외화 잔고(frcr_pchs_amt)
-        val = float(output2.get("frcr_pchs_amt", 0))
-        return val
-    except: return 0.0
+        if data.get('rt_cd') == '0':
+            return int(float(data['output2'][0].get('dnca_tot_amt', 0)))
+    except: pass
+    return 0
+
+def get_kis_overseas_balance():
+    """해외 주식 실시간 잔고 조회 (USD)"""
+    ak, as_, an, is_mock = get_user_kis_creds()
+    token = get_kis_access_token()
+    if not token or not an: return 0.0
+    
+    base_url = "https://openapivts.koreainvestment.com:29443" if is_mock else "https://openapi.koreainvestment.com:9443"
+    url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+    headers = {
+        "Content-Type": "application/json", "authorization": f"Bearer {token}",
+        "appkey": ak, "appsecret": as_, "tr_id": "VTTS3061R" if is_mock else "TTTS3061R"
+    }
+    params = {
+        "CANO": an[:8], "ACNT_PRDT_CD": an[8:] if len(an)>8 else "01",
+        "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""
+    }
+    try:
+        res = requests.get(url, headers=headers, params=params, timeout=7)
+        data = res.json()
+        if data.get('rt_cd') == '0':
+            output2 = data.get('output2', {})
+            if isinstance(output2, list) and len(output2) > 0: output2 = output2[0]
+            return float(output2.get('frcr_dncl_amt_2', 0))
+    except: pass
+    return 0.0
 
 # --- [ UI ] CSS & Background (Lightweight High-Performance) ---
 st.markdown("""
@@ -993,19 +1008,40 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # [ VIP ] 실시간 해외 잔고 대시보드 (사이드바 최상단)
-    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#FFD700; margin-top:10px;'>[ ASSET ] REAL-TIME KIS BALANCE</p>", unsafe_allow_html=True)
+    # [ VIP ] KIS 실시간 통합 잔고 대시보드
+    ak, _, an, is_mock = get_user_kis_creds()
+    st.markdown("<p style='font-weight:bold; font-size:0.8rem; color:#FFD700; margin-top:10px;'>[ ASSET ] KIS 실시간 계좌 정보</p>", unsafe_allow_html=True)
+    
     try:
+        kr_bal = get_kis_domestic_balance()
         ov_bal = get_kis_overseas_balance()
+        
+        # 계좌 번호 마스킹 처리 (앞 4자리 + **** + 뒤 2자리)
+        masked_an = f"{an[:4]}-****-{an[-2:]}" if len(an) >= 8 else an
+        
         st.markdown(f"""
         <div class='glass-card' style='padding: 15px; border-left: 4px solid #FFD700; background: rgba(255,215,0,0.05);'>
-            <small style='color: #888;'>해외 주식 예수금 (USD)</small>
-            <h2 style='color: #FFD700; margin: 0; font-size: 1.8rem;'>$ {ov_bal:,.2f}</h2>
-            <p style='font-size: 0.7rem; color: #00FF00; margin-top: 5px;'>● MTS 실시간 동기화 완료</p>
+            <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,215,0,0.2); padding-bottom: 8px;'>
+                <span style='color: #FFD700; font-size: 0.75rem; font-weight: 800;'>한국투자증권</span>
+                <span style='color: #888; font-size: 0.7rem;'>{masked_an}</span>
+            </div>
+            <div style='margin-bottom: 10px;'>
+                <small style='color: #AAA;'>국내 예수금 (KRW)</small>
+                <h3 style='color: #FFF; margin: 0; font-size: 1.3rem;'>{kr_bal:,.0f} <span style='font-size:0.8rem;'>원</span></h3>
+            </div>
+            <div>
+                <small style='color: #AAA;'>해외 예수금 (USD)</small>
+                <h3 style='color: #FFD700; margin: 0; font-size: 1.5rem;'>$ {ov_bal:,.2f}</h3>
+            </div>
+            <div style='margin-top: 12px; display: flex; align-items: center; gap: 5px;'>
+                <span style='color: #00FF00; font-size: 0.65rem;'>● API 접속됨</span>
+                <span style='color: #555; font-size: 0.65rem;'>|</span>
+                <span style='color: {"#FF4B4B" if is_mock else "#00FFFF"}; font-size: 0.65rem;'>{"모의투자" if is_mock else "실전매매"}</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
-    except:
-        st.error("[ ERROR ] 잔고 엔진 시동 실패")
+    except Exception as e:
+        st.error(f"[ ERROR ] 계좌 엔진 연결 실패")
 
     # [ PRO ] 글로벌 마켓 세션 클락 (Sidebar Clock System)
     now_utc = datetime.utcnow()

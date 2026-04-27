@@ -9,21 +9,43 @@ import pytz
 import re
 from datetime import datetime, timedelta
 
-# --- [ SUPREME CONFIG ] ---
-KIS_APP_KEY = os.getenv("KIS_APP_KEY", "")
-KIS_APP_SECRET = os.getenv("KIS_APP_SECRET", "")
-KIS_ACCOUNT_NO = os.getenv("KIS_ACCOUNT_NO", "").replace("-", "") # 하이픈 자동 제거
-KIS_MOCK_TRADING = os.getenv("KIS_MOCK_TRADING", "true").lower() == "true"
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+# --- [ CONFIG LOAD ] ---
+def load_config():
+    # 1. .streamlit/secrets.toml 확인 (로컬 실행 시)
+    toml_path = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml")
+    config = {}
+    if os.path.exists(toml_path):
+        try:
+            with open(toml_path, "r", encoding="utf-8") as f:
+                import toml
+                config = toml.load(f)
+        except: pass
+    
+    # 2. 환경 변수와 병합 (GitHub Actions 등 우선순위 적용)
+    return {
+        "ak": os.getenv("KIS_APP_KEY", config.get("KIS_APP_KEY", "")),
+        "as": os.getenv("KIS_APP_SECRET", config.get("KIS_APP_SECRET", "")),
+        "an": os.getenv("KIS_ACCOUNT_NO", config.get("KIS_ACCOUNT_NO", "")).replace("-", ""),
+        "mock": os.getenv("KIS_MOCK_TRADING", str(config.get("KIS_MOCK_TRADING", "false"))).lower() == "true",
+        "tg_token": os.getenv("TELEGRAM_TOKEN", config.get("TELEGRAM_TOKEN", "")),
+        "tg_id": os.getenv("TELEGRAM_CHAT_ID", config.get("TELEGRAM_CHAT_ID", ""))
+    }
+
+_CFG = load_config()
+KIS_APP_KEY = _CFG["ak"]
+KIS_APP_SECRET = _CFG["as"]
+KIS_ACCOUNT_NO = _CFG["an"]
+KIS_MOCK_TRADING = _CFG["mock"]
+TELEGRAM_TOKEN = _CFG["tg_token"]
+TELEGRAM_CHAT_ID = _CFG["tg_id"]
 
 # [ TACTICAL ALLOCATION ]
 US_RATIO = 0.7
 KR_RATIO = 0.3
-SLOTS_PER_REGION = 4
-RISK_PER_TRADE = 0.01   # 한 매매당 총 자산의 1% 리스크 (손절 시 손실액)
-STOP_LOSS_PCT = 0.05    # 기본 손절 라인 5%
-EXCHANGE_RATE = 1400    # 환율 (보수적 적용)
+SLOTS_PER_REGION = 5
+RISK_PER_TRADE = 0.01
+STOP_LOSS_PCT = 0.05
+EXCHANGE_RATE = 1400
 
 # --- [ UTILS ] ---
 def send_telegram_msg(msg):
@@ -273,14 +295,50 @@ def execute_kis_auto_cut(token):
                 log_combat(f"📉 [손절] {ticker} 리스크 관리 집행 ({roi:.1f}%)"); execute_kis_market_order(ticker, qty, False, token)
     except: pass
 
+def get_current_holdings(token):
+    """현재 보유 중인 종목 리스트 추출 (중복 매수 방지용)"""
+    try:
+        base_url = "https://openapivts.koreainvestment.com:29443" if KIS_MOCK_TRADING else "https://openapi.koreainvestment.com:9443"
+        url = f"{base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+        headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": KIS_APP_KEY, "appsecret": KIS_APP_SECRET, "tr_id": "VTTS3061R" if KIS_MOCK_TRADING else "TTTS3061R", "custtype": "P"}
+        holdings = []
+        for suffix in ["01", "02"]:
+            params = {"CANO": KIS_ACCOUNT_NO[:8], "ACNT_PRDT_CD": suffix, "WCRC_FRCR_DVS_CD": "02", "NATN_CD": "840", "TR_PACC_CD": ""}
+            res = requests.get(url, headers=headers, params=params, timeout=10)
+            if res.status_code == 200:
+                d = res.json()
+                o1 = d.get('output1', [])
+                if isinstance(o1, list):
+                    for h in o1:
+                        ticker = h.get('ovrs_pdno')
+                        qty = int(float(h.get('hldg_qty', 0)))
+                        if ticker and qty > 0: holdings.append(ticker)
+        return list(set(holdings))
+    except: return []
+
+def fetch_real_exchange_rate():
+    """실시간 환율 페치 (yfinance)"""
+    try:
+        data = yf.download("USDKRW=X", period="1d", progress=False)
+        if not data.empty: return float(data['Close'].iloc[-1])
+    except: pass
+    return 1400
+
 # --- [ MAIN LOOP ] ---
 def run_headless_cycle():
     log_combat("📡 교전 사이클 개시")
     token = get_kis_access_token()
     if not token: return
     
+    # 실시간 정보 업데이트
+    global EXCHANGE_RATE
+    EXCHANGE_RATE = fetch_real_exchange_rate()
+    
     total_asst = get_total_assets(token)
     is_defense = analyze_market_health()
+    
+    # 현재 보유 종목 파악
+    current_holdings = get_current_holdings(token)
     execute_kis_auto_cut(token)
 
     # [ DYNAMIC SLOT ALLOCATION ] 자산 규모에 따른 종목 수 결정
@@ -295,8 +353,17 @@ def run_headless_cycle():
 
     log_combat(f"📊 자산 규모별 슬롯 배정: 미국 {slots_us} / 한국 {slots_kr} (총 {slots_us + slots_kr}종목)")
 
-    us_univ = ["NVDA", "TSLA", "AAPL", "MSFT", "AMD", "PLTR", "SMCI", "META", "AMZN", "GOOGL", "NFLX", "COIN"]
-    kr_univ = ["005930", "000660", "066570", "035420", "035720", "005380"]
+    log_combat(f"📊 자산 규모별 슬롯 배정: 미국 {slots_us} / 한국 {slots_kr} (총 {slots_us + slots_kr}종목)")
+
+    # [ UNIVERSE EXPANSION ] 최강 주도주 후보군 (나스닥 100 + 주요 성장주 + 코스피/코스닥 핵심)
+    us_univ = [
+        "NVDA", "TSLA", "AAPL", "MSFT", "AMD", "PLTR", "SMCI", "META", "AMZN", "GOOGL", "NFLX", "COIN",
+        "AVGO", "CRWD", "ARM", "MSTR", "PANW", "SNOW", "ON", "MRVL", "CELH", "ELF", "DUOL", "LULU"
+    ]
+    kr_univ = [
+        "005930", "000660", "196170", "042700", "005380", "000270", "035420", "035720", 
+        "066570", "105560", "055550", "247540", "277810", "086520", "293490"
+    ]
     
     for region, univ, ratio, slots in [("US", us_univ, US_RATIO, slots_us), ("KR", kr_univ, KR_RATIO, slots_kr)]:
         bulk_data = get_bulk_market_data(univ)
@@ -309,6 +376,12 @@ def run_headless_cycle():
         hits = sorted(hits, key=lambda x: x['quality'], reverse=True)
         if hits:
             target = hits[0]
+            
+            # [중복 매수 방지] 이미 보유 중인 종목은 제외
+            if target['ticker'] in current_holdings:
+                log_combat(f"⏭️ {target['ticker']}는 이미 보유 중입니다. 매수를 건너뜜.")
+                continue
+
             curr_p = target['close']
             
             # 자산 배분 비율 및 배정된 슬롯 수에 따른 최대 가용 예산 체크
