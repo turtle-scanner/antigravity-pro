@@ -749,7 +749,7 @@ def get_kis_balance(token, mock=None, acc_no=None):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_kis_overseas_balance(token, mock=None, acc_no=None):
-    """해외 주식 잔고 및 달러 현금 현황 조회 (최강 수색 모드 v2.1)"""
+    """해외 주식 잔고 및 달러 현황 조회 (통합증거금 특화 v3.0)"""
     ak, as_, an = get_user_kis_creds()
     target_acc = acc_no if acc_no else an
     if not token or not target_acc: return {"krw": 0, "usd_total": 0, "usd_cash": 0}, []
@@ -757,17 +757,15 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     use_mock = mock if mock is not None else get_kis_mock_status()
     base_url = "https://openapivts.koreainvestment.com:29443" if use_mock else "https://openapi.koreainvestment.com:9443"
     
-    # [ TACTICAL ] 지원되는 모든 달러 현금 필드 매핑 (주문가능달러, 예수금, 외화예수금 등)
+    # [ TACTICAL ] 통합증거금 계좌는 실제 달러가 없어도 '주문가능외화금액'이 중요함
     USD_CASH_FIELDS = [
-        'frcr_ord_psbl_amt', 'frcr_dncl_amt_2', 'frcr_dnca_amt', 'frcr_drwg_psbl_amt_1', 
-        'frcr_dnca_amt_2', 'psbl_frcr_amt', 'ovrs_ord_psbl_amt', 'frcr_evlu_amt2',
-        'frcr_ord_psbl_amt1', 'ovrs_prec_amt', 'frcr_dncl_amt', 'frcr_dncl_amt_1',
-        'ord_psbl_frcr_amt', 'frcr_psbl_amt', 'frcr_dnca_amt1'
+        'ord_psbl_frcr_amt', 'ovrs_ord_psbl_amt', 'frcr_ord_psbl_amt', 'frcr_dncl_amt_2', 
+        'frcr_dnca_amt', 'psbl_frcr_amt', 'frcr_ord_psbl_amt1', 'ovrs_prec_amt', 
+        'frcr_dncl_amt', 'frcr_dncl_amt_1', 'frcr_psbl_amt', 'frcr_dnca_amt1'
     ]
-    # 사용자가 언급한 frcr_buy_amt_smtl(매수원가)도 참고용으로 포함
     USD_EVAL_FIELDS = [
         'frcr_evlu_amt2', 'ovrs_tot_evlu_amt', 'tot_evlu_pamt_2', 'evlu_amt_smtot', 
-        'frcr_buy_amt_smtl', 'tot_evlu_amt', 'evlu_amt_smtot_2'
+        'frcr_buy_amt_smtl', 'tot_evlu_amt', 'evlu_amt_smtot_2', 'tot_evlu_pamt'
     ]
     KRW_TOTAL_FIELDS = ['tot_evlu_pamt', 'tot_asst_amt', 'evlu_amt_smtot_pamt', 'wdrw_psbl_tot_amt', 'tot_evlu_amt']
 
@@ -800,80 +798,57 @@ def get_kis_overseas_balance(token, mock=None, acc_no=None):
     suffixes = ["01", "02", target_acc[8:]] + ["03", "04", "05", "06"]
     suffixes = list(dict.fromkeys([s for s in suffixes if s]))
     
+    # [ STRATEGY ] 통합증거금은 000(통합)과 840(미국)을 모두 수색
+    natn_codes = ["840", "000"]
     tr_ids = ["TTTS3031R", "TTTS3061R", "TTTS3012R", "TTTS3011R"]
     if use_mock: tr_ids = ["V" + t[1:] for t in tr_ids]
     
     exchanges = ["NASD", "NYSE", "AMEX", "NAS", "NYS", "AMS"]
     
-    # 1. 일반 해외 잔고 및 주문가능액 조회 (NATN_CD=840)
     for suffix in suffixes:
-        for tr_id in tr_ids:
-            is_psbl = "3031R" in tr_id or "3011R" in tr_id
-            url_path = "/uapi/overseas-stock/v1/trading/inquire-psbl-order" if is_psbl else "/uapi/overseas-stock/v1/trading/inquire-balance"
-            url = f"{base_url}{url_path}"
-            
-            target_exchanges = exchanges if is_psbl else [None]
-            
-            for excg in target_exchanges:
+        for natn in natn_codes:
+            for tr_id in tr_ids:
+                is_psbl = "3031R" in tr_id or "3011R" in tr_id
+                url_path = "/uapi/overseas-stock/v1/trading/inquire-psbl-order" if is_psbl else "/uapi/overseas-stock/v1/trading/inquire-balance"
+                url = f"{base_url}{url_path}"
+                
                 headers = {
                     "Content-Type": "application/json", "authorization": f"Bearer {token}",
                     "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"
                 }
-                params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "840", "TR_PACC_CD": ""}
-                if is_psbl: 
-                    params["TR_CRCY_CD"] = "USD"
-                    if excg: params["OVRS_EXCG_CD"] = excg
-                else: 
-                    params["WCRC_FRCR_DVS_CD"] = "02"
                 
-                try:
-                    res = requests.get(url, headers=headers, params=params, timeout=10)
-                    if res.status_code == 200:
-                        d = res.json()
-                        # [ DIAGNOSTIC ] 모든 응답을 세션에 임시 저장 (진단용)
-                        st.session_state["debug_kis_overseas_last_raw"] = d
-                        
-                        if d.get('rt_cd') != '0': continue
+                target_exchanges = exchanges if is_psbl else [None]
+                for excg in target_exchanges:
+                    params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": natn, "TR_PACC_CD": ""}
+                    if is_psbl: 
+                        params["TR_CRCY_CD"] = "USD"
+                        if excg: params["OVRS_EXCG_CD"] = excg
+                    else: 
+                        params["WCRC_FRCR_DVS_CD"] = "02"
+                    
+                    try:
+                        res = requests.get(url, headers=headers, params=params, timeout=10)
+                        if res.status_code == 200:
+                            d = res.json()
+                            st.session_state["debug_kis_overseas_last_raw"] = d
+                            if d.get('rt_cd') != '0': continue
+                                
+                            cash_usd = find_in_obj(d, USD_CASH_FIELDS)
+                            eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
+                            total_krw = find_in_obj(d, KRW_TOTAL_FIELDS)
                             
-                        cash_usd = find_in_obj(d, USD_CASH_FIELDS)
-                        eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
-                        total_krw = find_in_obj(d, KRW_TOTAL_FIELDS)
-                        
-                        if (eval_usd + cash_usd) > best_data["usd_total"] or cash_usd > best_data["usd_cash"]:
-                            o1 = d.get('output') or d.get('output1')
-                            best_data = {"krw": total_krw, "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}
-                            best_holdings = (o1 if isinstance(o1, list) else [])
+                            # 통합증거금의 경우 평가금액이 usd_total에 합산되어야 함
+                            current_usd_total = eval_usd + cash_usd if eval_usd > 0 else cash_usd
                             
-                            if cash_usd > 1.0 and len(best_holdings) > 0:
-                                return best_data, best_holdings
-                except: continue
-
-    # 2. [ FALLBACK ] 통합증거금 계좌 대응 (NATN_CD="000")
-    if best_data["usd_total"] == 0:
-        for suffix in suffixes:
-            for tr_id in ["TTTS3031R", "TTTS3061R"]:
-                if use_mock: tr_id = "V" + tr_id[1:]
-                is_psbl = "3031R" in tr_id
-                url_path = "/uapi/overseas-stock/v1/trading/inquire-psbl-order" if is_psbl else "/uapi/overseas-stock/v1/trading/inquire-balance"
-                url = f"{base_url}{url_path}"
-                
-                headers = {"Content-Type": "application/json", "authorization": f"Bearer {token}", "appkey": ak, "appsecret": as_, "tr_id": tr_id, "custtype": "P"}
-                params = {"CANO": target_acc[:8], "ACNT_PRDT_CD": suffix, "NATN_CD": "000", "TR_PACC_CD": ""}
-                if is_psbl: 
-                    params["TR_CRCY_CD"] = "USD"
-                else:
-                    params["WCRC_FRCR_DVS_CD"] = "02"
-                
-                try:
-                    res = requests.get(url, headers=headers, params=params, timeout=10)
-                    if res.status_code == 200:
-                        d = res.json()
-                        st.session_state["debug_kis_overseas_fallback_raw"] = d
-                        cash_usd = find_in_obj(d, USD_CASH_FIELDS)
-                        eval_usd = find_in_obj(d, USD_EVAL_FIELDS)
-                        if cash_usd > 0 or eval_usd > 0:
-                            return {"krw": find_in_obj(d, KRW_TOTAL_FIELDS), "usd_total": eval_usd + cash_usd, "usd_cash": cash_usd}, (d.get('output1', []) if isinstance(d.get('output1'), list) else [])
-                except: continue
+                            if current_usd_total > best_data["usd_total"] or cash_usd > best_data["usd_cash"]:
+                                o1 = d.get('output') or d.get('output1')
+                                best_data = {"krw": total_krw, "usd_total": current_usd_total, "usd_cash": cash_usd}
+                                best_holdings = (o1 if isinstance(o1, list) else [])
+                                
+                                # 데이터가 충분히 발견되면 즉시 리턴 (속도 최적화)
+                                if cash_usd > 1.0 and len(best_holdings) > 0:
+                                    return best_data, best_holdings
+                    except: continue
     
     return best_data, best_holdings
 
