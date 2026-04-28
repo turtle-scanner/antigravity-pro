@@ -20,7 +20,10 @@ import threading
 import concurrent.futures
 
 # --- [ SYSTEM ] [GLOBAL HELPER] Page Config ---
-st.set_page_config(page_title="StockDragonfly Pro", page_icon="[ TERMINAL ]", layout="wide")
+st.set_page_config(page_title="StockDragonfly Pro", page_icon="📟", layout="wide")
+
+# [ DIAGNOSTIC ] 서버 구동 확인용
+st.write("🚀 [ SYSTEM ] 사령부 시스템 엔진 로드 중... (이 메시지가 보이면 엔진은 정상입니다)")
 
 # --- [ SYSTEM ] [GLOBAL HELPER] Safe Network Request ---
 def safe_get(url, timeout=3):
@@ -160,13 +163,57 @@ def get_sheet_tickers():
     except: return ["NVDA", "TSLA"]
 
 def run_antigravity_screener():
+    """실시간 주도주 VCP & EP 정밀 스캐닝 엔진 v2.0"""
     st_txt = st.empty()
-    st_txt.info("스캐닝 중...")
+    st_txt.info("📡 [ SCAN ] 전 세계 주도주 수급 및 변동성 정밀 분석 중...")
+    
+    # 스캔 대상: 맵에 등록된 주요 종목들
+    tickers = list(TICKER_NAME_MAP.keys())
+    results = {"Burst": [], "EP": [], "Anticipation": []}
+    
     try:
-        # 간단 요약 버전
-        st.session_state.antigravity_scan = {"Burst": [], "EP": [], "Anticipation": []}
-        st.success("스캔 완료!")
-    except: st.error("오류")
+        # 데이터 일괄 다운로드 (최근 30일)
+        data = yf.download(tickers, period="30d", interval="1d", progress=False)
+        if data.empty:
+            st.warning("데이터를 가져오지 못했습니다. 잠시 후 다시 시도하세요.")
+            return
+
+        close = data['Close']
+        volume = data['Volume']
+        
+        for tic in tickers:
+            try:
+                if tic not in close.columns: continue
+                c_series = close[tic].dropna()
+                v_series = volume[tic].dropna()
+                if len(c_series) < 20: continue
+                
+                curr_p = c_series.iloc[-1]
+                prev_p = c_series.iloc[-2]
+                pct = (curr_p - prev_p) / prev_p * 100
+                
+                # 1. EP (Episodic Pivot) 스캔: 거래량 300% 급증 + 5% 이상 상승
+                avg_vol = v_series.iloc[-20:-1].mean()
+                curr_vol = v_series.iloc[-1]
+                vol_ratio = curr_vol / avg_vol if avg_vol > 0 else 0
+                
+                if vol_ratio > 3.0 and pct > 5.0:
+                    results["EP"].append({"Ticker": tic, "Name": TICKER_NAME_MAP[tic], "Price": curr_p, "Change": f"{pct:+.2f}%", "VolRatio": f"{vol_ratio:.1f}x"})
+                
+                # 2. Burst (Pocket Pivot) 스캔: 10일 평균 거래량 돌파 + 양봉
+                if curr_vol > v_series.iloc[-10:-1].max() and pct > 2.0:
+                    results["Burst"].append({"Ticker": tic, "Name": TICKER_NAME_MAP[tic], "Price": curr_p, "Change": f"{pct:+.2f}%"})
+                
+                # 3. Anticipation (VCP/응축): 최근 5일 변동성 축소 (고가-저가 범위 3% 이내)
+                recent_range = (c_series.iloc[-5:].max() - c_series.iloc[-5:].min()) / c_series.iloc[-5:].mean() * 100
+                if recent_range < 3.0:
+                    results["Anticipation"].append({"Ticker": tic, "Name": TICKER_NAME_MAP[tic], "Price": curr_p, "Range": f"{recent_range:.1f}%"})
+            except: continue
+            
+        st.session_state.antigravity_scan = results
+        st_txt.success(f"✅ [ COMPLETE ] {len(tickers)}개 종목 분석 완료!")
+    except Exception as e:
+        st.error(f"스캔 중 오류 발생: {e}")
 
 def safe_read_csv(file_path, columns=None):
     if not os.path.exists(file_path):
@@ -777,13 +824,14 @@ ZONE_CONFIG = {
     "[ RISK ] 4. 전략 및 리스크": ["4-a. [ REPORT ] 프로 분석 리포트", "4-b. [ CALC ] 리스크 계산기", "4-c. [ SHIELD ] 리스크 방패"],
     "[ ACADEMY ] 5. 마스터 훈련소": ["5-a. [ WHOWS ] 본데는 누구인가?", "5-b. [ STUDY ] 주식공부방(차트)", "5-c. [ RADAR ] 나노바나나 레이더", "5-d. [ EXAM ] 정기 승급 시험 안내", "5-e. [ SUCCESS ] 실전 익절 자랑방", "5-f. [ REVIEW ] 손실 위로 및 복기방"],
     "[ SQUARE ] 6. 안티그래비티 광장": ["6-a. [ CHECK ] 출석체크(오늘한줄)", "6-b. [ CHAT ] 소통 대화방", "6-c. [ VISIT ] 방문자 인사 신청"],
-    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ EXEC ] 모의투자 매수테스트", "7-b. [ DASHBOARD ] 모의투자 현황/결과", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-d. [ REPORT ] 자동투자 성적표", "7-e. [ RANK ] 사령부 명예의 전당", "7-f. [ COOLAMAGIE ] [쿨라매기 엔진 적용]", "7-g. [ BONDE ] 본데 통합 전략 사령부"]
+    "[ AUTO ] 7. 자동매매 사령부": ["7-a. [ EXEC ] 모의투자 매수테스트", "7-b. [ DASHBOARD ] 모의투자 현황/결과", "7-c. [ ENGINE ] 자동매매 전략엔진", "7-d. [ REPORT ] 자동투자 성적표", "7-e. [ RANK ] 사령부 명예의 전당", "7-f. [ COOLAMAGIE ] [쿨라매기 엔진 적용]", "7-g. [ BONDE ] 본데 통합 전략 사령부"],
+    "[ STRATEGY ] 8. AI 거장들의 전술": ["8-a. [ INTRO ] AI 요원 및 거장 소개", "8-b. [ MANUAL ] 거장의 실전 전술 매뉴얼", "8-c. [ CHECKLIST ] 진입 전 필수 체크리스트", "8-d. [ LIBRARY ] 추천 필독서 및 전술 라이브러리", "8-e. [ QUOTE ] 오늘의 거장 명언", "8-f. [ LOGS ] AI 자동매매 실전 기록", "8-g. [ PERFORMANCE ] AI 수익률 전격 공개"]
 }
 
 def load_trades():
-    data = safe_load_json(TRADES_DB, {"mock": [], "auto": [], "history": [], "wallets": {}})
-    if "wallets" not in data: data["wallets"] = {}
-    return data
+    default_data = {"mock": [], "auto": [], "history": [], "wallets": {}}
+    if not os.path.exists(TRADES_DB): return default_data
+    return safe_load_json(TRADES_DB, default_data)
 
 def save_trades(trades):
     safe_save_json(trades, TRADES_DB)
@@ -1834,8 +1882,138 @@ elif page.startswith("6-b."):
                                 local_chat.to_csv(CHAT_FILE, index=False, encoding="utf-8-sig")
                                 st.rerun()
                     st.write("") # 간격 조절
+
+elif page.startswith("8-b."):
+    st.header("[ MANUAL ] 거장들의 실전 전술 매뉴얼")
+    st.markdown("<div class='glass-card'>거장들이 수십 년간 검증해온 핵심 매매 타이밍과 전술을 요약해 드립니다.</div>", unsafe_allow_html=True)
+    
+    with st.expander("🚀 본데 & 오닐: EP 및 컵앤핸들 돌파 전술", expanded=True):
+        st.write("1. **거래량:** 평균 대비 최소 200~300% 이상 폭증 확인")
+        st.write("2. **가격:** 전고점 또는 피벗 포인트를 강력하게 돌파할 때 진입")
+        st.write("3. **손절:** 진입가 대비 5~7% 이내에서 철저히 관리")
+        
+    with st.expander("🎯 미너비니: VCP 패턴 및 저위험 진입 전술"):
+        st.write("1. **축소:** 주가 변동폭이 점점 좁아지는지 확인 (Volatility Contraction)")
+        st.write("2. **거래량 급감:** 돌파 직전 거래량이 마르며 대기 매물이 소화되는 시점 포착")
+        st.write("3. **치트키:** 10일/20일 이동평균선이 정배열된 상태에서만 공략")
+
+elif page.startswith("8-c."):
+    st.header("[ CHECKLIST ] 매수 전 5계명 (Self-Check)")
+    st.info("사령관님, 매수 버튼을 누르기 전 아래 항목 중 3개 이상 해당되지 않는다면 다시 생각해 보십시오.")
+    
+    c1 = st.checkbox("1. 시장의 흐름(지수)이 상승 국면인가?")
+    c2 = st.checkbox("2. 해당 종목이 속한 산업군이 주도 섹터인가?")
+    c3 = st.checkbox("3. 거래량이 실린 강력한 돌파가 발생했는가?")
+    c4 = st.checkbox("4. 손절가가 명확하며 리스크 대비 수익비가 1:3 이상인가?")
+    c5 = st.checkbox("5. 뇌동매매가 아닌 본인만의 시나리오에 의한 진입인가?")
+    
+    if all([c1, c2, c3, c4, c5]):
+        st.balloons()
+        st.success("🎯 완벽한 조건입니다! 전술적 진입을 승인합니다.")
+
+elif page.startswith("8-d."):
+    st.header("[ LIBRARY ] 트레이더의 보물 창고")
+    lib_cols = st.columns(3)
+    books = [
+        {"title": "초수익 성장주 투자", "author": "마크 미너비니", "tag": "필독서"},
+        {"title": "주식 투자하는 법", "author": "윌리엄 오닐", "tag": "바이블"},
+        {"title": "공포와 탐욕을 넘어서", "author": "프라딥 본데", "tag": "전술"},
+        {"title": "시장의 마법사들", "author": "잭 슈거", "tag": "마인드셋"},
+        {"title": "주식 매매하는 법", "author": "제시 리버모어", "tag": "고전"},
+        {"title": "농사매매 실전 가이드", "author": "한샘 요원", "tag": "실전"}
+    ]
+    for i, b in enumerate(books):
+        with lib_cols[i % 3]:
+            st.markdown(f"""
+            <div class='glass-card' style='text-align: center; border-bottom: 2px solid #00FF00;'>
+                <div style='font-size: 0.7rem; color: #00FF00;'>[{b['tag']}]</div>
+                <div style='font-weight: 800; margin: 10px 0;'>{b['title']}</div>
+                <div style='font-size: 0.8rem; color: #888;'>{b['author']} 저</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+elif page.startswith("8-e."):
+    st.header("[ QUOTE ] 거장의 한마디 (Mindset)")
+    quotes = [
+        "\"시장은 결코 틀리지 않는다. 틀리는 것은 내 판단뿐이다.\" - 제시 리버모어",
+        "\"손실을 짧게 끊는 것만이 시장에서 살아남는 유일한 길이다.\" - 마크 미너비니",
+        "\"최고의 종목은 가장 두려운 시기에 나타난다.\" - 윌리엄 오닐",
+        "\"매수 후 잠을 잘 수 없다면, 비중을 줄여라.\" - 워렌 버핏",
+        "\"원칙 없는 수익보다 원칙 있는 손실이 낫다.\" - 한샘 요원"
+    ]
+    q = random.choice(quotes)
+    st.markdown(f"""
+    <div class='glass-card' style='text-align: center; padding: 50px; font-style: italic;'>
+        <h2 style='color: #FFD700; font-family: "Nanum Myeongjo", serif;'>{q}</h2>
+    </div>
+    """, unsafe_allow_html=True)
     except Exception as e:
         st.error(f"채팅 데이터 로드 실패: {e}")
+
+elif page.startswith("8-a."):
+    st.header("[ INTRO ] AI 전술 사령부: 6인의 거장")
+    st.markdown("<div class='glass-card'>안티그래비티 터미널을 이끄는 6인의 전술 거장과 그들의 핵심 매매 철학을 소개합니다.</div>", unsafe_allow_html=True)
+    
+    masters = [
+        {
+            "name": "1. 프라딥 본데 (Pradeep Bonde)",
+            "title": "모멘텀 및 EP의 화신",
+            "desc": "EP(에피소딕 피벗)와 RS(상대강도) 90 이상의 주도주를 공략합니다. 강력한 실적 성장이 동반된 급등주 추격 매매의 대가입니다.",
+            "strategy": "EP / RS / 10-20MA 서포트",
+            "icon": "🚀"
+        },
+        {
+            "name": "2. 마크 미너비니 (Mark Minervini)",
+            "title": "변동성 축소(VCP)의 거장",
+            "desc": "SEPA 전략을 통해 위험을 최소화하고 수익을 극대화합니다. 주가가 에너지를 응축하는 VCP 패턴 돌파 시점을 정밀하게 타격합니다.",
+            "strategy": "VCP / SEPA / 신고가 돌파",
+            "icon": "🎯"
+        },
+        {
+            "name": "3. 윌리엄 오닐 (William O'Neil)",
+            "title": "CAN SLIM의 창시자",
+            "desc": "성장주 투자의 교과서입니다. 이익 성장, 기관 매수세, 시장 방향성을 모두 고려하여 최고의 대장주만을 골라냅니다.",
+            "strategy": "CAN SLIM / 컵앤핸들 패턴",
+            "icon": "📈"
+        },
+        {
+            "name": "4. 스탠 와인스태인 (Stan Weinstein)",
+            "title": "시장 주기 분석의 권위자",
+            "desc": "주식의 4단계 수명 주기를 강조합니다. 2단계 상승 국면의 초입을 포착하고, 4단계 하락 국면을 철저히 회피하는 전술을 구사합니다.",
+            "strategy": "4단계 주기 / 30주 이동평균선",
+            "icon": "🔍"
+        },
+        {
+            "name": "5. 워렌 버핏 (Warren Buffett)",
+            "title": "가치 투자의 전설",
+            "desc": "경제적 해자가 있는 기업을 싼 가격에 사서 영원히 보유하는 가치 투자의 정점입니다. 복리의 마법을 실천하는 지휘관입니다.",
+            "strategy": "경제적 해자 / 안전 마진 / ROE",
+            "icon": "💎"
+        },
+        {
+            "name": "6. 한샘 요원 (Hanssem)",
+            "title": "안정적인 농사매매의 달인",
+            "desc": "급등주보다는 씨를 뿌리고 수확하는 '농사매매' 기법을 지향합니다. 철저한 분할 매수와 자금 관리로 꾸준한 우상향 곡선을 그려냅니다.",
+            "strategy": "분할 매수 / 농사 매매 / 리스크 관리",
+            "icon": "🚜"
+        }
+    ]
+    
+    cols = st.columns(2)
+    for i, m in enumerate(masters):
+        with cols[i % 2]:
+            st.markdown(f"""
+            <div class='glass-card' style='height: 320px; border-top: 3px solid #FFD700;'>
+                <div style='font-size: 2.5rem; margin-bottom: 15px;'>{m['icon']}</div>
+                <h3 style='margin: 0; color: #FFD700;'>{m['name']}</h3>
+                <p style='color: #00FF00; font-weight: 800; font-size: 0.85rem;'>{m['title']}</p>
+                <div style='font-size: 0.85rem; color: #BBB; min-height: 80px;'>{m['desc']}</div>
+                <hr style='border-color: rgba(255,215,0,0.1);'>
+                <div style='font-size: 0.8rem;'>
+                    <span style='color: #888;'>핵심전술:</span> <b style='color: #FFF;'>{m['strategy']}</b>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
 elif page.startswith("3-c."):
     st.header("[ FOCUS ] 사령부 최핵심 감시 리스트 (Top 3 Focus)")
