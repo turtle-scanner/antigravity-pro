@@ -222,8 +222,16 @@ ATTENDANCE_SHEET_URL = st.secrets.get("ATTENDANCE_SHEET_URL", "https://docs.goog
 CHAT_SHEET_URL = st.secrets.get("CHAT_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=2147147361")
 VISITOR_SHEET_URL = st.secrets.get("VISITOR_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=621380834")
 WITHDRAWN_SHEET_URL = st.secrets.get("WITHDRAWN_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1873947039")
-# [ GLOBAL ] 전역 공지 및 UI 레이아웃 설정
 NOTICE_SHEET_URL = st.secrets.get("NOTICE_SHEET_URL", "https://docs.google.com/spreadsheets/d/1HbC_U1I78HAdV99X6qS1hmY_RiRGPrHX92AYbBPrIpU/export?format=csv&gid=1619623253")
+
+# --- [ GLOBAL CONFIG ] KIS API & TELEGRAM ---
+KIS_APP_KEY = st.secrets.get("KIS_APP_KEY", "")
+KIS_APP_SECRET = st.secrets.get("KIS_APP_SECRET", "")
+KIS_ACCOUNT_NO = st.secrets.get("KIS_ACCOUNT_NO", "").replace("-", "")
+KIS_MOCK_TRADING = str(st.secrets.get("KIS_MOCK_TRADING", "false")).lower() == "true"
+
+TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
 
 TICKER_NAME_MAP = {
     "NVDA": "엔비디아", "TSLA": "테슬라", "AAPL": "애플", "MSFT": "마이크로소프트", "PLTR": "팔란티어", "SMCI": "슈퍼마이크로", 
@@ -252,36 +260,59 @@ def get_market_sentiment_score():
     """VIX 및 나스닥 RSI 기반 실전 공포/탐욕 점수 산출"""
     try:
         # VIX(^VIX)는 공포의 지수
-        m_data = yf.download(["^VIX", "^IXIC"], period="14d", interval="1d", progress=False)['Close']
-        curr_vix = float(m_data["^VIX"].dropna().iloc[-1]) if "^VIX" in m_data.columns else 20.0
+        m_data = yf.download(["^VIX", "^IXIC"], period="14d", interval="1d", progress=False)
+        if m_data.empty or 'Close' not in m_data.columns:
+             return 50, 20.0, "NEUTRAL"
+             
+        close_data = m_data['Close']
+        curr_vix = float(close_data["^VIX"].dropna().iloc[-1]) if "^VIX" in close_data.columns else 20.0
         
         # 기본 점수: VIX가 낮을수록 탐욕(높음), 높을수록 공포(낮음)
         # VIX 15 -> 85점, VIX 40 -> 10점 정도의 보간
         vix_score = max(5, min(95, 100 - (curr_vix * 2.2)))
         
         # 나스닥 RSI로 보정
-        ndx = m_data["^IXIC"].dropna()
-        delta = ndx.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1+rs.iloc[-1])) if not rs.empty else 50
+        if "^IXIC" in close_data.columns:
+            ndx = close_data["^IXIC"].dropna()
+            if not ndx.empty:
+                delta = ndx.diff()
+                gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                if not loss.empty and loss.iloc[-1] != 0:
+                    rs = gain / loss
+                    rsi = 100 - (100 / (1+rs.iloc[-1]))
+                else:
+                    rsi = 50
+            else:
+                rsi = 50
+        else:
+            rsi = 50
         
         final_score = (vix_score * 0.6) + (rsi * 0.4)
         status = "GREED" if final_score > 65 else ("FEAR" if final_score < 40 else "NEUTRAL")
         return int(final_score), curr_vix, status
-    except:
+    except Exception as e:
         return 50, 20.0, "NEUTRAL"
 
 # --- [ MACRO ] 거시지표 매크로 바 ---
 @st.cache_data(ttl=600)
 def get_macro_data():
     try:
-        m_data = yf.download(["USDKRW=X", "^TNX"], period="5d", progress=False)['Close']
-        rate_series = m_data["USDKRW=X"].dropna()
-        rate = float(rate_series.iloc[-1]) if not rate_series.empty else 1400.0
-        yield_series = m_data["^TNX"].dropna()
-        yield10y = float(yield_series.iloc[-1]) if not yield_series.empty else 4.3
+        m_data = yf.download(["USDKRW=X", "^TNX"], period="5d", progress=False)
+        if m_data.empty or 'Close' not in m_data.columns:
+            return 1400.0, 4.3
+            
+        close_data = m_data['Close']
+        rate = 1400.0
+        if "USDKRW=X" in close_data.columns:
+            rate_series = close_data["USDKRW=X"].dropna()
+            if not rate_series.empty: rate = float(rate_series.iloc[-1])
+            
+        yield10y = 4.3
+        if "^TNX" in close_data.columns:
+            yield_series = close_data["^TNX"].dropna()
+            if not yield_series.empty: yield10y = float(yield_series.iloc[-1])
+            
         return rate, yield10y
     except: 
         return 1400.0, 4.3
@@ -463,12 +494,8 @@ def get_cached_bg_b64():
     return ""
 
 def get_user_kis_creds():
-    """st.secrets에서 KIS 인증 정보를 안전하게 추출"""
-    ak = st.secrets.get("KIS_APP_KEY", "")
-    as_ = st.secrets.get("KIS_APP_SECRET", "")
-    an = st.secrets.get("KIS_ACCOUNT_NO", "").replace("-", "")
-    is_mock = str(st.secrets.get("KIS_MOCK_TRADING", "false")).lower() == "true"
-    return ak, as_, an, is_mock
+    """글로벌 설정에서 KIS 인증 정보를 추출"""
+    return KIS_APP_KEY, KIS_APP_SECRET, KIS_ACCOUNT_NO, KIS_MOCK_TRADING
 
 def get_stock_name(ticker):
     """티커로부터 한글/영문 종목명 획득"""
@@ -1227,7 +1254,9 @@ with st.sidebar:
 
 # --- 유저 등급 판독 ---
 users = load_users()
-curr_user_data = users.get(st.session_state.current_user, {})
+# [ SAFE ] 세션 상태 접근 보안 강화 (AttributeError 방지)
+current_user = st.session_state.get("current_user")
+curr_user_data = users.get(current_user, {}) if current_user else {}
 curr_grade = curr_user_data.get("grade", "회원")
 is_admin = (curr_grade in ["관리자", "방장"])
 
