@@ -259,39 +259,43 @@ def resolve_ticker(query):
 def get_market_sentiment_score():
     """VIX 및 나스닥 RSI 기반 실전 공포/탐욕 점수 산출"""
     try:
-        # VIX(^VIX)는 공포의 지수
+        # m_data가 DataFrame인지 확실히 보장하기 위해 group_by=True 또는 컬럼 구조 확인
         m_data = yf.download(["^VIX", "^IXIC"], period="14d", interval="1d", progress=False)
-        if m_data.empty or 'Close' not in m_data.columns:
-             return 50, 20.0, "NEUTRAL"
-             
-        close_data = m_data['Close']
-        curr_vix = float(close_data["^VIX"].dropna().iloc[-1]) if "^VIX" in close_data.columns else 20.0
+        if m_data.empty: return 50, 20.0, "NEUTRAL"
         
-        # 기본 점수: VIX가 낮을수록 탐욕(높음), 높을수록 공포(낮음)
-        # VIX 15 -> 85점, VIX 40 -> 10점 정도의 보간
+        # MultiIndex 대응 및 단일 컬럼 대응
+        if 'Close' in m_data.columns:
+            close_data = m_data['Close']
+        else:
+            # yf 버전이나 상황에 따라 구조가 다를 수 있음
+            return 50, 20.0, "NEUTRAL"
+
+        # 데이터가 Series인 경우(티커가 1개만 성공한 경우 등) DataFrame으로 변환
+        if isinstance(close_data, pd.Series):
+            close_data = close_data.to_frame()
+
+        curr_vix = 20.0
+        if "^VIX" in close_data.columns:
+            v_s = close_data["^VIX"].dropna()
+            if not v_s.empty: curr_vix = float(v_s.iloc[-1])
+        
         vix_score = max(5, min(95, 100 - (curr_vix * 2.2)))
         
-        # 나스닥 RSI로 보정
+        rsi = 50
         if "^IXIC" in close_data.columns:
             ndx = close_data["^IXIC"].dropna()
-            if not ndx.empty:
+            if len(ndx) >= 14:
                 delta = ndx.diff()
                 gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
                 loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                if not loss.empty and loss.iloc[-1] != 0:
+                if not loss.empty and loss.iloc[-1] > 0:
                     rs = gain / loss
                     rsi = 100 - (100 / (1+rs.iloc[-1]))
-                else:
-                    rsi = 50
-            else:
-                rsi = 50
-        else:
-            rsi = 50
         
         final_score = (vix_score * 0.6) + (rsi * 0.4)
         status = "GREED" if final_score > 65 else ("FEAR" if final_score < 40 else "NEUTRAL")
         return int(final_score), curr_vix, status
-    except Exception as e:
+    except:
         return 50, 20.0, "NEUTRAL"
 
 # --- [ MACRO ] 거시지표 매크로 바 ---
@@ -299,19 +303,24 @@ def get_market_sentiment_score():
 def get_macro_data():
     try:
         m_data = yf.download(["USDKRW=X", "^TNX"], period="5d", progress=False)
-        if m_data.empty or 'Close' not in m_data.columns:
-            return 1400.0, 4.3
-            
-        close_data = m_data['Close']
+        if m_data.empty: return 1400.0, 4.3
+        
+        if 'Close' in m_data.columns:
+            close_data = m_data['Close']
+        else: return 1400.0, 4.3
+
+        if isinstance(close_data, pd.Series):
+            close_data = close_data.to_frame()
+
         rate = 1400.0
         if "USDKRW=X" in close_data.columns:
-            rate_series = close_data["USDKRW=X"].dropna()
-            if not rate_series.empty: rate = float(rate_series.iloc[-1])
+            r_s = close_data["USDKRW=X"].dropna()
+            if not r_s.empty: rate = float(r_s.iloc[-1])
             
         yield10y = 4.3
         if "^TNX" in close_data.columns:
-            yield_series = close_data["^TNX"].dropna()
-            if not yield_series.empty: yield10y = float(yield_series.iloc[-1])
+            y_s = close_data["^TNX"].dropna()
+            if not y_s.empty: yield10y = float(y_s.iloc[-1])
             
         return rate, yield10y
     except: 
@@ -1332,14 +1341,22 @@ def fetch_macro_ticker_tape():
     except: pass
     return "".join(items)
 
-ticker_html = fetch_macro_ticker_tape()
-st.markdown(f"""
-    <div class='ticker-wrap' style='background: rgba(0,255,0,0.03); border-top: 1px solid #FFD70033; border-bottom: 2px solid #FFD70066;'>
-        <div style='display: inline-block; white-space: nowrap; animation: marquee-new 40s linear infinite; font-family: "Outfit", sans-serif; font-size: 0.95rem; font-weight: 600;'>
-            {ticker_html} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {ticker_html} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {ticker_html}
+# --- 🐉 글로벌 매크로 애니메이션 티커 테이프 (안전한 렌더링) ---
+ticker_html = "" # 초기값 보장
+if current_user:
+    try:
+        ticker_html = fetch_macro_ticker_tape()
+    except:
+        ticker_html = ""
+
+if ticker_html:
+    st.markdown(f"""
+        <div class='ticker-wrap' style='background: rgba(0,255,0,0.03); border-top: 1px solid #FFD70033; border-bottom: 2px solid #FFD70066;'>
+            <div style='display: inline-block; white-space: nowrap; animation: marquee-new 40s linear infinite; font-family: "Outfit", sans-serif; font-size: 0.95rem; font-weight: 600;'>
+                {ticker_html} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {ticker_html} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {ticker_html}
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 # --- [ FLASH ] 글로벌 실시간 뉴스 플래시 (Reuters-Style) ---
 def get_urgent_news():
@@ -1354,24 +1371,28 @@ def get_urgent_news():
     ]
     return " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ".join(news_list)
 
-news_flash = get_urgent_news()
-st.markdown(f"""
-    <div style='background: #111; color: #FFF; padding: 5px 0; border-bottom: 2px solid #FF4B4B; overflow: hidden;'>
-        <div style='display: inline-block; white-space: nowrap; animation: marquee-news 45s linear infinite; font-size: 0.8rem; font-weight: 500; letter-spacing: 0.5px;'>
-            <span style='color: #FF4B4B; font-weight: 900; margin-right: 20px;'>NEWS FLASH</span> {news_flash} &nbsp;&nbsp;&nbsp; <span style='color: #FF4B4B; font-weight: 900; margin-right: 20px;'>NEWS FLASH</span> {news_flash}
+# --- [ FLASH ] 글로벌 실시간 뉴스 플래시 (안전한 렌더링) ---
+news_flash = "" # 초기값 보장
+if current_user:
+    news_flash = get_urgent_news()
+    st.markdown(f"""
+        <div style='background: #111; color: #FFF; padding: 5px 0; border-bottom: 2px solid #FF4B4B; overflow: hidden;'>
+            <div style='display: inline-block; white-space: nowrap; animation: marquee-news 45s linear infinite; font-size: 0.8rem; font-weight: 500; letter-spacing: 0.5px;'>
+                <span style='color: #FF4B4B; font-weight: 900; margin-right: 20px;'>NEWS FLASH</span> {news_flash} &nbsp;&nbsp;&nbsp; <span style='color: #FF4B4B; font-weight: 900; margin-right: 20px;'>NEWS FLASH</span> {news_flash}
+            </div>
         </div>
-    </div>
-    <style>
-        @keyframes marquee-news {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-50%); }} }}
-    </style>
-""", unsafe_allow_html=True)
-
-# --- [ STATUS ] 시스템 전역 장애/상태 알림 ---
-if "gs_error" in st.session_state and st.session_state["gs_error"]:
-    st.error(st.session_state["gs_error"])
+        <style>
+            @keyframes marquee-news {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-50%); }} }}
+        </style>
+    """, unsafe_allow_html=True)
 
 # --- [ LIVE ] LIVE OPS CENTER (NEW v6.0) ---
-macro_str = get_macro_indicators() # 환율/금리 포함
+macro_str = "[ SYSTEM ] 데이터 연결 대기 중..." # 초기값 보장
+if current_user:
+    try:
+        macro_str = get_macro_indicators() # 환율/금리 포함
+    except:
+        macro_str = "[ SYSTEM ] 데이터 연결 지연 중..."
 st.markdown(f"""
 <style>
 @keyframes pulse-heart {{
