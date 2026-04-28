@@ -1329,10 +1329,10 @@ if not is_admin:
         if admin_page in zones["[ HQ ] 1. 본부 사령부"]:
             zones["[ HQ ] 1. 본부 사령부"].remove(admin_page)
 
-# 🤖 자동매매 사령부는 모든 승인된 대원(준회원 이상)이 접근 가능
+# 🤖 자동매매 사령부 및 거장 전술 아카데미는 승인된 대원(준회원 이상) 접근 가능
 if curr_grade not in ["방장", "관리자", "정회원", "준회원"]:
-    if "[ AUTO ] 7. 자동매매 사령부" in zones:
-        del zones["[ AUTO ] 7. 자동매매 사령부"]
+    for z in ["[ AUTO ] 7. 자동매매 사령부", "[ STRATEGY ] 8. AI 거장들의 전술"]:
+        if z in zones: del zones[z]
 
 with st.sidebar:
     st.markdown("<p style='color: #FFD700; font-size: 0.9rem; font-weight: 700; margin-top: 10px; margin-bottom: 20px; letter-spacing: 1px;'>[ MISSION CONTROL ]</p>", unsafe_allow_html=True)
