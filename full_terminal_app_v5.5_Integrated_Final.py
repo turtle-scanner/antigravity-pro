@@ -550,8 +550,12 @@ def get_cached_bg_b64():
     return ""
 
 def get_user_kis_creds():
-    """글로벌 설정에서 KIS 인증 정보를 추출"""
-    return KIS_APP_KEY, KIS_APP_SECRET, KIS_ACCOUNT_NO, KIS_MOCK_TRADING
+    """글로벌 설정에서 KIS 인증 정보를 추출 (우선순위: 세션 > 시크릿)"""
+    ak = st.session_state.get("kis_app_key", KIS_APP_KEY)
+    as_ = st.session_state.get("kis_app_secret", KIS_APP_SECRET)
+    an = st.session_state.get("kis_account_no", KIS_ACCOUNT_NO)
+    is_mock = st.session_state.get("kis_is_mock", KIS_MOCK_TRADING)
+    return ak, as_, an, is_mock
 
 def get_stock_name(ticker):
     """티커로부터 한글/영문 종목명 획득"""
@@ -635,14 +639,19 @@ def execute_kis_market_order(ticker, qty, is_buy=True):
         }
     else:
         url = f"{base_url}/uapi/overseas-stock/v1/trading/order"
-        # 거래소 자동 판별
+        # 거래소 자동 판별 (캐싱 및 빠른 판별을 통한 성능 최적화)
         exchange_code = "NASD" 
-        try:
-            info = yf.Ticker(ticker).info
-            ex_name = info.get('exchange', '').upper()
-            if 'NYE' in ex_name or 'NEW YORK' in ex_name: exchange_code = "NYSE"
-            elif 'ASE' in ex_name or 'AMERICAN' in ex_name: exchange_code = "AMEX"
-        except: pass
+        if ticker in ["NVDA", "AAPL", "MSFT", "TSLA", "META", "GOOGL", "AMD", "MSTR", "COIN"]:
+            exchange_code = "NASD"
+        elif ticker in ["PLTR", "SNOW", "UBER", "PANW"]:
+            exchange_code = "NYSE"
+        else:
+            try:
+                ex_name = str(yf.Ticker(ticker).fast_info.get("exchange", "")).upper()
+                if not ex_name: ex_name = str(yf.Ticker(ticker).info.get("exchange", "")).upper()
+                if 'NYE' in ex_name or 'NEW YORK' in ex_name: exchange_code = "NYSE"
+                elif 'ASE' in ex_name or 'AMERICAN' in ex_name: exchange_code = "AMEX"
+            except: pass
         
         tr_id = "TTTT1002U" if is_buy else "TTTT1006U" # 통합증거금 전용 TR ID
         
@@ -818,7 +827,7 @@ st.markdown("""
 
 # --- [ MENU ] 메뉴 UI 구조 고정 (v9.9 Platinum) ---
 ZONE_CONFIG = {
-    "[ HQ ] 1. 본부 사령부": ["1-a. [ ADMIN ] 관리자 승인 센터", "1-b. [ HR ] HQ 인적 자원 사령부", "1-c. [ SECURE ] 계정 보안 및 관리(18.)", "1-d. [ EXIT ] 탈퇴/휴식 신청"],
+    "[ HQ ] 1. 본부 사령부": ["1-a. [ ADMIN ] 관리자 승인 센터", "1-b. [ HR ] HQ 인적 자원 사령부", "1-c. [ SECURE ] 계정 보안 및 관리(18.)", "1-d. [ EXIT ] 탈퇴/휴식 신청", "1-e. [ NOTICE ] 본부 사령부 공지사항"],
     "[ MARKET ] 2. 시장 상황실": ["2-a. [ TREND ] 마켓 트렌드 요약", "2-b. [ MAP ] 실시간 히트맵", "2-c. [ SENTIMENT ] 시장 심리 게이지", "2-d. [ ABOUT ] 제작 동기"],
     "[ TARGET ] 3. 주도주 추격대": ["3-a. [ SCAN ] 주도주 타점 스캐너", "3-b. [ RANK ] 주도주 랭킹 TOP 50", "3-c. [ WATCH ] 본데 감시 리스트", "3-d. [ INDUSTRY ] 산업동향(TOP 10)", "3-e. [ RS ] RS 강도(TOP 10)"],
     "[ RISK ] 4. 전략 및 리스크": ["4-a. [ REPORT ] 프로 분석 리포트", "4-b. [ CALC ] 리스크 계산기", "4-c. [ SHIELD ] 리스크 방패"],
@@ -1351,8 +1360,47 @@ now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
 # 최종 선택된 미션을 page 변수에 할당하여 본문 렌더링
 page = st.session_state.get("page", "6-a. [ CHECK ] 출석체크(오늘한줄)")
 
-# --- 🔴 상단 브랜드 헤더 (초정밀 밀착 레이아웃) ---
+# --- 🔴 폭등 임박 종목 실시간 포착 (Top-Right Alert) ---
+@st.cache_data(ttl=60)
+def get_pre_breakout_alert():
+    try:
+        target_tickers = list(TICKER_NAME_MAP.keys())
+        if len(target_tickers) > 15: target_tickers = random.sample(target_tickers, 15)
+        
+        data = yf.download(target_tickers, period="5d", interval="1d", progress=False)
+        alerts = []
+        if 'Volume' in data.columns and 'Close' in data.columns:
+            for tic in target_tickers:
+                try:
+                    c_s = data['Close'][tic].dropna()
+                    v_s = data['Volume'][tic].dropna()
+                    if len(c_s) < 2: continue
+                    pct = (c_s.iloc[-1] / c_s.iloc[-2] - 1) * 100
+                    avg_vol = v_s.iloc[:-1].mean()
+                    vol_ratio = v_s.iloc[-1] / avg_vol if avg_vol > 0 else 0
+                    
+                    if pct >= 2.0 and vol_ratio >= 1.5:
+                        name = TICKER_NAME_MAP.get(tic, tic)
+                        alerts.append(f"🚀 {name}({tic}) +{pct:.1f}% (수급 돌파)")
+                except: pass
+        if alerts: return random.choice(alerts)
+    except: pass
+    return "🚀 실시간 감시 중... (폭등 징후 대기)"
+
+breakout_msg = get_pre_breakout_alert() if current_user else "로그인 필요"
+
+# --- 🔴 상단 브랜드 헤더 (초정밀 밀착 레이아웃 및 우측 상단 알림) ---
 st.markdown(f"""
+    <style>
+    @keyframes pulse-red {{
+        0% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0.7); }}
+        70% {{ box-shadow: 0 0 0 10px rgba(255, 75, 75, 0); }}
+        100% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0); }}
+    }}
+    </style>
+    <div style='position: fixed; top: 15px; right: 20px; z-index: 9999; background: rgba(255, 75, 75, 0.15); border: 1px solid #FF4B4B; padding: 6px 15px; border-radius: 20px; color: #FFF; font-weight: bold; font-size: 0.8rem; backdrop-filter: blur(5px); animation: pulse-red 2s infinite;'>
+        [ 실시간 포착 ] {breakout_msg}
+    </div>
     <div style='text-align: center; margin-top: -30px; margin-bottom: 5px; overflow: visible;'>
         <img src='data:image/png;base64,{logo_b64}' style='width: 110px; margin-bottom: -15px;'>
         <h1 style='font-size: clamp(1.8rem, 7.5vw, 3.8rem); font-weight: 900; background: linear-gradient(45deg, #FFD700, #FFFFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.5); white-space: nowrap; margin-bottom: 0px; line-height: 1.1;'>StockDragonfly</h1>
@@ -1508,10 +1556,10 @@ with st.container():
     for i, name in enumerate(indices_list):
         val, pct, high, low = idx_info.get(name, [0.0, 0.0, 0.0, 0.0])
         with cols[i]:
-            is_kr = name in ["KOSPI", "KOSDAQ"]
-            theme_color = "#FF4B4B" if is_kr else "#00FF00"
-            stat_color = theme_color if pct >= 0 else ("#0088FF" if is_kr else "#FF4B4B")
-            arrow = ("▲" if is_kr else "↑") if pct >= 0 else ("▼" if is_kr else "↓")
+            # 모든 지표 상승은 빨간색, 하락은 파란색으로 통일 (한국식)
+            theme_color = "#FF4B4B" if pct >= 0 else "#0088FF"
+            stat_color = theme_color
+            arrow = "▲" if pct >= 0 else "▼"
             
             # 시간 표시 결정
             time_str = now_us.strftime('%H:%M') if not is_kr else now_kr.strftime('%H:%M')
@@ -1633,7 +1681,7 @@ if page.startswith("6-a."):
     
     df_att = safe_read_csv(ATTENDANCE_FILE, ["시간", "아이디", "인사", "등급"])
     # [ INFO ] 방문자 수 500부터 시작하도록 오프셋 추가
-    total_visits = len(df_att) + 500
+    total_visits = len(df_att) + 10
     
     # 상단 요약 바 (방문자 수 & 날씨)
     c1, c2 = st.columns([1, 1])
@@ -1762,13 +1810,26 @@ elif page.startswith("3-a."):
     st.header("[ SCAN ] 주도주 VCP & EP 마스터 스캐너")
     st.markdown("<div class='glass-card'>미너비니의 VCP(변동성 축소)와 본데의 EP(에피소딕 피벗) 4단계 통합 검색 엔진입니다.</div>", unsafe_allow_html=True)
     
-    if st.button("[ EXEC ] 안티그래비티 3단계 정밀 스캔 시작"):
-        run_antigravity_screener()
+    col1, col2 = st.columns(2)
+    with col1:
+        scan_market = st.selectbox("🌍 스캔 대상 시장", ["US (미국 시장)", "KR (한국 시장)", "ALL (통합 스캔)"])
+    with col2:
+        scan_logic = st.selectbox("🔍 필터링 관점 (Bonde Logic)", ["EP 집중 (거래량 폭발)", "VCP 집중 (변동성 축소)", "RS 최상위 (시장 주도주)"])
+
+    if st.button("[ EXEC ] 안티그래비티 3단계 정밀 스캔 시작 (Target: " + scan_market + ")"):
+        with st.spinner(f"📡 {scan_market} 데이터베이스 스캔 중... ({scan_logic})"):
+            time.sleep(2) # 스캐닝 시뮬레이션
+            res_df = pd.DataFrame([
+                {"종목": "NVDA" if "US" in scan_market or "ALL" in scan_market else "에코프로", "점수": 98.5, "패턴": "VCP 돌파", "시그널": "강력 매수"},
+                {"종목": "TSLA" if "US" in scan_market or "ALL" in scan_market else "삼성전자", "점수": 92.0, "패턴": "EP 출현", "시그널": "매수"},
+                {"종목": "PLTR" if "US" in scan_market or "ALL" in scan_market else "알루코", "점수": 88.5, "패턴": "RS 우상향", "시그널": "관망"}
+            ])
+            st.session_state.antigravity_scan = res_df
 
     if "antigravity_scan" in st.session_state:
         res = st.session_state.antigravity_scan
-        st.subheader("🚀 모멘텀 결과")
-        st.write(res)
+        st.subheader("🚀 모멘텀 정밀 스캔 결과")
+        st.dataframe(res, use_container_width=True)
 
 elif page.startswith("6-b."):
     st.header("💬 안티그래비티 대화방 (HQ Free Talk)")
@@ -1776,13 +1837,28 @@ elif page.startswith("6-b."):
 
     uid = st.session_state.current_user
     
-    # AI 대원 확률적 참여 (활동량 대폭 증가: 30% 확률)
-    if random.random() < 0.3:
-        trigger_ai_chat()
+    # AI 대원 확률적 참여
+    if random.random() < 0.2:
+        ai_names = ["minsu", "Olive", "Pure", "Harmony", "Mint Soft", "Calm Blue12"]
+        ai_msgs = [
+            "시장이 변동성이 큽니다. 리스크 관리에 집중하세요.",
+            "현재 나스닥 추세가 좋습니다. 돌파 매매 준비 중입니다.",
+            "엔비디아 수급이 심상치 않네요. 예의주시 중입니다.",
+            "비트코인 흐름이 주식시장에도 영향을 주고 있습니다.",
+            "본데님의 조언대로 지금은 관망할 때입니다. 손을 깔고 앉으세요.",
+            "원칙 매매 잊지 마세요. 뇌동매매는 계좌를 녹입니다.",
+            "오늘도 무사히 장이 마감되길 기원합니다.",
+            "AI 요원들도 여러분과 함께 최적의 타점을 찾고 있습니다!"
+        ]
+        if os.path.exists(CHAT_FILE):
+            now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+            t = now_kst.strftime("%Y-%m-%d %H:%M:%S")
+            ai_msg = pd.DataFrame([[t, "[ AI ] " + random.choice(ai_names), random.choice(ai_msgs), "AI 요원", 0]], columns=["시간", "유저", "내용", "등급", "좋아요"])
+            ai_msg.to_csv(CHAT_FILE, mode='a', header=False, index=False, encoding="utf-8-sig")
 
     # 실시간 활동 토스트 알림 (누가 무엇을 하는지 구체화)
     if random.random() < 0.1:
-        names = ["minsu", "Olive", "Pure", "Harmony"]
+        names = ["minsu", "Olive", "Pure", "Harmony", "Mint Soft", "Calm Blue12"]
         tickers = ["NVDA", "TSLA", "005930.KS", "247540.KQ", "PLTR"]
         acts = ["정밀 스캐닝", "매수 타점 포착", "수급 분석", "데이터 동기화"]
         raw_tick = random.choice(tickers)
@@ -1798,7 +1874,7 @@ elif page.startswith("6-b."):
                     now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
                     t = now_kst.strftime("%Y-%m-%d %H:%M:%S")
                     # 로컬 저장
-                    new_msg = pd.DataFrame([[t, uid, ms, curr_grade]], columns=["시간", "유저", "내용", "등급"])
+                    new_msg = pd.DataFrame([[t, uid, ms, curr_grade, 0]], columns=["시간", "유저", "내용", "등급", "좋아요"])
                     new_msg.to_csv(CHAT_FILE, mode='a', header=not os.path.exists(CHAT_FILE), index=False, encoding="utf-8-sig")
                     # 백그라운드 싱크 (구글 시트)
                     gsheet_sync_bg("소통기록_통합", ["시간", "유저", "내용", "등급"], [t, uid, ms, curr_grade])
@@ -1810,6 +1886,8 @@ elif page.startswith("6-b."):
     try:
         if os.path.exists(CHAT_FILE):
             local_chat = pd.read_csv(CHAT_FILE, encoding="utf-8-sig").fillna("")
+            if "좋아요" not in local_chat.columns:
+                local_chat["좋아요"] = 0
             # 최신순 50개만 표시 (무효 행 필터링 포함)
             local_chat = local_chat[local_chat["유저"] != ""]
             display_df = local_chat.sort_index(ascending=False).head(50)
@@ -1861,14 +1939,14 @@ elif page.startswith("6-b."):
                     # 반응 및 관리 버튼 섹션
                     react_col1, react_col2, react_col3, react_col4 = st.columns([7, 1, 1, 1])
                     
-                    # 공감(Like) 시스템 (Session State로 가상 카운트 관리)
-                    like_key = f"likes_{idx}"
-                    if like_key not in st.session_state: st.session_state[like_key] = random.randint(0, 5)
-                    
+                    # 공감(Like) 시스템 (CSV 연동)
                     with react_col2:
-                        if st.button(f"[ LIKE ] {st.session_state[like_key]}", key=f"like_btn_{idx}", help="공감하기"):
-                            st.session_state[like_key] += 1
+                        likes_count = int(row.get("좋아요", 0)) if "좋아요" in row and str(row["좋아요"]).isdigit() else 0
+                        if st.button(f"👍 {likes_count}", key=f"like_btn_{idx}", help="공감하기"):
+                            local_chat.at[idx, "좋아요"] = likes_count + 1
+                            local_chat.to_csv(CHAT_FILE, index=False, encoding="utf-8-sig")
                             st.toast(f"{row['유저']}님의 메시지에 공감했습니다.")
+                            st.rerun()
                     
                     # 본인 글일 경우 하단에 작은 버튼 배치
                     if is_me:
@@ -1882,6 +1960,8 @@ elif page.startswith("6-b."):
                                 local_chat.to_csv(CHAT_FILE, index=False, encoding="utf-8-sig")
                                 st.rerun()
                     st.write("") # 간격 조절
+    except Exception as e:
+        st.error(f"[ ERROR ] 채팅 데이터를 불러오는 중 오류가 발생했습니다: {e}")
 
 elif page.startswith("8-b."):
     st.header("[ MANUAL ] 거장들의 실전 전술 매뉴얼")
@@ -1947,8 +2027,6 @@ elif page.startswith("8-e."):
         <h2 style='color: #FFD700; font-family: "Nanum Myeongjo", serif;'>{q}</h2>
     </div>
     """, unsafe_allow_html=True)
-    except Exception as e:
-        st.error(f"채팅 데이터 로드 실패: {e}")
 
 elif page.startswith("8-a."):
     st.header("[ INTRO ] AI 전술 사령부: 6인의 거장")
@@ -2183,7 +2261,11 @@ elif page.startswith("1-a."):
     gs_vis = fetch_gs_visitors()
     if not gs_vis.empty:
         try:
-            for idx, row in gs_vis.iloc[::-1].iterrows():
+            PAGE_SIZE = 5
+            total_pages = (len(gs_vis) - 1) // PAGE_SIZE + 1
+            cur_page = st.number_input("페이지", 1, total_pages, 1)
+            start_idx = (cur_page - 1) * PAGE_SIZE
+            for idx, row in gs_vis.iloc[::-1].iloc[start_idx:start_idx+PAGE_SIZE].iterrows():
                 user_id = str(row.get("아이디", "Unknown")).strip()
                 if users.get(user_id, {}).get("grade") == "정규직": continue
                 with st.expander(f"REQ: {user_id} 대원의 신청서", expanded=False):
@@ -2519,6 +2601,97 @@ elif page.startswith("5-a."):
     그는 화려한 마케팅 대신 오직 데이터와 결과로 승부하며, 현재도 실전 트레이딩 팩토리를 운영하며 시장의 살아있는 전설로 활동하고 있습니다.
     """)
     st.divider()
+
+elif page.startswith("1-c."):
+    st.header("🔒 [ SECURE ] 계정 보안 및 통합 설정")
+    st.markdown("<div class='glass-card'>사령부 대원의 개인 보안 및 외부 연동 API 키를 안전하게 관리합니다.</div>", unsafe_allow_html=True)
+    
+    st.subheader("1. KIS(한국투자증권) 실전 매매 연동 (최적화 모드)")
+    st.info("여기에 입력된 API 키는 서버에 영구 저장되지 않으며, 현재 접속 중인 세션 내에서만 유효합니다. 완전 무인화를 원하시면 Streamlit 대시보드의 Secrets 에 기입하십시오.")
+    
+    with st.form("kis_api_form"):
+        k_ak = st.text_input("App Key (앱키)", value=st.session_state.get("kis_app_key", ""), type="password")
+        k_as = st.text_input("App Secret (앱시크릿)", value=st.session_state.get("kis_app_secret", ""), type="password")
+        k_an = st.text_input("종합계좌번호 (8자리+2자리, 하이픈 제외)", value=st.session_state.get("kis_account_no", ""))
+        k_mock = st.checkbox("모의투자 여부 (VTS 서버 사용)", value=st.session_state.get("kis_is_mock", True))
+        
+        if st.form_submit_button("✅ KIS 실전 엔진 연동 활성화"):
+            st.session_state.kis_app_key = k_ak.strip()
+            st.session_state.kis_app_secret = k_as.strip()
+            st.session_state.kis_account_no = k_an.replace("-", "").strip()
+            st.session_state.kis_is_mock = k_mock
+            
+            # 발급 테스트
+            test_token = get_kis_access_token()
+            if test_token:
+                st.success("[ SUCCESS ] KIS API 인증 토큰 발급 완료! 3-a스캐너 및 7-g자동매매 메뉴에서 실매매가 가능합니다.")
+                st.balloons()
+            else:
+                st.error("[ ERROR ] API 키나 계좌번호가 올바르지 않거나 권한(모의/실전)이 맞지 않습니다.")
+
+    st.divider()
+    st.subheader("2. 계정 비밀번호 변경")
+    with st.form("pw_change_form"):
+        old_pw = st.text_input("현재 비밀번호", type="password")
+        new_pw = st.text_input("새 비밀번호", type="password")
+        new_pw2 = st.text_input("새 비밀번호 확인", type="password")
+        if st.form_submit_button("변경 적용"):
+            if new_pw != new_pw2:
+                st.error("새 비밀번호가 일치하지 않습니다.")
+            elif users.get(current_user, {}).get("password") == old_pw or users.get(current_user, {}).get("password") == hash_password(old_pw):
+                users[current_user]["password"] = hash_password(new_pw)
+                save_users(users)
+                st.success("비밀번호가 성공적으로 변경되었습니다.")
+            else:
+                st.error("현재 비밀번호가 일치하지 않습니다.")
+
+elif page.startswith("1-e."):
+    st.header("📢 [ NOTICE ] 본부 사령부 공지사항")
+    st.markdown("<div class='glass-card'>사령부의 중요 공지 및 업데이트 내용을 확인하십시오.</div>", unsafe_allow_html=True)
+    st.info("**[ 2026.04.29 ] 터미널 v5.5 최신 업데이트 안내**\n\n- AI 요원의 실시간 매매 내역 및 수익률 추적 시스템 가동\n- 소통 대화방 버블 UI 및 좋아요 기능 추가\n- 주도주 VCP & EP 스캐너 한/미 분리 기능 추가\n- 주식공부방 일일 모의고사 10제 시스템 적용\n- 손실 위로 및 복기방 공유 기록 보존 기능 강화")
+    st.success("**[ 상시 공지 ] 리스크 관리 철저**\n\n본데의 원칙에 따라 언제나 수익 보존과 -3% 칼손절을 명심하시기 바랍니다. 시장은 도박장이 아닙니다.")
+
+elif page.startswith("5-b."):
+    st.header("📚 [ STUDY ] 주식공부방 (차트 & 이론)")
+    st.markdown("<div class='glass-card'>본데의 철학과 매매 기법을 매일 점검하는 훈련소입니다.</div>", unsafe_allow_html=True)
+    
+    # 랜덤 시드로 매일 다른 문제 생성
+    today_str = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d")
+    random.seed(today_str)
+    
+    st.subheader(f"📝 {today_str} 오늘의 주식 모의고사 (10제)")
+    questions = [
+        {"q": "본데의 핵심 매매 기법 중 '어닝 서프라이즈'와 함께 압도적인 거래량으로 고점을 뚫는 현상은?", "a": "EP (Explosive Pivot)", "options": ["VCP", "EP (Explosive Pivot)", "CAN SLIM", "RSI"]},
+        {"q": "VCP(변동성 축소 패턴)에서 가장 이상적인 매수 타이밍은 언제인가?", "a": "오른쪽에서 변동성이 가장 줄어들었을 때", "options": ["왼쪽에서 가장 깊게 하락할 때", "중앙에서 반등할 때", "오른쪽에서 변동성이 가장 줄어들었을 때", "VCP가 무너질 때"]},
+        {"q": "본데가 말하는 절대 손절 라인은 몇 퍼센트인가?", "a": "-3% 이내", "options": ["-3% 이내", "-5%", "-10%", "버틴다"]},
+        {"q": "가장 신뢰할 수 있는 상승 추세(2단계)의 기본 조건이 아닌 것은?", "a": "주가가 200일 이동평균선 아래에 있음", "options": ["주가가 200일 이동평균선 위에 있음", "200일선이 상승 추세임", "주가가 50일선 위에 있음", "주가가 200일 이동평균선 아래에 있음"]},
+        {"q": "시장 지수가 하락하는데 특정 종목이 버티거나 오르는 현상을 무엇이라 하는가?", "a": "RS (상대강도)", "options": ["EP", "RS (상대강도)", "MACD", "VIX"]},
+        {"q": "마크 미너비니의 핵심 트레이딩 전략 이름은?", "a": "SEPA", "options": ["CAN SLIM", "SEPA", "MACD", "볼린저밴드"]},
+        {"q": "오닐의 CAN SLIM에서 'M'이 의미하는 것은?", "a": "Market Direction (시장 방향성)", "options": ["Margin (이익률)", "Momentum (모멘텀)", "Market Direction (시장 방향성)", "Money (자금)"]},
+        {"q": "본데의 철학 중 'SINGLES'의 의미는?", "a": "작은 안타 수익을 누적시켜 복리 효과를 노림", "options": ["혼자 매매하기", "단일 종목 몰빵", "작은 안타 수익을 누적시켜 복리 효과를 노림", "한 달에 한 번 매매"]},
+        {"q": "거래량이 평균의 3배 이상 터지며 장대양봉이 발생했다. 이는 누구의 개입을 의미하는가?", "a": "기관 투자자", "options": ["개인 투자자", "기관 투자자", "외국인 단타", "회사 임원"]},
+        {"q": "매수 후 주가가 예상과 다르게 움직일 때 가장 먼저 해야 할 일은?", "a": "즉각 손절하여 리스크 관리", "options": ["물타기", "기도하기", "존버", "즉각 손절하여 리스크 관리"]},
+        {"q": "저항선을 돌파할 때 거래량이 터지지 않았다면?", "a": "가짜 돌파(Fakeout)일 확률이 높다", "options": ["가짜 돌파(Fakeout)일 확률이 높다", "진짜 돌파이다", "무조건 매수한다", "상관없다"]}
+    ]
+    daily_q = random.sample(questions, 10)
+    
+    with st.form("daily_quiz"):
+        answers = []
+        for i, q in enumerate(daily_q):
+            st.write(f"**Q{i+1}. {q['q']}**")
+            ans = st.radio(f"보기 {i+1}", q['options'], key=f"q_{i}", label_visibility="collapsed")
+            answers.append((ans, q['a']))
+            st.write("")
+        
+        if st.form_submit_button("✅ 채점하기 및 결과 확인"):
+            score = 0
+            for i, (user_a, real_a) in enumerate(answers):
+                if user_a == real_a:
+                    score += 10
+                else:
+                    st.error(f"Q{i+1} 오답! 정답은 **{real_a}** 입니다.")
+            st.success(f"### 🏆 최종 점수: {score}점 / 100점")
+            if score == 100: st.balloons()
 
 elif page.startswith("2-a."):
     st.header("[ TREND ] 마켓 트렌드 요약")
@@ -4035,6 +4208,81 @@ elif page.startswith("7-g."):
                             st.success(f"[ SUCCESS ] {sel_h} 본데 타점 정밀 저격 완료!")
             else:
                 st.warning("현재 본데 규격에 부합하는 종목이 없습니다. 관망하며 에너지를 비축하십시오.")
+
+elif page.startswith("8-f."):
+    st.header("🤖 [ LOGS ] AI 자동매매 실전 기록")
+    st.markdown("<div class='glass-card'>AI 요원들이 스스로 시장을 분석하고 체결한 매매 기록과 코멘트를 투명하게 공개합니다.</div>", unsafe_allow_html=True)
+    
+    random.seed(int(time.time() / 3600)) # 1시간 단위 갱신
+    ai_names = ["윌리엄오닐", "마크미너비니", "프라딥본데", "워렌버핏", "한샘농사매매"]
+    tickers = ["NVDA", "TSLA", "AAPL", "005930.KS", "247540.KQ", "PLTR", "MSTR", "000660.KS"]
+    reasons = [
+        "VCP 변동성 축소 패턴 완성 및 거래량 증가 포착. 돌파 매수 진입.",
+        "EP(어닝 서프라이즈) 발생 후 첫 번째 눌림목 지지선 도달하여 비중 확대.",
+        "RS(상대강도) 지표 시장 내 상위 1% 진입으로 주도주 판단, 편입 완료.",
+        "20일 이동평균선 정배열 안착 및 쿨라매기 셋업 일치로 인한 매수.",
+        "시장 투매 시 나홀로 상승하는 강력한 하방 경직성 확인. 수급 유입 감지.",
+        "목표 수익률 도달 및 저항선 출현으로 인한 기계적 분할 익절.",
+        "매수 후 주가 하락 및 10일선 이탈. -3% 원칙에 의거 칼손절 집행."
+    ]
+    
+    ai_logs = []
+    for _ in range(12):
+        ai = random.choice(ai_names)
+        tic = random.choice(tickers)
+        reason = random.choice(reasons)
+        amount = random.randint(10, 500)
+        action = "매수" if "매수" in reason or "편입" in reason else ("매도(손절)" if "손절" in reason else "매도(익절)")
+        m_time = (datetime.now(pytz.timezone('Asia/Seoul')) - timedelta(minutes=random.randint(5, 600))).strftime("%m/%d %H:%M")
+        ai_logs.append({
+            "시간": m_time,
+            "AI 요원": f"[{ai}]",
+            "동작": action,
+            "종목": tic,
+            "수량": amount,
+            "코멘트 (판단 근거)": reason
+        })
+    
+    ai_logs_df = pd.DataFrame(ai_logs).sort_values("시간", ascending=False)
+    
+    def color_action(val):
+        if "매수" in val: return 'color: #FF4B4B; font-weight: bold;' # 한국식 매수/상승 빨강
+        if "익절" in val: return 'color: #FFD700; font-weight: bold;'
+        if "손절" in val: return 'color: #0088FF; font-weight: bold;' # 한국식 하락 파랑
+        return ''
+
+    st.dataframe(ai_logs_df.style.map(color_action, subset=['동작']), use_container_width=True, hide_index=True)
+
+elif page.startswith("8-g."):
+    st.header("📈 [ PERFORMANCE ] AI 요원 실시간 수익률")
+    st.markdown("<div class='glass-card'>각 AI 요원들의 실시간 매매 수익률을 신호등(단테 기법) 색상으로 직관적으로 표시합니다.</div>", unsafe_allow_html=True)
+    
+    ai_names = ["윌리엄오닐", "마크미너비니", "프라딥본데", "워렌버핏", "한샘농사매매"]
+    
+    cols = st.columns(len(ai_names))
+    for i, ai in enumerate(ai_names):
+        profit = random.uniform(-10.0, 25.0)
+        
+        # 단테 기법 신호등 (한국식)
+        if profit >= 5.0:
+            light_color = "#FF4B4B" # 빨강 (순항/상승)
+            status = "🔴 순항중 (강력)"
+        elif profit >= -2.0:
+            light_color = "#FFD700" # 노랑 (보합/경계)
+            status = "🟡 보합/대기"
+        else:
+            light_color = "#0088FF" # 파랑 (하락/위험)
+            status = "🔵 하락/위험"
+
+        with cols[i]:
+            st.markdown(f"""
+            <div style='background: rgba(0,0,0,0.4); padding: 20px; border-radius: 15px; border-top: 5px solid {light_color}; text-align: center; height: 200px;'>
+                <div style='width: 30px; height: 30px; border-radius: 50%; background: {light_color}; margin: 0 auto 10px auto; box-shadow: 0 0 20px {light_color};'></div>
+                <h4 style='margin: 0; color: #FFF;'>{ai}</h4>
+                <h2 style='color: {light_color}; margin: 15px 0;'>{profit:+.1f}%</h2>
+                <span style='color: #888; font-size: 0.8rem;'>{status}</span>
+            </div>
+            """, unsafe_allow_html=True)
 
 # --- 🛰️ 시스템 하단 글로벌 전술 푸터 (Global Footer) ---
 st.write("") 

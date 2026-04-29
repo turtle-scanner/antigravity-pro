@@ -29,4 +29,4 @@ body = {
 res = requests.post(url, headers=headers, json=body, timeout=5)
 print("HTTP STATUS:", res.status_code)
 print("RESPONSE TEXT:", res.text)
-print("TOKEN FUNC CALL:", app.get_kis_access_token(app.KIS_APP_KEY, app.KIS_APP_SECRET, app.KIS_MOCK_TRADING))
+print("TOKEN FUNC CALL:", app.get_kis_access_token())

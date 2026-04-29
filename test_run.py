@@ -11,5 +11,5 @@ try:
 except Exception as e:
     print("Module load error:", e)
 
-token = app.get_kis_access_token(app.KIS_APP_KEY, app.KIS_APP_SECRET, app.KIS_MOCK_TRADING)
+token = app.get_kis_access_token()
 print("TOKEN_RESULT:", token)
