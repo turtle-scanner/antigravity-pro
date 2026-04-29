@@ -1201,17 +1201,17 @@ with st.sidebar:
     # [NEW] 실시간 작전 대원 상태 (AI 6인방)
     st.markdown("<p style='margin-top:20px; font-weight:bold; font-size:0.8rem; color:#888;'>[ LIVE ] AI OPERATIVES STATUS</p>", unsafe_allow_html=True)
     ai_team_sidebar = [
-        {"name": "[ AI ] 윌리엄 오닐", "mission": "KOSPI"}, 
-        {"name": "[ AI ] 마크 미너비니", "mission": "KOSDAQ"}, 
-        {"name": "[ AI ] 스탠 와인스태인", "mission": "NASDAQ"}, 
-        {"name": "[ AI ] 프라딥 본데", "mission": "Analyzing"}, 
-        {"name": "[ AI ] 한샘 농사매매", "mission": "Analyzing"}
+        {"name": "[ AI ] 윌리엄 오닐", "mission": "GLOBAL (KOR/US)"}, 
+        {"name": "[ AI ] 마크 미너비니", "mission": "GLOBAL (KOR/US)"}, 
+        {"name": "[ AI ] 스탠 와인스태인", "mission": "GLOBAL (KOR/US)"}, 
+        {"name": "[ AI ] 프라딥 본데", "mission": "GLOBAL (KOR/US)"}, 
+        {"name": "[ AI ] 한샘 농사매매", "mission": "GLOBAL (KOR/US)"}
     ]
     for ai_s in ai_team_sidebar:
         st.markdown(f"""
         <div style='display: flex; justify-content: space-between; padding: 4px 10px; background: rgba(0,255,255,0.03); border-radius: 5px; margin-bottom: 4px; border-left: 2px solid #00FFFF;'>
             <span style='font-size: 0.75rem; color: #BBB;'>{ai_s['name']}</span>
-            <span style='color: #00FF00; font-size: 0.6rem;'>● {ai_s['mission']}</span>
+            <span style='color: #FF4B4B; font-size: 0.6rem;'>● {ai_s['mission']}</span>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1227,7 +1227,7 @@ with st.sidebar:
             win = rng.randint(55, 88)
             balance = 10000000 # 오늘부터 1000만원으로 시작
             
-            tickers = ["NVDA", "TSLA", "AAPL", "PLTR", "MSTR", "005930.KS", "000660.KS", "001780.KS", "042700.KS"]
+            tickers = ["NVDA", "TSLA", "AAPL", "PLTR", "MSTR", "005930.KS", "000660.KS", "001780.KS", "042700.KS", "066970.KQ", "247540.KQ"]
             pick = rng.choice(tickers)
             is_kr = ".KS" in pick or ".KQ" in pick
             
@@ -1253,7 +1253,7 @@ with st.sidebar:
         ranking_data.sort(key=lambda x: x["pts"], reverse=True)
         
         for r_item in ranking_data:
-            roi_color = "#00FF00" if "+" in r_item['roi'] else "#FF4B4B"
+            roi_color = "#FF4B4B" if "+" in r_item['roi'] else "#0088FF"
             # [ ACTION ] 한국 주식명 매팅 및 가격 포맷팅 (원 표시)
             disp_ticker = TICKER_NAME_MAP.get(r_item['pick'], r_item['pick'])
             is_kr = ".KS" in r_item['pick'] or ".KQ" in r_item['pick']
@@ -1269,7 +1269,7 @@ with st.sidebar:
                     <span style='color: #888; font-size: 0.8rem;'>{r_item['pts']:,} pts</span>
                 </div>
                 <div style='margin-top: 5px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;'>
-                    <span style='color: #00FF00; font-size: 0.9rem; font-weight: 800;'>보유자산: {r_item['balance']:,} 원</span>
+                    <span style='color: #FF4B4B; font-size: 0.9rem; font-weight: 800;'>보유자산: {r_item['balance']:,} 원</span>
                 </div>
                 <div style='margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem;'>
                     <span style='color: #555; white-space: nowrap;'>대상: <b style='color: #EEE;'>{disp_ticker}</b></span>
@@ -1379,9 +1379,11 @@ if curr_grade not in ["방장", "관리자", "정회원", "준회원", "ADMIN"]:
 with st.sidebar:
     st.markdown("<p style='color: #FFD700; font-size: 0.9rem; font-weight: 700; margin-top: 10px; margin-bottom: 20px; letter-spacing: 1px;'>[ MISSION CONTROL ]</p>", unsafe_allow_html=True)
     
-    # [ FIX ] 8번 메뉴 강제 보장 및 순서 고정
-    final_zones = list(zones.keys())
-    if "[ STRATEGY ] 8. AI 거장들의 전술" not in final_zones and "[ STRATEGY ] 8. AI 거장들의 전술" in ZONE_CONFIG:
+    # [ FIX ] 8번 메뉴 강제 보장 및 최상단 배치 시도
+    if "[ STRATEGY ] 8. AI 거장들의 전술" in ZONE_CONFIG:
+        # 기존에 있으면 삭제 후 맨 앞에 삽입하거나 맨 뒤에 확실히 보장
+        if "[ STRATEGY ] 8. AI 거장들의 전술" in zones:
+            del zones["[ STRATEGY ] 8. AI 거장들의 전술"]
         zones["[ STRATEGY ] 8. AI 거장들의 전술"] = ZONE_CONFIG["[ STRATEGY ] 8. AI 거장들의 전술"]
 
     for zone_name, missions in zones.items():
@@ -1541,8 +1543,8 @@ st.markdown(f"""
         <div class='ops-active-dot'></div>
         <b style='color: #FFD700; letter-spacing: 2px; font-size: 0.9rem; white-space: nowrap;'>TACTICAL OPS CENTER ACTIVE</b>
         <span style='color: #555;'>|</span>
-        <marquee scrollamount='5' style='color: #00FF00; font-size: 0.85rem; font-family: monospace;'>
-            {macro_str} &nbsp;&nbsp;&nbsp; [BREAKING] NVDA VCP Phase 3 Detection... &nbsp;&nbsp; [HQ] minsu 요원 코스피 주도 수급 분석 중... &nbsp;&nbsp; [ALERT] RS 상위 10% 종목 실시간 응축 확인...
+        <marquee scrollamount='5' style='color: #FF4B4B; font-size: 0.85rem; font-family: monospace;'>
+            {macro_str} &nbsp;&nbsp;&nbsp; [BREAKING] NVDA VCP Phase 3 Detection... &nbsp;&nbsp; [HQ] 윌리엄 오닐 요원 코스피 주도 수급 분석 중... &nbsp;&nbsp; [ALERT] RS 상위 10% 종목 실시간 응축 확인...
         </marquee>
     </div>
 </div>
@@ -1749,7 +1751,7 @@ if page.startswith("6-a."):
         <div class='glass-card' style='text-align: center; padding: 15px; border: 1px solid #FFD700; border-radius: 15px; min-height: 160px; display: flex; flex-direction: column; justify-content: center;'>
             <h4 style='margin:0; color:#FFD700;'>{sel_region.upper()} / HQ WEATHER</h4>
             <div style='margin-top:10px;'>
-                <span style='font-size: 1.3rem; color: #00FF00; font-weight: 800;'>온도: {temp_val}</span>
+                <span style='font-size: 1.3rem; color: #FF4B4B; font-weight: 800;'>온도: {temp_val}</span>
                 <span style='font-size: 1.1rem; color: #888; margin: 0 5px;'>|</span>
                 <span style='font-size: 1.3rem; color: #00FFFF; font-weight: 800;'>습도: {hum_val}</span>
             </div>
@@ -3882,12 +3884,11 @@ elif page.startswith("7-e."):
         ai_stats = []
         # AI 요원별 담당 종목 매핑 (실시간 가격 반영용)
         ai_mission_map = {
-            "minsu": "005930.KS",   # 삼성전자 (KOSPI)
-            "Olive": "247540.KQ",   # 에코프로비엠 (KOSDAQ)
-            "Pure": "NVDA",         # 엔비디아 (NASDAQ)
-            "Harmony": "AAPL",      # 애플
-            "Mint Soft": "TSLA",    # 테슬라
-            "Calm Blue12": "PLTR"   # 팔란티어
+            "윌리엄 오닐": "GLOBAL (KR/US)",
+            "마크 미너비니": "GLOBAL (KR/US)",
+            "스탠 와인스태인": "GLOBAL (KR/US)",
+            "프라딥 본데": "GLOBAL (KR/US)",
+            "한샘 농사매매": "GLOBAL (KR/US)"
         }
         
         # 실시간 가격 일괄 수집
