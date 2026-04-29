@@ -78,12 +78,11 @@ def trigger_ai_chat():
     if time.time() - cd["last_time"] < 15: return False
     
     ai_users = [
-        {"name": "[ AI ] minsu", "grade": "AI_대원 (코스피)"},
-        {"name": "[ AI ] Olive", "grade": "AI_대원 (코스닥)"},
-        {"name": "[ AI ] Pure", "grade": "AI_대원 (나스닥)"},
-        {"name": "[ AI ] Harmony", "grade": "AI_대원"},
-        {"name": "[ AI ] Mint Soft", "grade": "AI_대원"},
-        {"name": "[ AI ] Calm Blue12", "grade": "AI_대원"}
+        {"name": "[ AI ] 윌리엄 오닐", "grade": "AI_대원 (모멘텀)"},
+        {"name": "[ AI ] 마크 미너비니", "grade": "AI_대원 (VCP)"},
+        {"name": "[ AI ] 스탠 와인스태인", "grade": "AI_대원 (추세)"},
+        {"name": "[ AI ] 프라딥 본데", "grade": "AI_대원 (돌파)"},
+        {"name": "[ AI ] 한샘 농사매매", "grade": "AI_대원 (스윙)"}
     ]
     ai_phrases = [
         "오늘 나스닥 선물 흐름이 심상치 않네요. 전술적 대기 권고합니다.",
@@ -379,12 +378,11 @@ def get_macro_indicators():
 
 # --- [ AI ] 사령부 AI 정예 요원 (NPC Operatives) 설정 ---
 AI_OPERATIVES = {
-    "minsu": {"strategy": "KOSPI Specialist", "risk": "Aggressive", "win_rate": 0.65},
-    "Olive": {"strategy": "KOSDAQ Specialist", "risk": "Balanced", "win_rate": 0.70},
-    "Pure": {"strategy": "NASDAQ Specialist", "risk": "Conservative", "win_rate": 0.75},
-    "Harmony": {"strategy": "Sector Rotation", "risk": "Balanced", "win_rate": 0.58},
-    "Mint Soft": {"strategy": "Contrarian", "risk": "Conservative", "win_rate": 0.62},
-    "Calm Blue12": {"strategy": "Macro Trend", "risk": "Aggressive", "win_rate": 0.60}
+    "윌리엄 오닐": {"strategy": "CAN SLIM (모멘텀/실적)", "risk": "Aggressive", "win_rate": 0.72},
+    "마크 미너비니": {"strategy": "VCP (변동성 축소)", "risk": "Balanced", "win_rate": 0.75},
+    "스탠 와인스태인": {"strategy": "Stage Analysis (추세)", "risk": "Conservative", "win_rate": 0.68},
+    "프라딥 본데": {"strategy": "EP (에피소딕 피벗)", "risk": "Aggressive", "win_rate": 0.77},
+    "한샘 농사매매": {"strategy": "분할 매수/매도 (가치/스윙)", "risk": "Conservative", "win_rate": 0.80}
 }
 
 @st.cache_data(ttl=300)
@@ -1203,12 +1201,11 @@ with st.sidebar:
     # [NEW] 실시간 작전 대원 상태 (AI 6인방)
     st.markdown("<p style='margin-top:20px; font-weight:bold; font-size:0.8rem; color:#888;'>[ LIVE ] AI OPERATIVES STATUS</p>", unsafe_allow_html=True)
     ai_team_sidebar = [
-        {"name": "[ AI ] 윌리엄오닐", "mission": "KOSPI"}, 
-        {"name": "[ AI ] 마크미너비니", "mission": "KOSDAQ"}, 
-        {"name": "[ AI ] 프라딥본데", "mission": "NASDAQ"}, 
-        {"name": "[ AI ] 워렌버핏", "mission": "Analyzing"}, 
-        {"name": "[ AI ] 스탠와인스태인", "mission": "Analyzing"}, 
-        {"name": "[ AI ] 한샘농사매매", "mission": "Analyzing"}
+        {"name": "[ AI ] 윌리엄 오닐", "mission": "KOSPI"}, 
+        {"name": "[ AI ] 마크 미너비니", "mission": "KOSDAQ"}, 
+        {"name": "[ AI ] 스탠 와인스태인", "mission": "NASDAQ"}, 
+        {"name": "[ AI ] 프라딥 본데", "mission": "Analyzing"}, 
+        {"name": "[ AI ] 한샘 농사매매", "mission": "Analyzing"}
     ]
     for ai_s in ai_team_sidebar:
         st.markdown(f"""
@@ -1246,9 +1243,11 @@ with st.sidebar:
             }
 
         ranking_data = [
-            generate_agent_data("윌리엄오닐", "1"),
-            generate_agent_data("마크미너비니", "2"),
-            generate_agent_data("프라딥본데", "3")
+            generate_agent_data("윌리엄 오닐", "1"),
+            generate_agent_data("마크 미너비니", "2"),
+            generate_agent_data("스탠 와인스태인", "3"),
+            generate_agent_data("프라딥 본데", "4"),
+            generate_agent_data("한샘 농사매매", "5")
         ]
         # 포인트 순으로 정렬하여 랭킹 화
         ranking_data.sort(key=lambda x: x["pts"], reverse=True)
@@ -1338,7 +1337,7 @@ with st.sidebar:
 
     # --- [ GLOBAL ] 실시간 AI 요원 매매 상황 중계 (전역 팝업 알림) ---
     if st.session_state.get("password_correct") and random.random() < 0.05:
-        names = ["minsu", "Olive", "Pure", "Harmony"]
+        names = ["윌리엄 오닐", "마크 미너비니", "스탠 와인스태인", "프라딥 본데", "한샘 농사매매"]
         tickers = ["NVDA", "TSLA", "005930.KS", "247540.KQ", "PLTR", "AAPL", "MSTR"]
         op = random.choice(names)
         ti = random.choice(tickers)
@@ -1372,9 +1371,9 @@ if not is_admin:
         if admin_page in zones["[ HQ ] 1. 본부 사령부"]:
             zones["[ HQ ] 1. 본부 사령부"].remove(admin_page)
 
-# 🤖 자동매매 사령부 및 거장 전술 아카데미는 승인된 대원(준회원 이상) 접근 가능
+# 🤖 자동매매 사령부는 승인된 대원(준회원 이상) 접근 가능, 8번(거장 전술)은 전체 개방
 if curr_grade not in ["방장", "관리자", "정회원", "준회원", "ADMIN"]:
-    for z in ["[ AUTO ] 7. 자동매매 사령부", "[ STRATEGY ] 8. AI 거장들의 전술"]:
+    for z in ["[ AUTO ] 7. 자동매매 사령부"]:
         if z in zones: del zones[z]
 
 with st.sidebar:
@@ -1594,6 +1593,7 @@ with st.container():
             theme_color = "#FF4B4B" if pct >= 0 else "#0088FF"
             stat_color = theme_color
             arrow = "▲" if pct >= 0 else "▼"
+            is_kr = "KOS" in name
             
             # 시간 표시 결정
             time_str = now_us.strftime('%H:%M') if not is_kr else now_kr.strftime('%H:%M')
@@ -1874,7 +1874,7 @@ elif page.startswith("6-b."):
     
     # AI 대원 확률적 참여
     if random.random() < 0.2:
-        ai_names = ["minsu", "Olive", "Pure", "Harmony", "Mint Soft", "Calm Blue12"]
+        ai_names = ["윌리엄 오닐", "마크 미너비니", "스탠 와인스태인", "프라딥 본데", "한샘 농사매매"]
         ai_msgs = [
             "시장이 변동성이 큽니다. 리스크 관리에 집중하세요.",
             "현재 나스닥 추세가 좋습니다. 돌파 매매 준비 중입니다.",
@@ -1893,7 +1893,7 @@ elif page.startswith("6-b."):
 
     # 실시간 활동 토스트 알림 (누가 무엇을 하는지 구체화)
     if random.random() < 0.1:
-        names = ["minsu", "Olive", "Pure", "Harmony", "Mint Soft", "Calm Blue12"]
+        names = ["윌리엄 오닐", "마크 미너비니", "스탠 와인스태인", "프라딥 본데", "한샘 농사매매"]
         tickers = ["NVDA", "TSLA", "005930.KS", "247540.KQ", "PLTR"]
         acts = ["정밀 스캐닝", "매수 타점 포착", "수급 분석", "데이터 동기화"]
         raw_tick = random.choice(tickers)
@@ -4314,7 +4314,7 @@ elif page.startswith("8-g."):
     st.header("📈 [ PERFORMANCE ] AI 요원 실시간 수익률")
     st.markdown("<div class='glass-card'>각 AI 요원들의 실시간 매매 수익률을 신호등(단테 기법) 색상으로 직관적으로 표시합니다.</div>", unsafe_allow_html=True)
     
-    ai_names = ["윌리엄오닐", "마크미너비니", "프라딥본데", "워렌버핏", "한샘농사매매"]
+    ai_names = ["윌리엄 오닐", "마크 미너비니", "스탠 와인스태인", "프라딥 본데", "한샘 농사매매"]
     
     cols = st.columns(len(ai_names))
     for i, ai in enumerate(ai_names):
