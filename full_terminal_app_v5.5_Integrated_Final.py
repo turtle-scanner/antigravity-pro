@@ -1113,11 +1113,11 @@ with st.sidebar:
     # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge) -> 날씨 테마로 변경
     sentiment_score, _, _ = get_market_sentiment_score()
     if sentiment_score < 40:
-        s_color, w_text, w_icon = "#FF4B4B", "벼락 - 하락장", "⚡"
+        s_color, w_text, w_icon = "#0088FF", "벼락 - 하락장", "⚡"
     elif sentiment_score < 65:
         s_color, w_text, w_icon = "#FFD700", "흐림 - 횡보장", "☁️"
     else:
-        s_color, w_text, w_icon = "#00FF00", "맑음 - 강세장", "☀️"
+        s_color, w_text, w_icon = "#FF4B4B", "맑음 - 강세장", "☀️"
         
     st.markdown(f"""
     <div class='glass-card' style='padding: 15px; margin-bottom: 20px; border-top: 3px solid {s_color};'>
@@ -1379,6 +1379,11 @@ if curr_grade not in ["방장", "관리자", "정회원", "준회원", "ADMIN"]:
 with st.sidebar:
     st.markdown("<p style='color: #FFD700; font-size: 0.9rem; font-weight: 700; margin-top: 10px; margin-bottom: 20px; letter-spacing: 1px;'>[ MISSION CONTROL ]</p>", unsafe_allow_html=True)
     
+    # [ FIX ] 8번 메뉴 강제 보장 및 순서 고정
+    final_zones = list(zones.keys())
+    if "[ STRATEGY ] 8. AI 거장들의 전술" not in final_zones and "[ STRATEGY ] 8. AI 거장들의 전술" in ZONE_CONFIG:
+        zones["[ STRATEGY ] 8. AI 거장들의 전술"] = ZONE_CONFIG["[ STRATEGY ] 8. AI 거장들의 전술"]
+
     for zone_name, missions in zones.items():
         is_active_zone = st.session_state.page in missions
         with st.expander(zone_name, expanded=is_active_zone):
@@ -1459,11 +1464,8 @@ def fetch_macro_ticker_tape():
                     diff = curr - prev
                     pct = (diff / prev) * 100
                     
-                    # [ ACTION ] 한국 주식 색상 체계 적용 (상승: 빨강, 하락: 파랑 / 글로벌은 반대)
-                    if name in ["KOSPI", "KOSDAQ"]:
-                        color = "#FF4B4B" if diff >= 0 else "#0088FF"
-                    else:
-                        color = "#00FF00" if diff >= 0 else "#FF4B4B"
+                    # [ ACTION ] 모든 지표 상승은 빨간색, 하락은 파란색으로 통일 (한국식)
+                    color = "#FF4B4B" if diff >= 0 else "#0088FF"
                         
                     items.append(f"<span class='ticker-item' style='margin-right: 30px;'>{name} <b>{curr:,.1f}</b> <span style='color:{color};'>{pct:+.2f}%</span></span>")
             except: continue
@@ -1619,23 +1621,24 @@ st.divider()
 # --- [ COMMANDER ] Tactical Command & Sentiment Gauge (v6.5) ---
 def get_ai_commander_report(indices):
     try:
+        # 모든 지표의 등락률 합산
         score = sum([v[1] for v in indices.values()])
         avg_pct = score / len(indices)
     except:
         avg_pct = 0.0
     
-    if avg_pct > 0.4: p_color = "green"
+    if avg_pct > 0.4: p_color = "red" # 강세 (한국식 빨강)
     elif avg_pct > -0.4: p_color = "orange"
-    else: p_color = "red"
+    else: p_color = "blue" # 약세 (한국식 파랑)
     return p_color, avg_pct
 
 p_color, avg_pct = get_ai_commander_report(idx_info)
 
 def get_commander_style(p_color):
     styles = {
-        "green": ("#00FF00", "rgba(0,255,0,0.1)", "GREED/AGGRESSIVE", "수익 좀 났다고 네가 천재가 된 줄 아나? 시장이 좋은 것뿐이다. 자만심(Ego)이 고개를 드는 순간, 시장은 네 계좌를 갈기갈기 찢어놓을 거다. 익절 라인 올려 잡고 닥치고 프로세스나 지켜라."),
+        "red": ("#FF4B4B", "rgba(255,75,75,0.1)", "GREED/AGGRESSIVE", "수익 좀 났다고 네가 천재가 된 줄 아나? 시장이 좋은 것뿐이다. 자만심(Ego)이 고개를 드는 순간, 시장은 네 계좌를 갈기갈기 찢어놓을 거다. 익절 라인 올려 잡고 닥치고 프로세스나 지켜라."),
         "orange": ("#FFD700", "rgba(255,215,0,0.1)", "NEUTRAL/WATCH", "방향성이 보이지 않을 때는 손을 깔고 앉아 있는 것도 기술이다. 억지로 타점을 만들려고 하지 마라. 시장이 너에게 돈을 벌 기회를 줄 때까지 굶주린 사자처럼 기다려라."),
-        "red": ("#FF4B4B", "rgba(255,75,75,0.1)", "FEAR/DEFENSIVE", "중력이 너를 끌어내리고 있다. 거부하지 마라. 지금은 영웅이 될 때가 아니라 생존자가 될 때다. 모든 포지션을 점검하고, 리스크가 감당 안 되면 즉시 현금을 대피시켜라.")
+        "blue": ("#0088FF", "rgba(0,136,255,0.1)", "FEAR/DEFENSIVE", "중력이 너를 끌어내리고 있다. 거부하지 마라. 지금은 영웅이 될 때가 아니라 생존자가 될 때다. 모든 포지션을 점검하고, 리스크가 감당 안 되면 즉시 현금을 대피시켜라.")
     }
     return styles.get(p_color, styles["orange"])
 
@@ -4001,7 +4004,7 @@ elif page.startswith("7-f."):
         """, unsafe_allow_html=True)
     with c_feel2:
         sentiment_score, curr_vix, _ = get_market_sentiment_score()
-        s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
+        s_color = "#0088FF" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#FF4B4B")
         
         with st.popover(f"[ STATUS ] 탐욕 지수 판독: {sentiment_score}", use_container_width=True):
             st.markdown(f"""
