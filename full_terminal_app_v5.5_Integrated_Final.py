@@ -1228,7 +1228,7 @@ with st.sidebar:
             rng = random.Random(seed)
             pts = rng.randint(800, 4500)
             win = rng.randint(55, 88)
-            balance = 10000000 + rng.randint(100000, 5000000)
+            balance = 10000000 # 오늘부터 1000만원으로 시작
             
             tickers = ["NVDA", "TSLA", "AAPL", "PLTR", "MSTR", "005930.KS", "000660.KS", "001780.KS", "042700.KS"]
             pick = rng.choice(tickers)
@@ -1789,8 +1789,9 @@ if page.startswith("6-a."):
     gs_att = fetch_gs_attendance().fillna("")
     local_att = safe_read_csv(ATTENDANCE_FILE, ["시간", "아이디", "인사", "등급"]).fillna("")
     full_att = pd.concat([gs_att, local_att]).drop_duplicates(subset=["시간", "아이디", "인사"])
-    # 아이디가 없는 무효 행 제거
-    full_att = full_att[full_att["아이디"] != ""]
+    # 아이디가 없는 무효 행 제거 및 nan 필터링
+    full_att = full_att.dropna(subset=["아이디"])
+    full_att = full_att[~full_att["아이디"].astype(str).str.lower().isin(["", "nan", "null"])]
     
     # --- 🛡️ 출석 통계 엔진 가동 (가점 산출용) ---
     def get_user_badges(uid, df):
@@ -1953,6 +1954,7 @@ elif page.startswith("6-b."):
                 else:
                     # 일반 버블 모드 (아바타/배지 포함 프리미엄 UI)
                     avatar_char = str(row["유저"])[0].upper() if row["유저"] else "?"
+                    safe_content = str(row["내용"]).replace("\n", "<br>")
                     st.markdown(f"""
                     <div style='display: flex; justify-content: {"flex-end" if is_me else "flex-start"}; margin-bottom: 20px; gap: 10px; flex-direction: {"row-reverse" if is_me else "row"};'>
                         <div style='width: 40px; height: 40px; background: {bg}; border: {border}; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FFF; font-weight: 900; font-size: 1.1rem; box-shadow: 0 0 10px {border.split()[-1]};'>
@@ -1965,7 +1967,7 @@ elif page.startswith("6-b."):
                                 <time style='font-size: 0.6rem; opacity: 0.6;'>{row["시간"]}</time>
                             </div>
                             <div style='background: {bg}; border: {border}; border-radius: {border_radius}; padding: 15px; color: #FFF; line-height: 1.6; box-shadow: 0 8px 25px rgba(0,0,0,0.3);'>
-                                {row["내용"]}
+                                {safe_content}
                             </div>
                         </div>
                     </div>
@@ -2030,12 +2032,12 @@ elif page.startswith("8-d."):
     st.header("[ LIBRARY ] 트레이더의 보물 창고")
     lib_cols = st.columns(3)
     books = [
-        {"title": "초수익 성장주 투자", "author": "마크 미너비니", "tag": "필독서"},
-        {"title": "주식 투자하는 법", "author": "윌리엄 오닐", "tag": "바이블"},
-        {"title": "공포와 탐욕을 넘어서", "author": "프라딥 본데", "tag": "전술"},
-        {"title": "시장의 마법사들", "author": "잭 슈거", "tag": "마인드셋"},
-        {"title": "주식 매매하는 법", "author": "제시 리버모어", "tag": "고전"},
-        {"title": "농사매매 실전 가이드", "author": "한샘 요원", "tag": "실전"}
+        {"title": "초수익 성장주 투자", "author": "마크 미너비니", "tag": "필독서", "desc": "가장 강력한 주도주를 발굴하는 VCP 패턴의 바이블입니다."},
+        {"title": "주식 투자하는 법", "author": "윌리엄 오닐", "tag": "바이블", "desc": "CAN SLIM 기법으로 폭발적인 수익을 얻는 핵심 원칙이 담겨있습니다."},
+        {"title": "공포와 탐욕을 넘어서", "author": "프라딥 본데", "tag": "전술", "desc": "심리를 지배하고 에피소딕 피벗(EP)을 공략하는 단기 모멘텀 전략의 정수입니다."},
+        {"title": "시장의 마법사들", "author": "잭 슈거", "tag": "마인드셋", "desc": "전설적인 트레이더들의 인터뷰를 통해 멘탈과 철학을 배웁니다."},
+        {"title": "주식 매매하는 법", "author": "제시 리버모어", "tag": "고전", "desc": "추세 추종과 리스크 관리의 중요성을 일깨우는 불후의 명저입니다."},
+        {"title": "농사매매 실전 가이드", "author": "한샘 요원", "tag": "실전", "desc": "꾸준한 수익을 내기 위한 실전 노하우와 원칙 매매의 정석을 다룹니다."}
     ]
     for i, b in enumerate(books):
         with lib_cols[i % 3]:
@@ -2046,6 +2048,8 @@ elif page.startswith("8-d."):
                 <div style='font-size: 0.8rem; color: #888;'>{b['author']} 저</div>
             </div>
             """, unsafe_allow_html=True)
+            with st.expander("📖 내용 보기"):
+                st.write(b["desc"])
 
 elif page.startswith("8-e."):
     st.header("[ QUOTE ] 거장의 한마디 (Mindset)")
@@ -2349,34 +2353,52 @@ elif page.startswith("5-a."):
 </div>
 </div>
 <h3 style='color: #00FF00; margin-top: 25px;'>3. 시장 관통 매매 기법</h3>
-<div style='background: rgba(0,255,0,0.03); padding: 20px; border-radius: 12px; border-left: 5px solid #00FF00;'>
-<p style='margin-bottom: 8px;'><b style='color:#FFF;'>[ EP ]</b>: 기업 펀더멘털을 바꾸는 강력한 뉴스 공략.</p>
-<p style='margin-bottom: 8px;'><b style='color:#FFF;'>[ BURST ]</b>: 눌림목(VCP) 에너지 임계점 포착.</p>
-<p style='margin-bottom: 0;'><b style='color:#FFF;'>[ FORMULA ]</b>: 본데만의 대장주 선별 공식 (MAGNA 53+).</p>
-</div>
-<h3 style='color: #FFD700; margin-top: 25px;'>4. 제자들의 증명</h3>
-<p style='color: #BBB;'>크리스찬 쿨라매기 등 수천억 자산가들이 본데의 가르침을 통해 시스템을 완성했습니다.</p>
-</div>""", unsafe_allow_html=True)
-    st.divider()
-# --- [ END OF IMMUTABLE ZONE: 5-a ] ---
-
-# --- [ IMMUTABLE ZONE: MISSION CRITICAL DATA - DO NOT MODIFY ] ---
-elif page.startswith("2-d."):
-    st.markdown("<div style='text-align: right;'><span style='background: #FF4B4B; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: bold;'>HQ-DATA SECURED: IMMUTABLE</span></div>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center; color: #FFD700;'>[ MISSION ] 사령부 제작 동기</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #888; font-size: 1.1rem;'>Follow the Giants, Conquer the Market Together</p>", unsafe_allow_html=True)
-    st.divider()
-    st.write("이 플랫폼은 윌리엄 오닐, 마크 미너비니, 프라딥 본데의 철학을 기리기 위해 시작되었습니다.")
-    st.markdown(f"""<div class='glass-card' style='padding: 30px; margin-top: 20px;'>
-<div style='border-left: 4px solid #FFD700; padding-left: 20px; margin-bottom: 30px;'>
-<h2 style='color: #FFF; margin: 0; font-size: 1.8rem;'>Dragonfly: 중력을 이기는 비행의 시작</h2>
-<p style='color: #888; margin: 5px 0 0 0;'>사령부 시스템의 존재 이유와 대원들을 위한 약속</p>
-</div>
-<div style='margin-bottom: 30px;'>
-<h4 style='color: #FFF;'>스승님을 향한 감사의 마음에서 출발했습니다</h4>
-<div style='color: #AAA; line-height: 1.8; font-size: 1rem;'>
-주식 시장이라는 거친 바다에서 길을 잃지 않게 이끌어주신 스승님이 계셨습니다. 마크 미너비니, 윌리엄 오닐, 데이비드 라이언, 
-그리고 프라딥 본데와 같은 대가들의 지혜를 전해주신 스승님께 보답하는 가장 좋은 방법은, 그 가르침을 나노 단위로 체계화하여 
+<div style='backgroun    st.subheader(f"📝 {today_str} 오늘의 주식 모의고사 (10제)")
+    st.markdown("<span style='color: #FF4B4B; font-weight: bold;'>⏳ 제한시간: 5분</span> (5분 경과 후 제출 시 무효 처리됩니다)", unsafe_allow_html=True)
+    
+    if "quiz_start_time" not in st.session_state:
+        st.session_state.quiz_start_time = time.time()
+        
+    questions = [
+        {"q": "본데의 핵심 매매 기법 중 '어닝 서프라이즈'와 함께 압도적인 거래량으로 고점을 뚫는 현상은?", "a": "EP (Explosive Pivot)", "options": ["VCP", "EP (Explosive Pivot)", "CAN SLIM", "RSI"]},
+        {"q": "VCP(변동성 축소 패턴)에서 가장 이상적인 매수 타이밍은 언제인가?", "a": "오른쪽에서 변동성이 가장 줄어들었을 때", "options": ["왼쪽에서 가장 깊게 하락할 때", "중앙에서 반등할 때", "오른쪽에서 변동성이 가장 줄어들었을 때", "VCP가 무너질 때"]},
+        {"q": "본데가 말하는 절대 손절 라인은 몇 퍼센트인가?", "a": "-3% 이내", "options": ["-3% 이내", "-5%", "-10%", "버틴다"]},
+        {"q": "가장 신뢰할 수 있는 상승 추세(2단계)의 기본 조건이 아닌 것은?", "a": "주가가 200일 이동평균선 아래에 있음", "options": ["주가가 200일 이동평균선 위에 있음", "200일선이 상승 추세임", "주가가 50일선 위에 있음", "주가가 200일 이동평균선 아래에 있음"]},
+        {"q": "시장 지수가 하락하는데 특정 종목이 버티거나 오르는 현상을 무엇이라 하는가?", "a": "RS (상대강도)", "options": ["EP", "RS (상대강도)", "MACD", "VIX"]},
+        {"q": "마크 미너비니의 핵심 트레이딩 전략 이름은?", "a": "SEPA", "options": ["CAN SLIM", "SEPA", "MACD", "볼린저밴드"]},
+        {"q": "오닐의 CAN SLIM에서 'M'이 의미하는 것은?", "a": "Market Direction (시장 방향성)", "options": ["Margin (이익률)", "Momentum (모멘텀)", "Market Direction (시장 방향성)", "Money (자금)"]},
+        {"q": "본데의 철학 중 'SINGLES'의 의미는?", "a": "작은 안타 수익을 누적시켜 복리 효과를 노림", "options": ["혼자 매매하기", "단일 종목 몰빵", "작은 안타 복리 효과를 노림", "한 달에 한 번 매매"]},
+        {"q": "거래량이 평균의 3배 이상 터지며 장대양봉이 발생했다. 이는 누구의 개입을 의미하는가?", "a": "기관 투자자", "options": ["개인 투자자", "기관 투자자", "외국인 단타", "회사 임원"]},
+        {"q": "매수 후 주가가 예상과 다르게 움직일 때 가장 먼저 해야 할 일은?", "a": "즉각 손절하여 리스크 관리", "options": ["물타기", "기도하기", "존버", "즉각 손절하여 리스크 관리"]},
+        {"q": "저항선을 돌파할 때 거래량이 터지지 않았다면?", "a": "가짜 돌파(Fakeout)일 확률이 높다", "options": ["가짜 돌파(Fakeout)일 확률이 높다", "진짜 돌파이다", "무조건 매수한다", "상관없다"]}
+    ]
+    daily_q = random.sample(questions, 10)
+    
+    with st.form("daily_quiz"):
+        answers = []
+        for i, q in enumerate(daily_q):
+            st.write(f"**Q{i+1}. {q['q']}**")
+            ans = st.radio(f"보기 {i+1}", q['options'], key=f"q_{i}", label_visibility="collapsed", index=None)
+            answers.append((ans, q['a']))
+            st.write("")
+        
+        if st.form_submit_button("✅ 채점하기 및 결과 확인"):
+            elapsed = time.time() - st.session_state.quiz_start_time
+            if elapsed > 300:
+                st.error(f"⏰ 시간 초과! ({int(elapsed//60)}분 {int(elapsed%60)}초 소요) 5분 제한시간을 넘겼습니다.")
+                st.session_state.quiz_start_time = time.time() # 초기화
+            else:
+                score = 0
+                for i, (user_a, real_a) in enumerate(answers):
+                    if user_a == real_a:
+                        score += 10
+                    elif user_a is None:
+                        st.warning(f"Q{i+1} 미입력! 정답은 **{real_a}** 입니다.")
+                    else:
+                        st.error(f"Q{i+1} 오답! 정답은 **{real_a}** 입니다.")
+                st.success(f"### 🏆 최종 점수: {score}점 / 100점 (소요시간: {int(elapsed//60)}분 {int(elapsed%60)}초)")
+                if score == 100: st.balloons()
+                st.session_state.quiz_start_time = time.time() # 다음번 도전을 위해 초기화답하는 가장 좋은 방법은, 그 가르침을 나노 단위로 체계화하여 
 더 완성도 높은 시스템으로 만드는 것이라 믿었습니다. <b style='color:#FFD700;'>Dragonfly는 스승님의 유산을 잇는 보은의 결과물입니다.</b>
 </div>
 </div>
