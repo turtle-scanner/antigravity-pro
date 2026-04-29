@@ -1112,18 +1112,24 @@ with st.sidebar:
         st.image("StockDragonfly.png")
     st.markdown("<div style='text-align: center;'><p style='color:#00FF00; font-size:1.5rem; font-weight:900; margin-bottom:0;'>[ SYSTEM ] StockDragonfly v9.9</p><small style='color:#666;'>ELITE TRADING TERMINAL</small></div>", unsafe_allow_html=True)
     
-    # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge)
+    # [ DESIGN ] 시장 탐욕 지수 (Market Sentiment Gauge) -> 날씨 테마로 변경
     sentiment_score, _, _ = get_market_sentiment_score()
-    s_color = "#FF4B4B" if sentiment_score < 40 else ("#FFD700" if sentiment_score < 65 else "#00FF00")
+    if sentiment_score < 40:
+        s_color, w_text, w_icon = "#FF4B4B", "벼락 - 하락장", "⚡"
+    elif sentiment_score < 65:
+        s_color, w_text, w_icon = "#FFD700", "흐림 - 횡보장", "☁️"
+    else:
+        s_color, w_text, w_icon = "#00FF00", "맑음 - 강세장", "☀️"
+        
     st.markdown(f"""
     <div class='glass-card' style='padding: 15px; margin-bottom: 20px; border-top: 3px solid {s_color};'>
-        <p style='color: #888; font-size: 0.75rem; margin-bottom: 5px;'>[ MARKET SENTIMENT ]</p>
+        <p style='color: #888; font-size: 0.75rem; margin-bottom: 5px;'>[ MARKET WEATHER ] 시장 기상도</p>
         <div style='display: flex; align-items: center; justify-content: space-between;'>
-            <span style='color: {s_color}; font-weight: 800; font-size: 1.2rem;'>{sentiment_score} pts</span>
-            <span style='font-size: 0.75rem; color: #555;'>{'FEAR' if sentiment_score < 40 else ('NEUTRAL' if sentiment_score < 65 else 'GREED')}</span>
+            <span style='color: {s_color}; font-weight: 900; font-size: 1.2rem;'>{w_icon} {sentiment_score} pts</span>
+            <span style='font-size: 0.8rem; color: {s_color}; font-weight: bold;'>{w_text}</span>
         </div>
         <div style='width: 100%; height: 4px; background: #222; border-radius: 2px; margin-top: 10px;'>
-            <div style='width: {sentiment_score}%; height: 100%; background: {s_color}; border-radius: 2px; box-shadow: 0 0 10px {s_color};'></div>
+            <div style='width: {min(100, sentiment_score)}%; height: 100%; background: {s_color}; border-radius: 2px; box-shadow: 0 0 10px {s_color};'></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1197,12 +1203,12 @@ with st.sidebar:
     # [NEW] 실시간 작전 대원 상태 (AI 6인방)
     st.markdown("<p style='margin-top:20px; font-weight:bold; font-size:0.8rem; color:#888;'>[ LIVE ] AI OPERATIVES STATUS</p>", unsafe_allow_html=True)
     ai_team_sidebar = [
-        {"name": "[ AI ] minsu", "mission": "KOSPI"}, 
-        {"name": "[ AI ] Olive", "mission": "KOSDAQ"}, 
-        {"name": "[ AI ] Pure", "mission": "NASDAQ"}, 
-        {"name": "[ AI ] Harmony", "mission": "Analyzing"}, 
-        {"name": "[ AI ] Mint Soft", "mission": "Analyzing"}, 
-        {"name": "[ AI ] Calm Blue12", "mission": "Analyzing"}
+        {"name": "[ AI ] 윌리엄오닐", "mission": "KOSPI"}, 
+        {"name": "[ AI ] 마크미너비니", "mission": "KOSDAQ"}, 
+        {"name": "[ AI ] 프라딥본데", "mission": "NASDAQ"}, 
+        {"name": "[ AI ] 워렌버핏", "mission": "Analyzing"}, 
+        {"name": "[ AI ] 스탠와인스태인", "mission": "Analyzing"}, 
+        {"name": "[ AI ] 한샘농사매매", "mission": "Analyzing"}
     ]
     for ai_s in ai_team_sidebar:
         st.markdown(f"""
@@ -1214,11 +1220,39 @@ with st.sidebar:
 
     # [NEW] 금주의 우수 요원 랭킹 (전술 지표 포함)
     with st.expander("[ TOP ] COMMANDER RANKING (WEEKLY)", expanded=True):
+        import hashlib
+        current_time_seed = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d %H:%M")[:-1] # 10분마다 갱신
+        
+        def generate_agent_data(name, base_seed):
+            seed = int(hashlib.md5(f"{name}_{current_time_seed}_{base_seed}".encode()).hexdigest(), 16)
+            rng = random.Random(seed)
+            pts = rng.randint(800, 4500)
+            win = rng.randint(55, 88)
+            balance = 10000000 + rng.randint(100000, 5000000)
+            
+            tickers = ["NVDA", "TSLA", "AAPL", "PLTR", "MSTR", "005930.KS", "000660.KS", "001780.KS", "042700.KS"]
+            pick = rng.choice(tickers)
+            is_kr = ".KS" in pick or ".KQ" in pick
+            
+            entry = rng.randint(40000, 150000) if is_kr else rng.uniform(80, 600)
+            roi_val = rng.uniform(1.5, 35.0)
+            exit_p = entry * (1 + roi_val / 100)
+            
+            exit_time = f"{datetime.now().strftime('%m/%d')} {rng.randint(9, 15):02d}:{rng.randint(0, 59):02d}"
+            
+            return {
+                "name": f"[ AI ] {name}", "pts": pts, "win": win, "balance": balance, 
+                "pick": pick, "entry": entry, "exit_p": exit_p, "roi": f"+{roi_val:.1f}%", "exit": exit_time
+            }
+
         ranking_data = [
-            {"name": "[ AI ] minsu", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"},
-            {"name": "[ AI ] Olive", "pts": 0, "win": 0, "balance": 10000000, "pick": "내일 09:00 작전 개시", "entry": 0, "exit_p": 0, "roi": "-", "exit": "-"},
-            {"name": "[ AI ] Pure", "pts": 1120, "win": 65, "balance": 11450000, "pick": "NVDA", "entry": 128.5, "exit_p": 144.5, "roi": "+12.4%", "exit": "04/19 23:50"}
+            generate_agent_data("윌리엄오닐", "1"),
+            generate_agent_data("마크미너비니", "2"),
+            generate_agent_data("프라딥본데", "3")
         ]
+        # 포인트 순으로 정렬하여 랭킹 화
+        ranking_data.sort(key=lambda x: x["pts"], reverse=True)
+        
         for r_item in ranking_data:
             roi_color = "#00FF00" if "+" in r_item['roi'] else "#FF4B4B"
             # [ ACTION ] 한국 주식명 매팅 및 가격 포맷팅 (원 표시)
@@ -1339,7 +1373,7 @@ if not is_admin:
             zones["[ HQ ] 1. 본부 사령부"].remove(admin_page)
 
 # 🤖 자동매매 사령부 및 거장 전술 아카데미는 승인된 대원(준회원 이상) 접근 가능
-if curr_grade not in ["방장", "관리자", "정회원", "준회원"]:
+if curr_grade not in ["방장", "관리자", "정회원", "준회원", "ADMIN"]:
     for z in ["[ AUTO ] 7. 자동매매 사령부", "[ STRATEGY ] 8. AI 거장들의 전술"]:
         if z in zones: del zones[z]
 
@@ -1687,7 +1721,7 @@ if page.startswith("6-a."):
     c1, c2 = st.columns([1, 1])
     with c1:
         st.markdown(f"""
-        <div class='glass-card' style='text-align: center; padding: 20px; border: 1px solid #FFD700; border-radius: 15px; height: 140px; margin-top: 38px;'>
+        <div class='glass-card' style='text-align: center; padding: 25px 15px; border: 1px solid #FFD700; border-radius: 15px; min-height: 160px; margin-top: 38px; display: flex; flex-direction: column; justify-content: center;'>
             <h4 style='margin:0; color:#FFD700;'>[ DRAGONFLY ] 누적 사령부 방문</h4>
             <span style='font-size: 2.2rem; font-weight: 900; color: #00FF00;'>{total_visits:,}</span>
             <p style='margin:0; color:#888; font-size: 0.8rem;'>Operatives Engaged</p>
@@ -1709,9 +1743,9 @@ if page.startswith("6-a."):
         cond_val = " ".join(w_parts[2:]) if len(w_parts) > 2 else ""
         
         st.markdown(f"""
-        <div class='glass-card' style='text-align: center; padding: 20px; border: 1px solid #FFD700; border-radius: 15px; height: 140px;'>
+        <div class='glass-card' style='text-align: center; padding: 15px; border: 1px solid #FFD700; border-radius: 15px; min-height: 160px; display: flex; flex-direction: column; justify-content: center;'>
             <h4 style='margin:0; color:#FFD700;'>{sel_region.upper()} / HQ WEATHER</h4>
-            <div style='margin-top:5px;'>
+            <div style='margin-top:10px;'>
                 <span style='font-size: 1.3rem; color: #00FF00; font-weight: 800;'>온도: {temp_val}</span>
                 <span style='font-size: 1.1rem; color: #888; margin: 0 5px;'>|</span>
                 <span style='font-size: 1.3rem; color: #00FFFF; font-weight: 800;'>습도: {hum_val}</span>
@@ -1916,6 +1950,7 @@ elif page.startswith("6-b."):
                         if ce2.form_submit_button("[ CANCEL ] 취소"):
                             del st.session_state["editing_msg_idx"]
                             st.rerun()
+                else:
                     # 일반 버블 모드 (아바타/배지 포함 프리미엄 UI)
                     avatar_char = str(row["유저"])[0].upper() if row["유저"] else "?"
                     st.markdown(f"""
