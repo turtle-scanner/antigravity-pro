@@ -1,5 +1,6 @@
 # full_terminal_app_v5.5_Integrated_Final# 작업 일자: 2026-04-19 | 버전: v9.9 Platinum Full Restoration (Step 1: Base)
 import streamlit as st
+import traceback
 import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
@@ -21,6 +22,66 @@ import concurrent.futures
 import ssl
 import requests
 from urllib3.exceptions import InsecureRequestWarning
+
+TICKER_NAME_MAP = {
+    "NVDA": "엔비디아",
+    "TSLA": "테슬라",
+    "AAPL": "애플",
+    "MSFT": "마이크로소프트",
+    "PLTR": "팔란티어",
+    "SMCI": "슈퍼마이크로",
+    "AMD": "AMD",
+    "META": "메타",
+    "GOOGL": "구글",
+    "AVGO": "브로드컴",
+    "CRWD": "크라우드스트라이크",
+    "005930.KS": "삼성전자",
+    "000660.KS": "SK하이닉스",
+    "196170.KQ": "알테오젠",
+    "042700.KS": "한미반도체",
+    "105560.KS": "KB금융",
+    "055550.KS": "신한지주",
+    "005490.KS": "POSCO홀딩스",
+    "000270.KS": "기아",
+    "066570.KS": "LG전자",
+    "035720.KS": "카카오",
+    "035420.KS": "NAVER",
+    "005380.KS": "현대차",
+    "000810.KS": "삼성화재",
+    "NFLX": "넷플릭스",
+    "MSTR": "마이크로스트래티지",
+    "COIN": "코인베이스",
+    "MARA": "마라톤디지털",
+    "PANW": "팔로알토",
+    "SNOW": "스노우플레이크",
+    "STX": "씨게이트",
+    "WDC": "웨스턴디지털",
+    "247540.KQ": "에코프로비엠",
+    "277810.KQ": "에코프로",
+    "091990.KQ": "셀트리온헬스케어",
+    "293490.KQ": "카카오게임즈",
+    "086520.KQ": "에코프로",
+}
+REVERSE_TICKER_MAP = {v: k for k, v in TICKER_NAME_MAP.items()}
+
+@st.cache_data(ttl=86400)
+def get_stock_name(ticker):
+    """티커로부터 한글/영문 종목명 획득 (맵에 없으면 yfinance 시도)"""
+    if ticker in TICKER_NAME_MAP:
+        return TICKER_NAME_MAP[ticker]
+    
+    try:
+        # yfinance를 통해 종목명 획득 시도 (타임아웃 및 속도 고려)
+        tk = yf.Ticker(ticker)
+        # info 대신 fast_info를 시도하거나 info를 짧게 사용
+        info = tk.info
+        name = info.get("longName") or info.get("shortName") or info.get("symbol")
+        if name:
+            return name
+    except:
+        pass
+    
+    return ticker
 
 # --- [ SYSTEM ] [GLOBAL HELPER] SSL Fix for Environments with Certificate Issues ---
 os.environ["CURL_CA_BUNDLE"] = ""
@@ -423,47 +484,7 @@ KIS_MOCK_TRADING = str(st.secrets.get("KIS_MOCK_TRADING", "false")).lower() == "
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
 
-TICKER_NAME_MAP = {
-    "NVDA": "엔비디아",
-    "TSLA": "테슬라",
-    "AAPL": "애플",
-    "MSFT": "마이크로소프트",
-    "PLTR": "팔란티어",
-    "SMCI": "슈퍼마이크로",
-    "AMD": "AMD",
-    "META": "메타",
-    "GOOGL": "구글",
-    "AVGO": "브로드컴",
-    "CRWD": "크라우드스트라이크",
-    "005930.KS": "삼성전자",
-    "000660.KS": "SK하이닉스",
-    "196170.KQ": "알테오젠",
-    "042700.KS": "한미반도체",
-    "105560.KS": "KB금융",
-    "055550.KS": "신한지주",
-    "005490.KS": "POSCO홀딩스",
-    "000270.KS": "기아",
-    "066570.KS": "LG전자",
-    "035720.KS": "카카오",
-    "035420.KS": "NAVER",
-    "005380.KS": "현대차",
-    "000810.KS": "삼성화재",
-    "NFLX": "넷플릭스",
-    "MSTR": "마이크로스트래티지",
-    "COIN": "코인베이스",
-    "MARA": "마라톤디지털",
-    "PANW": "팔로알토",
-    "SNOW": "스노우플레이크",
-    "STX": "씨게이트",
-    "WDC": "웨스턴디지털",
-    "247540.KQ": "에코프로비엠",
-    "277810.KQ": "에코프로",
-    "091990.KQ": "셀트리온헬스케어",
-    "293490.KQ": "카카오게임즈",
-    "086520.KQ": "에코프로",
-}
 
-REVERSE_TICKER_MAP = {v: k for k, v in TICKER_NAME_MAP.items()}
 
 
 def resolve_ticker(query):
@@ -811,22 +832,6 @@ def get_user_kis_creds():
     return ak, as_, an, is_mock
 
 
-@st.cache_data(ttl=86400)
-def get_stock_name(ticker):
-    """티커로부터 한글/영문 종목명 획득 (맵에 없으면 yfinance 시도)"""
-    if ticker in TICKER_NAME_MAP:
-        return TICKER_NAME_MAP[ticker]
-    
-    try:
-        # yfinance를 통해 종목명 획득 시도
-        tk = yf.Ticker(ticker)
-        name = tk.info.get("longName") or tk.info.get("shortName")
-        if name:
-            return name
-    except:
-        pass
-    
-    return ticker
 
 
 def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
@@ -2688,45 +2693,80 @@ elif page.startswith("3-a."):
             ],
         )
 
-    if st.button(
-        "[ EXEC ] 안티그래비티 3단계 정밀 스캔 시작 (Target: " + scan_market + ")"
-    ):
-        with st.spinner(f"📡 {scan_market} 데이터베이스 스캔 중... ({scan_logic})"):
-            time.sleep(2)  # 스캐닝 시뮬레이션
-            res_df = pd.DataFrame(
-                [
-                    {
-                        "종목": "NVDA"
-                        if "US" in scan_market or "ALL" in scan_market
-                        else "에코프로",
-                        "점수": 98.5,
-                        "패턴": "VCP 돌파",
-                        "시그널": "강력 매수",
-                    },
-                    {
-                        "종목": "TSLA"
-                        if "US" in scan_market or "ALL" in scan_market
-                        else "삼성전자",
-                        "점수": 92.0,
-                        "패턴": "EP 출현",
-                        "시그널": "매수",
-                    },
-                    {
-                        "종목": "PLTR"
-                        if "US" in scan_market or "ALL" in scan_market
-                        else "알루코",
-                        "점수": 88.5,
-                        "패턴": "RS 우상향",
-                        "시그널": "관망",
-                    },
-                ]
-            )
-            st.session_state.antigravity_scan = res_df
+    if st.button("[ EXEC ] 안티그래비티 3단계 정밀 스캔 시작"):
+        run_antigravity_screener()
 
     if "antigravity_scan" in st.session_state:
         res = st.session_state.antigravity_scan
         st.subheader("🚀 모멘텀 정밀 스캔 결과")
-        st.dataframe(res, use_container_width=True)
+        
+        tab_ep, tab_burst, tab_vcp = st.tabs(["[ EP ] 에피소딕 피벗", "[ BURST ] 포켓 피벗", "[ VCP ] 응축 종목"])
+        
+        with tab_ep:
+            if res["EP"]:
+                df_ep = pd.DataFrame(res["EP"])
+                st.dataframe(df_ep, use_container_width=True, hide_index=True)
+            else:
+                st.info("현재 발견된 EP 종목이 없습니다.")
+                
+        with tab_burst:
+            if res["Burst"]:
+                df_burst = pd.DataFrame(res["Burst"])
+                st.dataframe(df_burst, use_container_width=True, hide_index=True)
+            else:
+                st.info("현재 발견된 Burst 종목이 없습니다.")
+                
+        with tab_vcp:
+            if res["Anticipation"]:
+                df_vcp = pd.DataFrame(res["Anticipation"])
+                st.dataframe(df_vcp, use_container_width=True, hide_index=True)
+            else:
+                st.info("현재 발견된 VCP 종목이 없습니다.")
+
+elif page.startswith("3-b."):
+    st.header("[ RANK ] 주도주 랭킹 TOP 50")
+    st.markdown(
+        "<div class='glass-card'>현재 시장에서 가장 강력한 상대강도(RS)와 수급을 보여주는 최상위 주도주 50개 리스트입니다.</div>",
+        unsafe_allow_html=True,
+    )
+    
+    with st.spinner("사령부 통합 리더보드 데이터 분석 중..."):
+        # 실시간 데이터 스캔 (캐시 활용)
+        all_tickers = list(TICKER_NAME_MAP.keys())
+        try:
+            data = yf.download(all_tickers, period="6mo", interval="1d", progress=False)
+            if not data.empty:
+                close = data["Close"]
+                # 6개월 수익률 기준 RS 점수 산출
+                rs_scores = []
+                for tic in all_tickers:
+                    if tic in close.columns:
+                        c = close[tic].dropna()
+                        if len(c) > 100:
+                            ret = (c.iloc[-1] / c.iloc[-100] - 1) * 100
+                            rs_scores.append({
+                                "Ticker": tic,
+                                "Name": get_stock_name(tic),
+                                "Price": c.iloc[-1],
+                                "RS Score": ret
+                            })
+                
+                df_rank = pd.DataFrame(rs_scores)
+                if not df_rank.empty:
+                    df_rank = df_rank.sort_values("RS Score", ascending=False).head(50)
+                    df_rank["Rank"] = range(1, len(df_rank) + 1)
+                    
+                    st.dataframe(
+                        df_rank[["Rank", "Name", "Ticker", "Price", "RS Score"]].style.format({"RS Score": "{:.1f}%", "Price": "{:,.2f}"}),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                else:
+                    st.info("현재 랭킹을 산출할 수 있는 데이터가 부족합니다.")
+            else:
+                st.warning("데이터를 불러올 수 없습니다.")
+        except Exception as e:
+            st.error(f"랭킹 분석 중 오류 발생: {e}")
 
 elif page.startswith("6-b."):
     st.header("💬 안티그래비티 대화방 (HQ Free Talk)")
