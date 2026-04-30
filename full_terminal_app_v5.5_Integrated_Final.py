@@ -811,9 +811,22 @@ def get_user_kis_creds():
     return ak, as_, an, is_mock
 
 
+@st.cache_data(ttl=86400)
 def get_stock_name(ticker):
-    """티커로부터 한글/영문 종목명 획득"""
-    return TICKER_NAME_MAP.get(ticker, ticker)
+    """티커로부터 한글/영문 종목명 획득 (맵에 없으면 yfinance 시도)"""
+    if ticker in TICKER_NAME_MAP:
+        return TICKER_NAME_MAP[ticker]
+    
+    try:
+        # yfinance를 통해 종목명 획득 시도
+        tk = yf.Ticker(ticker)
+        name = tk.info.get("longName") or tk.info.get("shortName")
+        if name:
+            return name
+    except:
+        pass
+    
+    return ticker
 
 
 def analyze_stockbee_setup(ticker, hist_df=None, kis_token=None):
