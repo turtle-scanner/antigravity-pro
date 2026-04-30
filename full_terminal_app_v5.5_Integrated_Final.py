@@ -1,8 +1,8 @@
-full_terminal_app_v5.5_Integrated_Final# 작업 일자: 2026-04-19 | 버전: v9.9 Platinum Full Restoration (Step 1: Base)
+# full_terminal_app_v5.5_Integrated_Final# 작업 일자: 2026-04-19 | 버전: v9.9 Platinum Full Restoration (Step 1: Base)
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import json
 import pytz
@@ -18,6 +18,24 @@ import shutil
 import hashlib
 import threading
 import concurrent.futures
+import ssl
+import requests
+from urllib3.exceptions import InsecureRequestWarning
+
+# --- [ SYSTEM ] [GLOBAL HELPER] SSL Fix for Environments with Certificate Issues ---
+os.environ['CURL_CA_BUNDLE'] = ''
+os.environ['REQUESTS_CA_BUNDLE'] = ''
+ssl._create_default_https_context = ssl._create_unverified_context
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
+# [ PRO ] yfinance SSL Bypass Monkey-patch
+_session = requests.Session()
+_session.verify = False
+_orig_download = yf.download
+def _new_download(*args, **kwargs):
+    if 'session' not in kwargs: kwargs['session'] = _session
+    return _orig_download(*args, **kwargs)
+yf.download = _new_download
 
 # --- [ SYSTEM ] [GLOBAL HELPER] Page Config ---
 st.set_page_config(page_title="StockDragonfly Pro", page_icon="📟", layout="wide")
@@ -1551,7 +1569,7 @@ st.markdown(f"""
 now_kr = datetime.now(pytz.timezone('Asia/Seoul'))
 now_us = datetime.now(pytz.timezone('America/New_York'))
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def get_top_indices():
     # [ PRO ] 고가/저가 정보를 포함한 정밀 데이터 페칭
     res = {"DOW": [0.0, 0.0, 0.0, 0.0], "S&P500": [0.0, 0.0, 0.0, 0.0], "NASDAQ": [0.0, 0.0, 0.0, 0.0], "KOSPI": [0.0, 0.0, 0.0, 0.0], "KOSDAQ": [0.0, 0.0, 0.0, 0.0]}
@@ -1576,8 +1594,6 @@ def get_top_indices():
     except: pass
     return res
 
-idx_info = get_top_indices()
-
 # --- [ CONTROL ] 사령부 통합 지수 관제 센터 (Stable v6.1) ---
 idx_info = get_top_indices()
 
@@ -1589,6 +1605,7 @@ with st.container():
     
     for i, name in enumerate(indices_list):
         val, pct, high, low = idx_info.get(name, [0.0, 0.0, 0.0, 0.0])
+        is_kr = name in ["KOSPI", "KOSDAQ"]
         with cols[i]:
             # 모든 지표 상승은 빨간색, 하락은 파란색으로 통일 (한국식)
             theme_color = "#FF4B4B" if pct >= 0 else "#0088FF"
@@ -3708,7 +3725,8 @@ elif page.startswith("7-b."):
     if user_history:
         h_df = pd.DataFrame(user_history)
         h_df = h_df[["date", "date_sold", "ticker", "buy_price", "sell_price", "amount", "final_profit_krw"]]
-        h_df.columns = ["매수일시", "매도일시", "종목", "매수가($)", "매도가($)", "수량", "확정수익(원)"]
+        h_df["ticker"] = h_df["ticker"].apply(get_stock_name)
+        h_df.columns = ["매수일시", "매도일시", "종목명", "매수가($)", "매도가($)", "수량", "확정수익(원)"]
         
         def color_profit(val):
             color = '#ff4b4b' if val > 0 else '#6366f1' if val < 0 else 'white'
@@ -3790,11 +3808,11 @@ elif page.startswith("7-d."):
     st.subheader("[ LOG ] 자동투자 상세 매매 기록 (Execution Log)")
     # 가상의 상세 매매 이력 데이터 (AI가 수행한 것으로 가주)
     auto_history = [
-        {"일시": "2026-04-20 10:15", "티커": "NVDA", "수량": 10, "매수가": "855.20", "현재가": "890.30", "수익": "+4.1%"},
-        {"일시": "2026-04-20 09:30", "티커": "PLTR", "수량": 50, "매수가": "22.15", "현재가": "23.40", "수익": "+5.6%"},
-        {"일시": "2026-04-19 15:45", "티커": "TSLA", "수량": 5, "매수가": "172.10", "현재가": "165.20", "수익": "-4.0%"},
-        {"일시": "2026-04-19 11:20", "티커": "SMCI", "수량": 2, "매수가": "920.00", "현재가": "1040.50", "수익": "+13.1%"},
-        {"일시": "2026-04-18 13:10", "티커": "AMD", "수량": 15, "매수가": "180.50", "현재가": "185.00", "수익": "+2.5%"}
+        {"일시": "2026-04-20 10:15", "종목명": get_stock_name("NVDA"), "수량": 10, "매수가": "855.20", "현재가": "890.30", "수익": "+4.1%"},
+        {"일시": "2026-04-20 09:30", "종목명": get_stock_name("PLTR"), "수량": 50, "매수가": "22.15", "현재가": "23.40", "수익": "+5.6%"},
+        {"일시": "2026-04-19 15:45", "종목명": get_stock_name("TSLA"), "수량": 5, "매수가": "172.10", "현재가": "165.20", "수익": "-4.0%"},
+        {"일시": "2026-04-19 11:20", "종목명": get_stock_name("SMCI"), "수량": 2, "매수가": "920.00", "현재가": "1040.50", "수익": "+13.1%"},
+        {"일시": "2026-04-18 13:10", "종목명": get_stock_name("AMD"), "수량": 15, "매수가": "180.50", "현재가": "185.00", "수익": "+2.5%"}
     ]
     
     h_df = pd.DataFrame(auto_history)
@@ -4144,8 +4162,9 @@ elif page.startswith("7-f."):
         # --- 실시간 매수 신호 시각화 ---
         buys = df_q[df_q['Signal'].str.contains("매수")]
         if not buys.empty:
+            buy_names = [get_stock_name(t) for t in buys['Ticker'].tolist()]
             st.markdown("<div class='neon-border'><div class='neon-inner' style='text-align:center;'>", unsafe_allow_html=True)
-            st.markdown(f"### [ TARGET ] 사령부 긴급 매수 타점 감지: <span style='color:#00FF00;'>{', '.join(buys['Ticker'].tolist())}</span>", unsafe_allow_html=True)
+            st.markdown(f"### [ TARGET ] 사령부 긴급 매수 타점 감지: <span style='color:#00FF00;'>{', '.join(buy_names)}</span>", unsafe_allow_html=True)
             st.markdown("</div></div>", unsafe_allow_html=True)
         
         st.divider()
@@ -4159,8 +4178,9 @@ elif page.startswith("7-f."):
             return ''
 
         # 컬럼 순서 재조정 및 표시
-        display_df = df_q[["Ticker", "Price", "Score", "Signal", "EP", "SL", "TP", "ROE", "RS", "1M_Ret"]]
-        display_df.columns = ["티커", "현재가", "종합점수", "신호", "매출시점(EP)", "손절가(SL)", "목표가(TP)", "ROE", "RS", "1M수익"]
+        display_df = df_q[["Ticker", "Price", "Score", "Signal", "EP", "SL", "TP", "ROE", "RS", "1M_Ret"]].copy()
+        display_df["Ticker"] = display_df["Ticker"].apply(get_stock_name)
+        display_df.columns = ["종목명", "현재가", "종합점수", "신호", "매출시점(EP)", "손절가(SL)", "목표가(TP)", "ROE", "RS", "1M수익"]
         
         st.dataframe(display_df.style.map(style_q_df).format(precision=2), use_container_width=True, hide_index=True)
         
@@ -4232,7 +4252,7 @@ elif page.startswith("7-g."):
                 st.markdown("### ⚔️ 본데 전술 즉시 집행 (Precision Strike)")
                 sc1, sc2, sc3 = st.columns([2, 1, 1])
                 with sc1:
-                    sel_h = st.selectbox("저격 종목 선택", df_h['ticker'].tolist())
+                    sel_h = st.selectbox("저격 종목 선택", df_h['ticker'].tolist(), format_func=get_stock_name)
                 with sc2:
                     o_qty = st.number_input("수량(주)", min_value=1, value=1)
                 with sc3:
@@ -4273,7 +4293,7 @@ elif page.startswith("8-f."):
             "시간": m_time,
             "AI 요원": f"[{ai}]",
             "동작": action,
-            "종목": tic,
+            "종목": get_stock_name(tic),
             "수량": amount,
             "코멘트 (판단 근거)": reason
         })
