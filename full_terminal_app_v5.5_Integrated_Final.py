@@ -1,4 +1,4 @@
-# 작업 일자: 2026-04-19 | 버전: v9.9 Platinum Full Restoration (Step 1: Base)
+full_terminal_app_v5.5_Integrated_Final# 작업 일자: 2026-04-19 | 버전: v9.9 Platinum Full Restoration (Step 1: Base)
 import streamlit as st
 import pandas as pd
 import yfinance as yf
