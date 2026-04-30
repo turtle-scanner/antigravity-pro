@@ -281,7 +281,7 @@ def run_antigravity_screener():
                     results["EP"].append(
                         {
                             "Ticker": tic,
-                            "Name": TICKER_NAME_MAP[tic],
+                            "Name": get_stock_name(tic),
                             "Price": curr_p,
                             "Change": f"{pct:+.2f}%",
                             "VolRatio": f"{vol_ratio:.1f}x",
@@ -293,7 +293,7 @@ def run_antigravity_screener():
                     results["Burst"].append(
                         {
                             "Ticker": tic,
-                            "Name": TICKER_NAME_MAP[tic],
+                            "Name": get_stock_name(tic),
                             "Price": curr_p,
                             "Change": f"{pct:+.2f}%",
                         }
@@ -309,7 +309,7 @@ def run_antigravity_screener():
                     results["Anticipation"].append(
                         {
                             "Ticker": tic,
-                            "Name": TICKER_NAME_MAP[tic],
+                            "Name": get_stock_name(tic),
                             "Price": curr_p,
                             "Range": f"{recent_range:.1f}%",
                         }
@@ -5057,6 +5057,7 @@ elif page.startswith("5-c."):
 
     cols = st.columns(3)
     for i, stock in enumerate(radar_stocks):
+        s_name = get_stock_name(stock["T"])
         with cols[i % 3]:
             color = (
                 "#00FF00"
@@ -5069,13 +5070,14 @@ elif page.startswith("5-c."):
                 f"""
             <div class='glass-card' style='border-top: 5px solid {color};'>
                 <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <h3 style='margin: 0;'>{stock["T"]}</h3>
+                    <h3 style='margin: 0;'>{s_name}</h3>
                     <span style='color: {color}; font-weight: 800;'>{stock["Ready"]}%</span>
                 </div>
                 <div class='banana-track'>
                     <div class='banana-fill' style='width: {stock["Ready"]}%; background: {color}; color: {color};'></div>
                 </div>
                 <p style='font-size: 0.85rem; color: #888; margin-top: 10px;'>📡 상태: {stock["Status"]}</p>
+                <small style='color: #444;'>Code: {stock["T"]}</small>
             </div>
             """,
                 unsafe_allow_html=True,
